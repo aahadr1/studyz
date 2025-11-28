@@ -13,20 +13,17 @@ async function processPDF(fileBuffer: Buffer, documentId: string, userId: string
   const pages: string[] = []
   
   try {
-    // Note: PDF processing with canvas requires native dependencies not available on Vercel
-    // For production, consider using:
-    // 1. A separate service (AWS Lambda with layers, Railway, etc.)
-    // 2. Cloud services like Cloudinary, imgbb, or pdf.co
-    // 3. Client-side processing with pdf.js in the browser
+    // Note: We don't need to convert PDF to images anymore!
+    // The PDFViewer component renders PDFs directly in the browser using PDF.js
+    // This is actually better: faster, no storage costs, and works on Vercel!
     
-    console.log('PDF processing placeholder - document uploaded but not converted to images')
-    console.log('For production: Set up external PDF processing service')
+    console.log('Document uploaded successfully - will be rendered client-side with PDF.js')
     
-    // For now, just mark the document as uploaded with 0 pages
-    // Users can still view the original PDF
+    // Set a placeholder page count (will be updated when PDF loads in browser)
+    // The actual page count will be determined by PDF.js in the PDFViewer component
     await supabase
       .from('documents')
-      .update({ page_count: 0 })
+      .update({ page_count: 1 })
       .eq('id', documentId)
 
     return pages

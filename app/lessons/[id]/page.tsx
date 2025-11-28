@@ -272,7 +272,7 @@ export default function LessonDetailPage() {
                     
                     <div className="flex items-center justify-between text-sm text-gray-600">
                       <span className="uppercase">{doc.file_type}</span>
-                      <span>{doc.page_count || 0} pages</span>
+                      <span>{(doc.file_path.split('/').pop()?.split('-').slice(1).join('-') || doc.name).substring(0, 30)}</span>
                     </div>
                   </div>
                 )

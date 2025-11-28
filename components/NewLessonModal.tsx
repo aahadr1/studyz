@@ -75,7 +75,7 @@ export default function NewLessonModal({ onClose, onSuccess }: NewLessonModalPro
 
           if (docError) throw docError
 
-          // Trigger document processing (convert to images)
+          // Process document (mark as ready for viewing)
           await fetch('/api/process-document', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -84,7 +84,7 @@ export default function NewLessonModal({ onClose, onSuccess }: NewLessonModalPro
               filePath: fileName,
               fileType: fileExt,
             }),
-          })
+          }).catch(err => console.log('Processing trigger error (non-critical):', err))
         }
       }
 
