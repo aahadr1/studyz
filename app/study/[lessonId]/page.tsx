@@ -30,7 +30,7 @@ export default function StudyPage() {
   const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
   const [assistantMode, setAssistantMode] = useState<'chat' | 'voice'>('chat')
-  const [getPageImageFn, setGetPageImageFn] = useState<(() => Promise<string | null>) | null>(null)
+  const [getPageImageFn, setGetPageImageFn] = useState<(() => Promise<string | null>) | undefined>(undefined)
 
   useEffect(() => {
     const loadDocuments = async () => {
