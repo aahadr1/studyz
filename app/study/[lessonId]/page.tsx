@@ -32,10 +32,9 @@ export default function StudyPage() {
   const [assistantMode, setAssistantMode] = useState<'chat' | 'voice'>('chat')
   const [getPageImageFn, setGetPageImageFn] = useState<(() => Promise<string | null>) | null>(null)
 
-  const supabase = createClient()
-
   useEffect(() => {
     const loadDocuments = async () => {
+      const supabase = createClient()
       try {
         const { data: { user } } = await supabase.auth.getUser()
 
@@ -61,7 +60,8 @@ export default function StudyPage() {
     if (documentIds.length > 0) {
       loadDocuments()
     }
-  }, [documentIds])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentIds.join(',')])
 
   const currentDocument = documents[currentDocIndex]
 

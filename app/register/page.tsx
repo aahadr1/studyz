@@ -9,7 +9,6 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
 
   const supabase = createClient()
 
@@ -31,32 +30,12 @@ export default function RegisterPage() {
 
       if (error) throw error
 
-      setSuccess(true)
+      // Redirect to dashboard after successful signup
+      window.location.href = '/dashboard'
     } catch (err: any) {
       setError(err.message || 'Registration failed')
-    } finally {
       setLoading(false)
     }
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md text-center">
-          <div className="text-green-600 text-6xl mb-4">✓</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Registration Successful!</h2>
-          <p className="text-gray-600 mb-6">
-            Please check your email to verify your account, then log in.
-          </p>
-          <a
-            href="/login"
-            className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
-          >
-            Go to Login
-          </a>
-        </div>
-      </div>
-    )
   }
 
   return (

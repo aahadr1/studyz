@@ -30,9 +30,8 @@ export default function LessonDetailPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
 
-  const supabase = createClient()
-
   const loadLessonData = async () => {
+    const supabase = createClient()
     try {
       const { data: { user } } = await supabase.auth.getUser()
 
@@ -72,6 +71,7 @@ export default function LessonDetailPage() {
     if (lessonId) {
       loadLessonData()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,6 +81,7 @@ export default function LessonDetailPage() {
     setUploading(true)
 
     try {
+      const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) throw new Error('Not authenticated')

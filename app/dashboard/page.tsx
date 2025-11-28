@@ -7,15 +7,13 @@ import { FiBook, FiFileText, FiLogOut, FiPlus } from 'react-icons/fi'
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [stats, setStats] = useState({ totalLessons: 0, totalDocuments: 0 })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadDashboard = async () => {
       const supabase = createClient()
       
       try {
-        // Get user with timeout
+        // Get user
         const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
         
         if (authError || !authUser) {
@@ -38,12 +36,8 @@ export default function DashboardPage() {
           totalLessons: lessonsCount || 0,
           totalDocuments: 0,
         })
-
-        setLoading(false)
       } catch (err: any) {
         console.error('Dashboard error:', err)
-        setError(err.message)
-        setLoading(false)
       }
     }
 
@@ -56,28 +50,6 @@ export default function DashboardPage() {
     window.location.href = '/login'
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">Error: {error}</p>
-          <a href="/login" className="text-blue-600 hover:underline">Go to Login</a>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -86,7 +58,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-center h-16">
             <h1 className="text-2xl font-bold text-blue-600">Studyz</h1>
             <div className="flex items-center space-x-4">
-              <span className="text-gray-600">{user?.email}</span>
+              <span className="text-gray-600">{user?.email || 'Loading...'}</span>
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition"
@@ -103,7 +75,7 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900">
-            Welcome, {user?.fullName}!
+            Welcome{user?.fullName ? `, ${user.fullName}` : ''}!
           </h2>
           <p className="text-gray-600 mt-2">Ready to study?</p>
         </div>

@@ -25,8 +25,6 @@ export default function LessonsPage() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
-
   useEffect(() => {
     // Check if ?new=true to auto-open modal
     if (searchParams.get('new') === 'true') {
@@ -35,6 +33,7 @@ export default function LessonsPage() {
   }, [searchParams])
 
   const loadLessons = async () => {
+    const supabase = createClient()
     try {
       const { data: { user } } = await supabase.auth.getUser()
       
@@ -76,6 +75,7 @@ export default function LessonsPage() {
 
   useEffect(() => {
     loadLessons()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,6 +96,7 @@ export default function LessonsPage() {
     setError(null)
 
     try {
+      const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) throw new Error('Not authenticated')
