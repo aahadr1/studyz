@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { processPDFToImages, validatePDFBuffer } from '@/lib/pdf-processor'
 
 // Initialize Supabase with service role key for admin operations
 const supabase = createClient(
@@ -12,51 +11,20 @@ async function processPDF(fileBuffer: Buffer, documentId: string, userId: string
   const pages: string[] = []
   
   try {
-    // Validate PDF buffer
-    if (!validatePDFBuffer(fileBuffer)) {
-      throw new Error('Invalid PDF file')
-    }
-
-    // Process PDF to images
-    const { pageImages, pageCount } = await processPDFToImages(fileBuffer)
-
-    // Upload each page image
-    for (let pageNum = 0; pageNum < pageImages.length; pageNum++) {
-      const imageBuffer = pageImages[pageNum]
-      const imagePath = `${userId}/${documentId}/page-${pageNum + 1}.png`
-      
-      const { error: uploadError } = await supabase.storage
-        .from('document-pages')
-        .upload(imagePath, imageBuffer, {
-          contentType: 'image/png',
-          upsert: true,
-        })
-
-      if (uploadError) {
-        console.error(`Error uploading page ${pageNum + 1}:`, uploadError)
-        continue
-      }
-
-      // Create document_pages record
-      const { error: insertError } = await supabase
-        .from('document_pages')
-        .upsert({
-          document_id: documentId,
-          page_number: pageNum + 1,
-          image_path: imagePath,
-        })
-
-      if (insertError) {
-        console.error(`Error creating page record ${pageNum + 1}:`, insertError)
-      }
-
-      pages.push(imagePath)
-    }
-
-    // Update document page_count
+    // Note: PDF processing with canvas requires native dependencies not available on Vercel
+    // For production, consider using:
+    // 1. A separate service (AWS Lambda with layers, Railway, etc.)
+    // 2. Cloud services like Cloudinary, imgbb, or pdf.co
+    // 3. Client-side processing with pdf.js in the browser
+    
+    console.log('PDF processing placeholder - document uploaded but not converted to images')
+    console.log('For production: Set up external PDF processing service')
+    
+    // For now, just mark the document as uploaded with 0 pages
+    // Users can still view the original PDF
     await supabase
       .from('documents')
-      .update({ page_count: pageCount })
+      .update({ page_count: 0 })
       .eq('id', documentId)
 
     return pages
