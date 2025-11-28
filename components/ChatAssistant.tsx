@@ -88,6 +88,14 @@ export default function ChatAssistant({
         console.log('⚠️ getPageImage function not available')
       }
 
+      // Prepare conversation history safely (avoid arrow function minification issues)
+      const conversationHistory = messages.map(function(msg) {
+        return {
+          role: msg.role,
+          content: msg.content,
+        }
+      })
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -97,10 +105,7 @@ export default function ChatAssistant({
           pageNumber,
           lessonId,
           pageImageData,
-          conversationHistory: messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          conversationHistory,
         }),
       })
 
