@@ -36,10 +36,8 @@ export async function POST(request: NextRequest) {
     // Try to use the page image data sent from frontend first
     if (pageImageData) {
       imageUrl = pageImageData
-      console.log('✅ Using page image from frontend', {
-        pageNumber,
-        imageSize: Math.round(pageImageData.length / 1024) + 'KB'
-      })
+      const sizeKB = Math.round(pageImageData.length / 1024)
+      console.log(`✅ Using page image from frontend - Page ${pageNumber}, Size: ${sizeKB}KB`)
     } else if (documentId) {
       console.log('⚠️ No page image from frontend, trying database fallback...')
       // Fallback: try to get from document_pages table

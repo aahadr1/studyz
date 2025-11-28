@@ -40,10 +40,8 @@ export default function PDFViewer({
         try {
           // Capture at high quality for GPT vision
           const imageData = canvasRef.current.toDataURL('image/jpeg', 0.95)
-          console.log('✅ Page image captured successfully', {
-            size: Math.round(imageData.length / 1024) + 'KB',
-            page: currentPage
-          })
+          const sizeKB = Math.round(imageData.length / 1024)
+          console.log(`✅ Page image captured: ${sizeKB}KB, page ${currentPage}`)
           return imageData
         } catch (err) {
           console.error('❌ Error capturing page image:', err)
