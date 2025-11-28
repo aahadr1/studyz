@@ -72,13 +72,16 @@ export default function PDFViewer({
         // Dynamically import PDF.js
         const pdfjsLib = await import('pdfjs-dist')
         
-        // Set worker
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+        // Set worker - use versioned CDN URL
+        const pdfVersion = pdfjsLib.version || '3.11.174'
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfVersion}/pdf.worker.min.js`
 
         // Load the PDF with CORS settings
         const loadingTask = pdfjsLib.getDocument({
           url: urlData.signedUrl,
           withCredentials: false,
+          cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfVersion}/cmaps/`,
+          cMapPacked: true,
         })
         const pdf = await loadingTask.promise
 
@@ -119,9 +122,11 @@ export default function PDFViewer({
           viewport: viewport,
         }
 
-        await page.render(renderContext).promise
-      } catch (err) {
+        const renderTask = page.render(renderContext)
+        await renderTask.promise
+      } catch (err: any) {
         console.error('Error rendering page:', err)
+        // Don't throw - just log the error to prevent crashes
       }
     }
 
