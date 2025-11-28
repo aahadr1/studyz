@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiMic } from 'react-icons/fi'
-import { getCurrentUser } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase'
 import PDFViewer from '@/components/PDFViewer'
 import ChatAssistant from '@/components/ChatAssistant'
 import VoiceAssistant from '@/components/VoiceAssistant'
@@ -33,10 +32,17 @@ export default function StudyPage() {
   const [assistantMode, setAssistantMode] = useState<'chat' | 'voice'>('chat')
   const [getPageImageFn, setGetPageImageFn] = useState<(() => Promise<string | null>) | null>(null)
 
+  const supabase = createClient()
+
   useEffect(() => {
     const loadDocuments = async () => {
       try {
-        const user = await getCurrentUser()
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+          window.location.href = '/login'
+          return
+        }
 
         const { data, error } = await supabase
           .from('documents')
