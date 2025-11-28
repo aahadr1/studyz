@@ -27,10 +27,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
         alert('Registration successful! Please check your email to verify your account.')
         router.push('/login')
       } else {
-        await signIn(email, password)
-        router.push('/dashboard')
+        const result = await signIn(email, password)
+        console.log('Login successful:', result)
+        
+        // Force hard navigation to dashboard
+        window.location.href = '/dashboard'
       }
     } catch (err: any) {
+      console.error('Auth error:', err)
       setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
