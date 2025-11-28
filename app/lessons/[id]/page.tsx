@@ -2,16 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import DashboardLayout from '@/components/DashboardLayout'
-import { FiArrowLeft, FiFileText, FiUpload, FiCheck, FiX } from 'react-icons/fi'
-import { getCurrentUser } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { FiArrowLeft, FiFileText, FiUpload, FiCheck } from 'react-icons/fi'
+import { createClient } from '@/lib/supabase'
 
 interface Document {
   id: string
   name: string
   file_type: string
-  page_count: number
   created_at: string
   file_path: string
 }
@@ -33,16 +30,23 @@ export default function LessonDetailPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
 
+  const supabase = createClient()
+
   const loadLessonData = async () => {
     try {
-      const user = await getCurrentUser()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        window.location.href = '/login'
+        return
+      }
 
       // Load lesson
       const { data: lessonData, error: lessonError } = await supabase
         .from('lessons')
         .select('*')
         .eq('id', lessonId)
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single()
 
       if (lessonError) throw lessonError
@@ -77,43 +81,32 @@ export default function LessonDetailPage() {
     setUploading(true)
 
     try {
-      const user = await getCurrentUser()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) throw new Error('Not authenticated')
 
       for (const file of Array.from(files)) {
         const fileExt = file.name.split('.').pop()
-        const fileName = `${user?.id}/${lessonId}/${Date.now()}-${file.name}`
+        const fileName = `${user.id}/${lessonId}/${Date.now()}-${file.name}`
 
-        // Upload file to storage
         const { error: uploadError } = await supabase.storage
           .from('documents')
           .upload(fileName, file)
 
-        if (uploadError) throw uploadError
+        if (uploadError) {
+          console.error('Upload error:', uploadError)
+          continue
+        }
 
-        // Create document record
-        const { data: document, error: docError } = await supabase
+        await supabase
           .from('documents')
           .insert({
             lesson_id: lessonId,
             name: file.name,
             file_path: fileName,
             file_type: fileExt || 'unknown',
+            page_count: 1,
           })
-          .select()
-          .single()
-
-        if (docError) throw docError
-
-        // Trigger document processing
-        await fetch('/api/process-document', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            documentId: document.id,
-            filePath: fileName,
-            fileType: fileExt,
-          }),
-        })
       }
 
       await loadLessonData()
@@ -147,38 +140,35 @@ export default function LessonDetailPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="spinner"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading lesson...</p>
         </div>
-      </DashboardLayout>
+      </div>
     )
   }
 
   return (
-    <DashboardLayout>
-      <div className="p-8">
-        <div className="mb-6">
-          <button
-            onClick={() => router.push('/lessons')}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition mb-4"
-          >
-            <FiArrowLeft className="w-5 h-5" />
-            <span>Back to Lessons</span>
-          </button>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{lesson?.name}</h1>
-              <p className="text-gray-600 mt-2">
-                {documents.length} document{documents.length !== 1 ? 's' : ''} • {selectedDocuments.size} selected
-              </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => router.push('/lessons')}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <FiArrowLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-xl font-bold text-gray-900">{lesson?.name}</h1>
             </div>
             
             <div className="flex space-x-3">
-              <label className="flex items-center space-x-2 bg-white border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50 transition cursor-pointer">
+              <label className="flex items-center space-x-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition cursor-pointer">
                 <FiUpload className="w-5 h-5" />
-                <span>{uploading ? 'Uploading...' : 'Upload Documents'}</span>
+                <span>{uploading ? 'Uploading...' : 'Upload'}</span>
                 <input
                   type="file"
                   multiple
@@ -192,25 +182,28 @@ export default function LessonDetailPage() {
               {selectedDocuments.size > 0 && (
                 <button
                   onClick={handleStudyLesson}
-                  className="flex items-center space-x-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition"
+                  className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
                 >
-                  <span className="font-semibold">Study Lesson</span>
+                  <span className="font-semibold">Study ({selectedDocuments.size})</span>
                 </button>
               )}
             </div>
           </div>
         </div>
+      </header>
 
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {documents.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
-            <div className="bg-primary-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FiFileText className="w-8 h-8 text-primary-600" />
+            <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FiFileText className="w-8 h-8 text-blue-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No documents yet</h3>
             <p className="text-gray-600 mb-6">
               Upload documents to start studying this lesson
             </p>
-            <label className="inline-flex items-center space-x-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition cursor-pointer">
+            <label className="inline-flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition cursor-pointer">
               <FiUpload className="w-5 h-5" />
               <span>Upload Documents</span>
               <input
@@ -225,14 +218,11 @@ export default function LessonDetailPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start space-x-3">
-              <div className="text-blue-600 mt-0.5">ℹ️</div>
-              <div className="flex-1">
-                <p className="text-sm text-blue-900 font-medium">Select documents to study</p>
-                <p className="text-sm text-blue-700 mt-1">
-                  Click on documents below to select them, then click "Study Lesson" to begin.
-                </p>
-              </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-900 font-medium">Select documents to study</p>
+              <p className="text-sm text-blue-700 mt-1">
+                Click on documents below to select them, then click "Study" to begin.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -245,21 +235,21 @@ export default function LessonDetailPage() {
                     onClick={() => toggleDocumentSelection(doc.id)}
                     className={`bg-white rounded-xl shadow-sm p-6 border-2 cursor-pointer transition ${
                       isSelected
-                        ? 'border-primary-500 bg-primary-50'
-                        : 'border-gray-200 hover:border-primary-300'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
                     }`}
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className={`p-3 rounded-lg ${
-                        isSelected ? 'bg-primary-100' : 'bg-gray-100'
+                        isSelected ? 'bg-blue-100' : 'bg-gray-100'
                       }`}>
                         <FiFileText className={`w-6 h-6 ${
-                          isSelected ? 'text-primary-600' : 'text-gray-600'
+                          isSelected ? 'text-blue-600' : 'text-gray-600'
                         }`} />
                       </div>
                       <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
                         isSelected
-                          ? 'bg-primary-600 border-primary-600'
+                          ? 'bg-blue-600 border-blue-600'
                           : 'border-gray-300'
                       }`}>
                         {isSelected && <FiCheck className="w-4 h-4 text-white" />}
@@ -272,7 +262,7 @@ export default function LessonDetailPage() {
                     
                     <div className="flex items-center justify-between text-sm text-gray-600">
                       <span className="uppercase">{doc.file_type}</span>
-                      <span>{(doc.file_path.split('/').pop()?.split('-').slice(1).join('-') || doc.name).substring(0, 30)}</span>
+                      <span>{new Date(doc.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                 )
@@ -280,8 +270,7 @@ export default function LessonDetailPage() {
             </div>
           </div>
         )}
-      </div>
-    </DashboardLayout>
+      </main>
+    </div>
   )
 }
-

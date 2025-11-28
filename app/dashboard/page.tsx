@@ -1,77 +1,136 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import DashboardLayout from '@/components/DashboardLayout'
-import { FiBook, FiFileText, FiTrendingUp } from 'react-icons/fi'
-import { getCurrentUser } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase'
+import { FiBook, FiFileText, FiLogOut, FiPlus } from 'react-icons/fi'
+
+interface UserData {
+  id: string
+  email: string
+  fullName: string
+}
+
+interface Stats {
+  totalLessons: number
+  totalDocuments: number
+}
 
 export default function DashboardPage() {
-  const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [stats, setStats] = useState({
-    totalLessons: 0,
-    totalDocuments: 0,
-  })
+  const [user, setUser] = useState<UserData | null>(null)
+  const [stats, setStats] = useState<Stats>({ totalLessons: 0, totalDocuments: 0 })
+  const [loading, setLoading] = useState(true)
+
+  const supabase = createClient()
 
   useEffect(() => {
-    const loadData = async () => {
+    const loadDashboard = async () => {
       try {
-        const currentUser = await getCurrentUser()
-        setUser(currentUser)
+        // Get current user
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        
+        if (!authUser) {
+          window.location.href = '/login'
+          return
+        }
 
-        // Get lessons count
+        setUser({
+          id: authUser.id,
+          email: authUser.email || '',
+          fullName: authUser.user_metadata?.full_name || 'Student',
+        })
+
+        // Get stats
         const { count: lessonsCount } = await supabase
           .from('lessons')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', currentUser?.id)
+          .eq('user_id', authUser.id)
 
-        // Get documents count
         const { data: lessons } = await supabase
           .from('lessons')
           .select('id')
-          .eq('user_id', currentUser?.id)
+          .eq('user_id', authUser.id)
 
-        if (lessons) {
+        let documentsCount = 0
+        if (lessons && lessons.length > 0) {
           const lessonIds = lessons.map(l => l.id)
-          const { count: documentsCount } = await supabase
+          const { count } = await supabase
             .from('documents')
             .select('*', { count: 'exact', head: true })
-            .in('lesson_id', lessonIds.length > 0 ? lessonIds : [''])
-
-          setStats({
-            totalLessons: lessonsCount || 0,
-            totalDocuments: documentsCount || 0,
-          })
+            .in('lesson_id', lessonIds)
+          documentsCount = count || 0
         }
+
+        setStats({
+          totalLessons: lessonsCount || 0,
+          totalDocuments: documentsCount,
+        })
       } catch (error) {
-        console.error('Error loading dashboard data:', error)
+        console.error('Dashboard error:', error)
+      } finally {
+        setLoading(false)
       }
     }
 
-    loadData()
+    loadDashboard()
   }, [])
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <DashboardLayout>
-      <div className="p-8">
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <h1 className="text-2xl font-bold text-blue-600">Studyz</h1>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-600">{user?.email}</span>
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 text-gray-600 hover:text-red-600 transition"
+              >
+                <FiLogOut className="w-5 h-5" />
+                <span>Logout</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Welcome back, {user?.user_metadata?.full_name || 'Student'}!
-          </h1>
+          <h2 className="text-3xl font-bold text-gray-900">
+            Welcome back, {user?.fullName}!
+          </h2>
           <p className="text-gray-600 mt-2">Ready to continue your learning journey?</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Total Lessons</p>
                 <p className="text-3xl font-bold text-gray-900">{stats.totalLessons}</p>
               </div>
-              <div className="bg-primary-100 p-3 rounded-lg">
-                <FiBook className="w-6 h-6 text-primary-600" />
+              <div className="bg-blue-100 p-3 rounded-lg">
+                <FiBook className="w-6 h-6 text-blue-600" />
               </div>
             </div>
           </div>
@@ -87,39 +146,40 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Study Progress</p>
-                <p className="text-3xl font-bold text-gray-900">0%</p>
-              </div>
-              <div className="bg-purple-100 p-3 rounded-lg">
-                <FiTrendingUp className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </div>
         </div>
 
+        {/* Quick Actions */}
         <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-          <div className="space-y-3">
-            <button
-              onClick={() => router.push('/lessons')}
-              className="w-full text-left px-6 py-4 bg-primary-50 hover:bg-primary-100 rounded-lg transition border border-primary-200"
+          <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <a
+              href="/lessons"
+              className="flex items-center space-x-4 p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition border border-blue-200"
             >
-              <div className="flex items-center space-x-3">
-                <FiBook className="w-5 h-5 text-primary-600" />
-                <div>
-                  <p className="font-semibold text-gray-900">Go to Lessons</p>
-                  <p className="text-sm text-gray-600">View and manage your study lessons</p>
-                </div>
+              <div className="bg-blue-600 p-3 rounded-lg">
+                <FiBook className="w-6 h-6 text-white" />
               </div>
-            </button>
+              <div>
+                <p className="font-semibold text-gray-900">View Lessons</p>
+                <p className="text-sm text-gray-600">Browse and manage your lessons</p>
+              </div>
+            </a>
+
+            <a
+              href="/lessons?new=true"
+              className="flex items-center space-x-4 p-4 bg-green-50 hover:bg-green-100 rounded-lg transition border border-green-200"
+            >
+              <div className="bg-green-600 p-3 rounded-lg">
+                <FiPlus className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Create New Lesson</p>
+                <p className="text-sm text-gray-600">Start a new study session</p>
+              </div>
+            </a>
           </div>
         </div>
-      </div>
-    </DashboardLayout>
+      </main>
+    </div>
   )
 }
-
