@@ -265,12 +265,15 @@ export default function StudyPage() {
           {assistantMode === 'chat' ? (
             <ChatAssistant
               documentId={currentDocument?.id}
+              pageNumber={currentPage}
+              lessonId={lessonId}
               getPageImage={getPageImageFn}
             />
           ) : (
             <VoiceAssistant
               documentId={currentDocument?.id}
-              getPageImage={getPageImageFn}
+              pageNumber={currentPage}
+              lessonId={lessonId}
             />
           )}
         </div>
