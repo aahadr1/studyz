@@ -343,6 +343,7 @@ export default function StudyPage() {
               documentId={docId}
               pageNumber={currentPage}
               lessonId={lessonId}
+              getPageImage={getPageImageFn}
             />
           )}
         </div>
