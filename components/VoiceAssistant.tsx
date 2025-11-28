@@ -28,8 +28,9 @@ export default function VoiceAssistant({
       // In production, this would connect to OpenAI's Realtime API
       // For now, we'll create a mock connection
       
-      // Example: Connect to your backend WebSocket that proxies to OpenAI Realtime API
-      const ws = new WebSocket('ws://localhost:3001/realtime')
+      // Voice assistant WebSocket connection would go here
+      // For now, this is disabled until you set up the WebSocket server
+      throw new Error('Voice assistant requires WebSocket server setup. Use Chat mode for now.')
       
       ws.onopen = () => {
         setIsConnected(true)

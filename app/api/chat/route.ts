@@ -102,8 +102,9 @@ Always be helpful, patient, and educational in your responses.`,
     })
 
     // Call OpenAI API with vision
+    // Use gpt-4o which has vision capabilities and is more recent
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-vision-preview',
+      model: 'gpt-4o',
       messages: messages,
       max_tokens: 1000,
       temperature: 0.7,
@@ -119,8 +120,24 @@ Always be helpful, patient, and educational in your responses.`,
     })
   } catch (error: any) {
     console.error('Error in chat API:', error)
+    console.error('Error details:', {
+      message: error.message,
+      status: error.status,
+      type: error.type,
+    })
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to process chat request'
+    if (error.message?.includes('API key')) {
+      errorMessage = 'OpenAI API key is missing or invalid. Please check your environment variables.'
+    } else if (error.message?.includes('quota')) {
+      errorMessage = 'OpenAI API quota exceeded. Please check your OpenAI account.'
+    } else if (error.message?.includes('model')) {
+      errorMessage = 'The AI model is not available. This might be a temporary issue.'
+    }
+    
     return NextResponse.json(
-      { error: error.message || 'Failed to process chat request' },
+      { error: error.message || errorMessage },
       { status: 500 }
     )
   }
