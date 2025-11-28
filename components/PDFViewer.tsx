@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
 
 interface PDFViewerProps {
   documentId: string
@@ -13,22 +12,55 @@ interface PDFViewerProps {
   onCanvasRefReady?: (getImage: () => Promise<string | null>) => void
 }
 
+interface SignedUrlResponse {
+  signedUrl: string
+  documentId: string
+  fileName: string
+  fileType: string
+  pageCount: number
+  expiresIn: number
+}
+
 export default function PDFViewer(props: PDFViewerProps) {
   const documentId = props.documentId
-  const filePath = props.filePath
   const currentPage = props.currentPage
-  const onPageChange = props.onPageChange
-  const totalPages = props.totalPages
   const onTotalPagesChange = props.onTotalPagesChange
   const onCanvasRefReady = props.onCanvasRefReady
 
   const [pdfDoc, setPdfDoc] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [scale, setScale] = useState(1.5)
+  const [scale, setScale] = useState(1.0)
+  const [retryCount, setRetryCount] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const renderTaskRef = useRef<any>(null)
   const isRenderingRef = useRef<boolean>(false)
+
+  // Monitor container width for responsive scaling
+  useEffect(function() {
+    if (!containerRef.current) {
+      return
+    }
+
+    const updateContainerWidth = function() {
+      if (containerRef.current) {
+        const width = containerRef.current.clientWidth
+        setContainerWidth(width)
+      }
+    }
+
+    // Initial measurement
+    updateContainerWidth()
+
+    // Listen for resize events
+    window.addEventListener('resize', updateContainerWidth)
+
+    return function() {
+      window.removeEventListener('resize', updateContainerWidth)
+    }
+  }, [])
 
   // Register image capture function whenever canvas or page changes
   useEffect(function() {
@@ -58,28 +90,39 @@ export default function PDFViewer(props: PDFViewerProps) {
     onCanvasRefReady(capturePageImage)
   }, [onCanvasRefReady, pdfDoc, currentPage, canvasRef.current])
 
-  // Load PDF document
+  // Load PDF document via backend API
   useEffect(function() {
-    if (!filePath) {
+    if (!documentId) {
       return
     }
+
+    let isCancelled = false
 
     const loadPDF = async function() {
       try {
         setLoading(true)
         setError(null)
 
-        // Get signed URL for the PDF
-        const result = await supabase.storage
-          .from('documents')
-          .createSignedUrl(filePath, 3600)
+        console.log('📄 Loading PDF for document:', documentId)
 
-        if (result.error || !result.data || !result.data.signedUrl) {
-          console.error('Error getting signed URL:', result.error)
-          throw new Error('Could not get document URL')
+        // Get signed URL from our backend API
+        const response = await fetch('/api/documents/' + documentId + '/signed-url', {
+          method: 'GET',
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(function() {
+            return { error: 'Failed to load document' }
+          })
+          throw new Error(errorData.error || 'Failed to get document URL')
         }
 
-        const signedUrl = result.data.signedUrl
+        const data: SignedUrlResponse = await response.json()
+
+        if (isCancelled) return
+
+        console.log('✅ Got signed URL for:', data.fileName)
 
         // Dynamically import PDF.js
         const pdfjsLib = await import('pdfjs-dist')
@@ -88,9 +131,11 @@ export default function PDFViewer(props: PDFViewerProps) {
         const pdfVersion = pdfjsLib.version || '3.11.174'
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + pdfVersion + '/pdf.worker.min.js'
 
+        if (isCancelled) return
+
         // Load the PDF
         const loadingTask = pdfjsLib.getDocument({
-          url: signedUrl,
+          url: data.signedUrl,
           withCredentials: false,
           cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + pdfVersion + '/cmaps/',
           cMapPacked: true,
@@ -98,22 +143,44 @@ export default function PDFViewer(props: PDFViewerProps) {
         
         const pdf = await loadingTask.promise
 
+        if (isCancelled) return
+
+        console.log('✅ PDF loaded, pages:', pdf.numPages)
+
         setPdfDoc(pdf)
         onTotalPagesChange(pdf.numPages)
         setLoading(false)
+        setRetryCount(0)
       } catch (err: any) {
-        console.error('Error loading PDF:', err)
-        setError(err.message || 'Failed to load PDF')
+        if (isCancelled) return
+
+        console.error('❌ Error loading PDF:', err)
+        
+        // More descriptive error messages
+        let errorMessage = err.message || 'Failed to load PDF'
+        if (err.message && err.message.includes('Unauthorized')) {
+          errorMessage = 'Please log in to view this document'
+        } else if (err.message && err.message.includes('Access denied')) {
+          errorMessage = 'You do not have access to this document'
+        } else if (err.message && err.message.includes('not found')) {
+          errorMessage = 'Document not found'
+        }
+        
+        setError(errorMessage)
         setLoading(false)
       }
     }
 
     loadPDF()
-  }, [filePath, onTotalPagesChange])
+
+    return function() {
+      isCancelled = true
+    }
+  }, [documentId, onTotalPagesChange, retryCount])
 
   // Render current page
   useEffect(function() {
-    if (!pdfDoc || !canvasRef.current) {
+    if (!pdfDoc || !canvasRef.current || !containerWidth) {
       return
     }
 
@@ -136,7 +203,6 @@ export default function PDFViewer(props: PDFViewerProps) {
     }
 
     const pageToRender = currentPage
-    const scaleToUse = scale
 
     pdfDoc.getPage(pageToRender).then(function(page: any) {
       const canvas = canvasRef.current
@@ -145,7 +211,16 @@ export default function PDFViewer(props: PDFViewerProps) {
         return
       }
 
-      const viewport = page.getViewport({ scale: scaleToUse })
+      // Calculate scale to fit the page width with some padding
+      const pageViewport = page.getViewport({ scale: 1.0 })
+      const padding = 32 // 16px on each side
+      const availableWidth = containerWidth - padding
+      const autoScale = availableWidth / pageViewport.width
+      
+      // Use the calculated auto scale, but respect manual zoom adjustments
+      const finalScale = autoScale * scale
+      
+      const viewport = page.getViewport({ scale: finalScale })
       const context = canvas.getContext('2d')
       
       if (!context) {
@@ -167,6 +242,7 @@ export default function PDFViewer(props: PDFViewerProps) {
       renderTask.promise.then(function() {
         renderTaskRef.current = null
         isRenderingRef.current = false
+        console.log('✅ Page rendered at scale:', finalScale.toFixed(2), 'width:', viewport.width + 'px')
       }).catch(function(err: any) {
         renderTaskRef.current = null
         isRenderingRef.current = false
@@ -192,7 +268,19 @@ export default function PDFViewer(props: PDFViewerProps) {
       }
       isRenderingRef.current = false
     }
-  }, [pdfDoc, currentPage, scale])
+  }, [pdfDoc, currentPage, scale, containerWidth])
+
+  function handleRetry() {
+    setRetryCount(function(c) { return c + 1 })
+  }
+
+  function handleZoomOut() {
+    setScale(function(s) { return Math.max(0.5, s - 0.25) })
+  }
+
+  function handleZoomIn() {
+    setScale(function(s) { return Math.min(3, s + 0.25) })
+  }
 
   if (loading) {
     return (
@@ -217,18 +305,24 @@ export default function PDFViewer(props: PDFViewerProps) {
           <h3 className="text-lg font-semibold text-white mb-2">
             Failed to Load Document
           </h3>
-          <p className="text-sm text-gray-400">{error}</p>
+          <p className="text-sm text-gray-400 mb-4">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="px-4 py-2 bg-gradient-to-r from-accent-purple to-accent-blue text-white rounded-lg font-medium hover:opacity-90 transition"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-full bg-dark-bg">
+    <div className="flex flex-col h-full w-full bg-dark-bg">
       {/* Zoom controls */}
       <div className="flex items-center justify-center space-x-2 p-2 glass-card border-b border-dark-border">
         <button
-          onClick={function() { setScale(function(s) { return Math.max(0.5, s - 0.25) }) }}
+          onClick={handleZoomOut}
           className="px-3 py-1 glass-button rounded text-sm font-medium transition hover:text-primary-400"
         >
           −
@@ -237,7 +331,7 @@ export default function PDFViewer(props: PDFViewerProps) {
           {Math.round(scale * 100)}%
         </span>
         <button
-          onClick={function() { setScale(function(s) { return Math.min(3, s + 0.25) }) }}
+          onClick={handleZoomIn}
           className="px-3 py-1 glass-button rounded text-sm font-medium transition hover:text-primary-400"
         >
           +
@@ -245,10 +339,13 @@ export default function PDFViewer(props: PDFViewerProps) {
       </div>
 
       {/* PDF Canvas */}
-      <div className="flex-1 overflow-auto flex items-start justify-center p-4">
+      <div 
+        ref={containerRef}
+        className="flex-1 overflow-auto flex items-start justify-center p-4 w-full"
+      >
         <canvas
           ref={canvasRef}
-          className="shadow-2xl bg-white"
+          className="shadow-2xl bg-white max-w-full h-auto"
         />
       </div>
     </div>

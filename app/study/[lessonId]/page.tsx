@@ -273,20 +273,20 @@ export default function StudyPage() {
         </div>
 
         {/* Document Content Area */}
-        <div className="flex-1 overflow-auto bg-dark-bg p-4">
-          <div className="max-w-4xl mx-auto">
-            {isPdf ? (
-              <PDFViewer
-                documentId={docId}
-                filePath={docFilePath}
-                currentPage={currentPage}
-                onPageChange={handlePageChange}
-                totalPages={totalPages}
-                onTotalPagesChange={handleTotalPagesChange}
-                onCanvasRefReady={handleCanvasReady}
-              />
-            ) : (
-              <div className="glass-card p-12 text-center">
+        <div className="flex-1 overflow-hidden bg-dark-bg flex flex-col">
+          {isPdf ? (
+            <PDFViewer
+              documentId={docId}
+              filePath={docFilePath}
+              currentPage={currentPage}
+              onPageChange={handlePageChange}
+              totalPages={totalPages}
+              onTotalPagesChange={handleTotalPagesChange}
+              onCanvasRefReady={handleCanvasReady}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center p-4">
+              <div className="glass-card p-12 text-center max-w-md">
                 <div className="w-16 h-16 bg-gradient-to-br from-accent-purple to-accent-blue rounded-2xl mx-auto mb-4 flex items-center justify-center">
                   <FiMaximize2 className="w-8 h-8 text-white" />
                 </div>
@@ -298,8 +298,8 @@ export default function StudyPage() {
                   You can still ask the AI assistant questions about this document.
                 </p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
