@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { FiArrowLeft, FiFileText, FiUpload, FiCheck } from 'react-icons/fi'
+import { FiArrowLeft, FiFileText, FiUpload, FiCheck, FiPlay, FiTrash2 } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase'
 
 interface Document {
@@ -141,35 +141,35 @@ export default function LessonDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading lesson...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center animate-fade-in">
+          <div className="spinner mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading lesson...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-dark-bg">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
+      <header className="glass-card border-b border-dark-border sticky top-0 z-40 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 flex-1 min-w-0">
               <button
                 onClick={() => router.push('/lessons')}
-                className="text-gray-600 hover:text-gray-900"
+                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg flex-shrink-0"
               >
                 <FiArrowLeft className="w-5 h-5" />
               </button>
-              <h1 className="text-xl font-bold text-gray-900">{lesson?.name}</h1>
+              <h1 className="text-xl font-bold text-white truncate">{lesson?.name}</h1>
             </div>
             
-            <div className="flex space-x-3">
-              <label className="flex items-center space-x-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition cursor-pointer">
+            <div className="flex space-x-3 flex-shrink-0">
+              <label className="btn-secondary flex items-center space-x-2 cursor-pointer">
                 <FiUpload className="w-5 h-5" />
-                <span>{uploading ? 'Uploading...' : 'Upload'}</span>
+                <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload'}</span>
                 <input
                   type="file"
                   multiple
@@ -183,9 +183,10 @@ export default function LessonDetailPage() {
               {selectedDocuments.size > 0 && (
                 <button
                   onClick={handleStudyLesson}
-                  className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+                  className="btn-accent flex items-center space-x-2"
                 >
-                  <span className="font-semibold">Study ({selectedDocuments.size})</span>
+                  <FiPlay className="w-5 h-5" />
+                  <span>Study ({selectedDocuments.size})</span>
                 </button>
               )}
             </div>
@@ -194,17 +195,17 @@ export default function LessonDetailPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto section-padding">
         {documents.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
-            <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FiFileText className="w-8 h-8 text-blue-600" />
+          <div className="glass-card p-12 text-center animate-scale-in">
+            <div className="w-20 h-20 bg-gradient-to-br from-accent-purple to-accent-blue rounded-2xl mx-auto mb-6 flex items-center justify-center glow-primary">
+              <FiFileText className="w-10 h-10 text-white" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No documents yet</h3>
-            <p className="text-gray-600 mb-6">
-              Upload documents to start studying this lesson
+            <h3 className="text-2xl font-bold text-white mb-3">No documents yet</h3>
+            <p className="text-gray-400 mb-6 max-w-md mx-auto">
+              Upload documents to start studying this lesson with AI assistance
             </p>
-            <label className="inline-flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition cursor-pointer">
+            <label className="btn-accent flex items-center space-x-2 mx-auto cursor-pointer group">
               <FiUpload className="w-5 h-5" />
               <span>Upload Documents</span>
               <input
@@ -218,52 +219,55 @@ export default function LessonDetailPage() {
             </label>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-900 font-medium">Select documents to study</p>
-              <p className="text-sm text-blue-700 mt-1">
-                Click on documents below to select them, then click "Study" to begin.
+          <div className="space-y-6">
+            {/* Info Banner */}
+            <div className="glass-card p-4 border-l-4 border-primary-500">
+              <p className="text-sm text-gray-300 font-medium mb-1">📚 Select documents to study</p>
+              <p className="text-sm text-gray-500">
+                Click on documents below to select them, then click "Study" to begin your AI-assisted learning session.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {documents.map((doc) => {
+            {/* Documents Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {documents.map((doc, index) => {
                 const isSelected = selectedDocuments.has(doc.id)
                 
                 return (
                   <div
                     key={doc.id}
                     onClick={() => toggleDocumentSelection(doc.id)}
-                    className={`bg-white rounded-xl shadow-sm p-6 border-2 cursor-pointer transition ${
+                    className={`glass-card p-6 cursor-pointer transition-all duration-300 animate-slide-up group ${
                       isSelected
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300'
+                        ? 'border-2 border-primary-500 bg-primary-500/10'
+                        : 'border border-dark-border hover:border-primary-500/50'
                     }`}
+                    style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <div className="flex items-start justify-between mb-4">
-                      <div className={`p-3 rounded-lg ${
-                        isSelected ? 'bg-blue-100' : 'bg-gray-100'
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                        isSelected 
+                          ? 'bg-gradient-to-br from-accent-purple to-accent-blue glow-primary' 
+                          : 'bg-dark-surface group-hover:bg-gradient-to-br group-hover:from-accent-purple group-hover:to-accent-blue'
                       }`}>
-                        <FiFileText className={`w-6 h-6 ${
-                          isSelected ? 'text-blue-600' : 'text-gray-600'
-                        }`} />
+                        <FiFileText className="w-6 h-6 text-white" />
                       </div>
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
                         isSelected
-                          ? 'bg-blue-600 border-blue-600'
-                          : 'border-gray-300'
+                          ? 'bg-primary-500 border-primary-500'
+                          : 'border-dark-border group-hover:border-primary-500'
                       }`}>
                         {isSelected && <FiCheck className="w-4 h-4 text-white" />}
                       </div>
                     </div>
                     
-                    <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+                    <h3 className="font-semibold text-white mb-3 line-clamp-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-accent-purple group-hover:to-accent-blue transition-all duration-300">
                       {doc.name}
                     </h3>
                     
-                    <div className="flex items-center justify-between text-sm text-gray-600">
-                      <span className="uppercase">{doc.file_type}</span>
-                      <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="uppercase text-gray-400 font-medium">{doc.file_type}</span>
+                      <span className="text-gray-500">{new Date(doc.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                 )

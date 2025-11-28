@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FiPlus, FiBook, FiFileText, FiCalendar, FiArrowLeft, FiX, FiUpload } from 'react-icons/fi'
+import { FiPlus, FiBook, FiFileText, FiCalendar, FiArrowLeft, FiX, FiUpload, FiChevronRight } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase'
 
 interface Lesson {
@@ -153,30 +153,33 @@ export default function LessonsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading lessons...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center animate-fade-in">
+          <div className="spinner mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading lessons...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-dark-bg">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
+      <header className="glass-card border-b border-dark-border sticky top-0 z-40 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <a href="/dashboard" className="text-gray-600 hover:text-gray-900">
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg"
+              >
                 <FiArrowLeft className="w-5 h-5" />
-              </a>
-              <h1 className="text-2xl font-bold text-blue-600">My Lessons</h1>
+              </button>
+              <h1 className="text-2xl font-bold gradient-text">My Lessons</h1>
             </div>
             <button
               onClick={() => setShowNewLessonModal(true)}
-              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+              className="btn-accent flex items-center space-x-2"
             >
               <FiPlus className="w-5 h-5" />
               <span>New Lesson</span>
@@ -186,19 +189,19 @@ export default function LessonsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto section-padding">
         {lessons.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
-            <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FiBook className="w-8 h-8 text-blue-600" />
+          <div className="glass-card p-12 text-center animate-scale-in">
+            <div className="w-20 h-20 bg-gradient-to-br from-accent-purple to-accent-blue rounded-2xl mx-auto mb-6 flex items-center justify-center glow-primary">
+              <FiBook className="w-10 h-10 text-white" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No lessons yet</h3>
-            <p className="text-gray-600 mb-6">
-              Create your first lesson to start organizing your study materials
+            <h3 className="text-2xl font-bold text-white mb-3">No lessons yet</h3>
+            <p className="text-gray-400 mb-6 max-w-md mx-auto">
+              Create your first lesson to start organizing your study materials and learning with AI assistance
             </p>
             <button
               onClick={() => setShowNewLessonModal(true)}
-              className="inline-flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition"
+              className="btn-accent flex items-center space-x-2 mx-auto group"
             >
               <FiPlus className="w-5 h-5" />
               <span>Create Lesson</span>
@@ -206,26 +209,30 @@ export default function LessonsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lessons.map((lesson) => (
+            {lessons.map((lesson, index) => (
               <div
                 key={lesson.id}
                 onClick={() => router.push(`/lessons/${lesson.id}`)}
-                className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
+                className="glass-card p-6 card-hover cursor-pointer group animate-slide-up"
+                style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div className="bg-blue-100 p-3 rounded-lg">
-                    <FiBook className="w-6 h-6 text-blue-600" />
+                  <div className="w-12 h-12 bg-gradient-to-br from-accent-purple to-accent-blue rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                    <FiBook className="w-6 h-6 text-white" />
                   </div>
+                  <FiChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-1">
+                
+                <h3 className="text-lg font-semibold text-white mb-3 line-clamp-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-accent-purple group-hover:to-accent-blue transition-all duration-300">
                   {lesson.name}
                 </h3>
-                <div className="flex items-center space-x-4 text-sm text-gray-600">
-                  <div className="flex items-center space-x-1">
+                
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center space-x-1 text-gray-400">
                     <FiFileText className="w-4 h-4" />
                     <span>{lesson.documentCount} docs</span>
                   </div>
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center space-x-1 text-gray-500">
                     <FiCalendar className="w-4 h-4" />
                     <span>{new Date(lesson.created_at).toLocaleDateString()}</span>
                   </div>
@@ -238,21 +245,23 @@ export default function LessonsPage() {
 
       {/* New Lesson Modal */}
       {showNewLessonModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Create New Lesson</h2>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-card w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scale-in">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-dark-elevated/95 backdrop-blur-xl border-b border-dark-border px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-white">Create New Lesson</h2>
               <button
                 onClick={() => setShowNewLessonModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition"
+                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg"
               >
                 <FiX className="w-6 h-6" />
               </button>
             </div>
 
+            {/* Modal Content */}
             <form onSubmit={handleCreateLesson} className="p-6 space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Lesson Name *
                 </label>
                 <input
@@ -260,17 +269,17 @@ export default function LessonsPage() {
                   value={lessonName}
                   onChange={(e) => setLessonName(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  className="input-field"
                   placeholder="e.g., Introduction to Biology"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Upload Documents (Optional)
                 </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition">
-                  <FiUpload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <div className="border-2 border-dashed border-dark-border rounded-xl p-8 text-center hover:border-primary-500/50 transition-colors bg-dark-surface/50">
+                  <FiUpload className="w-12 h-12 text-gray-500 mx-auto mb-4" />
                   <input
                     type="file"
                     multiple
@@ -281,7 +290,7 @@ export default function LessonsPage() {
                   />
                   <label
                     htmlFor="fileInput"
-                    className="cursor-pointer inline-block bg-blue-50 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-100 transition"
+                    className="cursor-pointer inline-block btn-secondary"
                   >
                     Choose Files
                   </label>
@@ -292,10 +301,10 @@ export default function LessonsPage() {
                 
                 {files.length > 0 && (
                   <div className="mt-4 space-y-2">
-                    <p className="text-sm font-medium text-gray-700">Selected files:</p>
+                    <p className="text-sm font-medium text-gray-300">Selected files:</p>
                     {files.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between bg-gray-50 px-4 py-2 rounded-lg">
-                        <span className="text-sm text-gray-700">{file.name}</span>
+                      <div key={index} className="flex items-center justify-between bg-dark-surface px-4 py-3 rounded-lg border border-dark-border">
+                        <span className="text-sm text-gray-300">{file.name}</span>
                         <span className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                       </div>
                     ))}
@@ -304,7 +313,7 @@ export default function LessonsPage() {
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl text-sm">
                   {error}
                 </div>
               )}
@@ -314,14 +323,14 @@ export default function LessonsPage() {
                   type="button"
                   onClick={() => setShowNewLessonModal(false)}
                   disabled={creating}
-                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+                  className="flex-1 btn-secondary disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                  className="flex-1 btn-accent disabled:opacity-50"
                 >
                   {creating ? 'Creating...' : 'Create Lesson'}
                 </button>
