@@ -51,12 +51,13 @@ export default function PDFViewer({
         setLoading(true)
         setError(null)
 
-        // Get the PDF file URL from Supabase
-        const { data: urlData } = supabase.storage
+        // Get a signed URL for the PDF (valid for 1 hour)
+        const { data: urlData, error: urlError } = await supabase.storage
           .from('documents')
-          .getPublicUrl(filePath)
+          .createSignedUrl(filePath, 3600) // 1 hour expiry
 
-        if (!urlData?.publicUrl) {
+        if (urlError || !urlData?.signedUrl) {
+          console.error('Error getting signed URL:', urlError)
           throw new Error('Could not get document URL')
         }
 
@@ -66,8 +67,11 @@ export default function PDFViewer({
         // Set worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
-        // Load the PDF
-        const loadingTask = pdfjsLib.getDocument(urlData.publicUrl)
+        // Load the PDF with CORS settings
+        const loadingTask = pdfjsLib.getDocument({
+          url: urlData.signedUrl,
+          withCredentials: false,
+        })
         const pdf = await loadingTask.promise
 
         setPdfDoc(pdf)
