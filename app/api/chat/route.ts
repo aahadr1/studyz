@@ -53,18 +53,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!imageUrl) {
-      return NextResponse.json(
-        { error: 'No page image available. The AI needs to see the page to answer questions.' },
-        { status: 400 }
-      )
-    }
-
     // Prepare conversation history for OpenAI
     const messages: any[] = [
       {
         role: 'system',
-        content: `You are Studyz Guy, a friendly and helpful AI study assistant. You are helping a student understand their study materials. You can see the page image the student is currently viewing (Page ${pageNumber}). 
+        content: imageUrl 
+          ? `You are Studyz Guy, a friendly and helpful AI study assistant. You are helping a student understand their study materials. You can see the page image the student is currently viewing (Page ${pageNumber}). 
 
 Your role is to:
 - Answer questions about the content visible in the page image
@@ -72,6 +66,16 @@ Your role is to:
 - Provide examples and clarifications when needed
 - Be encouraging and supportive
 - Reference specific elements from the page image when relevant
+
+Always be helpful, patient, and educational in your responses.`
+          : `You are Studyz Guy, a friendly and helpful AI study assistant. You are helping a student understand their study materials on Page ${pageNumber}. 
+
+Your role is to:
+- Answer questions about the student's study materials
+- Explain concepts clearly and concisely
+- Provide examples and clarifications when needed
+- Be encouraging and supportive
+- Help with general study-related questions
 
 Always be helpful, patient, and educational in your responses.`,
       },
@@ -83,28 +87,36 @@ Always be helpful, patient, and educational in your responses.`,
       messages.push(...recentHistory)
     }
 
-    // Add current message with the page image
-    messages.push({
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: message,
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: imageUrl,
-            detail: 'high',
+    // Add current message with the page image (if available)
+    if (imageUrl) {
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: message,
           },
-        },
-      ],
-    })
+          {
+            type: 'image_url',
+            image_url: {
+              url: imageUrl,
+              detail: 'high',
+            },
+          },
+        ],
+      })
+    } else {
+      // Text-only mode if no image available
+      messages.push({
+        role: 'user',
+        content: message,
+      })
+    }
 
-    // Call OpenAI API with vision
-    // Use gpt-4o which has vision capabilities and is more recent
+    // Call OpenAI API
+    // Use gpt-4o for vision when image available, gpt-4o-mini for text-only
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: imageUrl ? 'gpt-4o' : 'gpt-4o-mini',
       messages: messages,
       max_tokens: 1000,
       temperature: 0.7,

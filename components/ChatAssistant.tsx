@@ -95,7 +95,10 @@ export default function ChatAssistant({
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to get response')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to get response')
+      }
 
       const data = await response.json()
 
@@ -107,13 +110,26 @@ export default function ChatAssistant({
       }
 
       setMessages((prev) => [...prev, assistantMessage])
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error)
+      
+      let errorContent = 'Sorry, I encountered an error. Please try again.'
+      
+      // Provide more specific error messages
+      if (error.message?.includes('API key')) {
+        errorContent = '⚠️ OpenAI API is not configured. Please contact support.'
+      } else if (error.message?.includes('quota')) {
+        errorContent = '⚠️ API quota exceeded. Please try again later.'
+      } else if (error.message?.includes('Failed to fetch')) {
+        errorContent = '⚠️ Network error. Please check your connection and try again.'
+      } else if (error.message) {
+        errorContent = `⚠️ ${error.message}`
+      }
       
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: errorContent,
         timestamp: new Date(),
       }
 
