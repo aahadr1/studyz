@@ -38,7 +38,7 @@ export default function VoiceAssistant({
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const currentPageRef = useRef<number>(pageNumber)
 
-  // Extract page text context from PDF using PDF.js
+  // Extract page text context using GPT-4o-mini (via voice-chat API)
   const extractPageTextFromPDF = async (): Promise<string> => {
     try {
       console.log('📄 Extracting text from PDF page', pageNumber)
@@ -53,6 +53,8 @@ export default function VoiceAssistant({
         console.warn('⚠️ No page image available')
         return ''
       }
+
+      console.log('🤖 Calling GPT-4o-mini for text extraction...')
 
       // Use our API to extract text via GPT-4o-mini
       const response = await fetch('/api/voice-chat', {
@@ -73,7 +75,13 @@ export default function VoiceAssistant({
       const data = await response.json()
       const pageText = data.pageContext || ''
       
-      console.log('✅ Page text extracted:', pageText.substring(0, 150) + '...')
+      if (pageText) {
+        console.log(`✅ Text extracted: ${pageText.length} characters`)
+        console.log(`📝 Preview: ${pageText.substring(0, 150)}...`)
+      } else {
+        console.warn('⚠️ No text extracted from page')
+      }
+      
       return pageText
 
     } catch (error: any) {
@@ -139,22 +147,23 @@ IMPORTANT: The content above is what the student is currently viewing. Use it to
       setError(null)
       setStatus('Preparing...')
 
-      // Extract initial page context
+      // Get page image for context extraction
       setStatus('Analyzing page...')
-      const pageText = await extractPageTextFromPDF()
-      setCurrentPageContext(pageText)
-      setHasPageContext(!!pageText)
+      let pageImageData = null
+      if (getPageImage) {
+        pageImageData = await getPageImage()
+      }
 
       setStatus('Connecting...')
       console.log('🔌 Starting OpenAI Realtime API session with WebRTC')
 
-      // Get ephemeral token from our backend (with initial context)
+      // Get ephemeral token from our backend (backend will extract text)
       const tokenResponse = await fetch('/api/realtime-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pageNumber,
-          pageContext: pageText,
+          pageImageData, // Send image, backend extracts text
         }),
       })
 
@@ -162,8 +171,16 @@ IMPORTANT: The content above is what the student is currently viewing. Use it to
         throw new Error('Failed to get session token')
       }
 
-      const { clientSecret } = await tokenResponse.json()
+      const tokenData = await tokenResponse.json()
+      const { clientSecret, hasPageContext, pageContextLength } = tokenData
+      
       console.log('✅ Got ephemeral token')
+      console.log(`📄 Page context: ${hasPageContext ? `Yes (${pageContextLength} chars)` : 'No'}`)
+      
+      setHasPageContext(hasPageContext)
+      if (hasPageContext && pageContextLength > 0) {
+        setCurrentPageContext('Context loaded')
+      }
 
       // Create RTCPeerConnection
       const pc = new RTCPeerConnection()
@@ -220,23 +237,11 @@ IMPORTANT: The content above is what the student is currently viewing. Use it to
         }
         dc.send(JSON.stringify(sessionUpdate))
         console.log('✅ Session configured with turn detection')
-        
-        // If we have page text, also update instructions to include it
-        if (pageText) {
-          setTimeout(() => {
-            sendContextUpdate(pageText, pageNumber)
-          }, 100)
-        }
-
-        if (pageText) {
-          setCurrentPageContext(pageText)
-          setHasPageContext(true)
-        }
 
         // Add welcome message
         const welcomeMsg: Message = {
           role: 'assistant',
-          content: `Hi! I'm your voice study assistant. I can see page ${pageNumber} of your document${pageText ? ' and I understand its content' : ''}. Ask me anything!`,
+          content: `Hi! I'm your voice study assistant. I can see page ${pageNumber} of your document${hasPageContext ? ' and I understand its content' : ''}. Ask me anything!`,
           timestamp: new Date(),
         }
         setConversation([welcomeMsg])
