@@ -4,38 +4,27 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { FiBook, FiFileText, FiLogOut, FiPlus } from 'react-icons/fi'
 
-interface UserData {
-  id: string
-  email: string
-  fullName: string
-}
-
-interface Stats {
-  totalLessons: number
-  totalDocuments: number
-}
-
 export default function DashboardPage() {
-  const [user, setUser] = useState<UserData | null>(null)
-  const [stats, setStats] = useState<Stats>({ totalLessons: 0, totalDocuments: 0 })
+  const [user, setUser] = useState<any>(null)
+  const [stats, setStats] = useState({ totalLessons: 0, totalDocuments: 0 })
   const [loading, setLoading] = useState(true)
-
-  const supabase = createClient()
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadDashboard = async () => {
+      const supabase = createClient()
+      
       try {
-        // Get current user
-        const { data: { user: authUser } } = await supabase.auth.getUser()
+        // Get user with timeout
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
         
-        if (!authUser) {
+        if (authError || !authUser) {
           window.location.href = '/login'
           return
         }
 
         setUser({
-          id: authUser.id,
-          email: authUser.email || '',
+          email: authUser.email,
           fullName: authUser.user_metadata?.full_name || 'Student',
         })
 
@@ -45,28 +34,15 @@ export default function DashboardPage() {
           .select('*', { count: 'exact', head: true })
           .eq('user_id', authUser.id)
 
-        const { data: lessons } = await supabase
-          .from('lessons')
-          .select('id')
-          .eq('user_id', authUser.id)
-
-        let documentsCount = 0
-        if (lessons && lessons.length > 0) {
-          const lessonIds = lessons.map(l => l.id)
-          const { count } = await supabase
-            .from('documents')
-            .select('*', { count: 'exact', head: true })
-            .in('lesson_id', lessonIds)
-          documentsCount = count || 0
-        }
-
         setStats({
           totalLessons: lessonsCount || 0,
-          totalDocuments: documentsCount,
+          totalDocuments: 0,
         })
-      } catch (error) {
-        console.error('Dashboard error:', error)
-      } finally {
+
+        setLoading(false)
+      } catch (err: any) {
+        console.error('Dashboard error:', err)
+        setError(err.message)
         setLoading(false)
       }
     }
@@ -75,6 +51,7 @@ export default function DashboardPage() {
   }, [])
 
   const handleLogout = async () => {
+    const supabase = createClient()
     await supabase.auth.signOut()
     window.location.href = '/login'
   }
@@ -84,7 +61,18 @@ export default function DashboardPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">Error: {error}</p>
+          <a href="/login" className="text-blue-600 hover:underline">Go to Login</a>
         </div>
       </div>
     )
@@ -111,14 +99,13 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome */}
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900">
-            Welcome back, {user?.fullName}!
+            Welcome, {user?.fullName}!
           </h2>
-          <p className="text-gray-600 mt-2">Ready to continue your learning journey?</p>
+          <p className="text-gray-600 mt-2">Ready to study?</p>
         </div>
 
         {/* Stats */}
@@ -148,7 +135,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Actions */}
         <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-200">
           <h3 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -161,7 +148,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="font-semibold text-gray-900">View Lessons</p>
-                <p className="text-sm text-gray-600">Browse and manage your lessons</p>
+                <p className="text-sm text-gray-600">Browse your lessons</p>
               </div>
             </a>
 
@@ -173,8 +160,8 @@ export default function DashboardPage() {
                 <FiPlus className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="font-semibold text-gray-900">Create New Lesson</p>
-                <p className="text-sm text-gray-600">Start a new study session</p>
+                <p className="font-semibold text-gray-900">New Lesson</p>
+                <p className="text-sm text-gray-600">Create a lesson</p>
               </div>
             </a>
           </div>
