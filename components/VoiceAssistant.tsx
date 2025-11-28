@@ -30,13 +30,17 @@ export default function VoiceAssistant({
       
       // Voice assistant WebSocket connection would go here
       // For now, this is disabled until you set up the WebSocket server
-      throw new Error('Voice assistant requires WebSocket server setup. Use Chat mode for now.')
+      setStatus('Voice mode not yet available. Please use Chat mode.')
+      console.log('Voice assistant requires WebSocket server setup. Use Chat mode for now.')
+      
+      // WebSocket setup would go here when backend is ready
+      // Example implementation (commented out):
+      /*
+      const ws = new WebSocket('wss://your-backend.com/realtime')
       
       ws.onopen = () => {
         setIsConnected(true)
         setStatus('Connected')
-        
-        // Send initial context
         ws.send(JSON.stringify({
           type: 'context',
           documentId,
@@ -47,7 +51,6 @@ export default function VoiceAssistant({
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data)
-        
         if (data.type === 'transcript') {
           setTranscript((prev) => [...prev, data.text])
         }
@@ -65,6 +68,7 @@ export default function VoiceAssistant({
       }
 
       wsRef.current = ws
+      */
     } catch (error) {
       console.error('Error connecting to Realtime API:', error)
       setStatus('Failed to connect')
