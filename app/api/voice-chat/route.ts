@@ -69,6 +69,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // If this is just a text extraction request, return the context
+    if (message === 'EXTRACT_TEXT_ONLY') {
+      return NextResponse.json({
+        pageContext,
+        pageNumber,
+      })
+    }
+
     // Step 2: Prepare conversation for voice assistant
     const messages: any[] = [
       {
