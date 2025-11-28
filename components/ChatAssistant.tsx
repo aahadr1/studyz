@@ -55,7 +55,9 @@ export default function ChatAssistant({
         content: `I can now see Page ${pageNumber}. What would you like to know about this page?`,
         timestamp: new Date(),
       }
-      return prev.concat(newMessage)
+      const newMessages = prev.slice()
+      newMessages.push(newMessage)
+      return newMessages
     })
   }, [pageNumber, documentId])
 
@@ -64,18 +66,21 @@ export default function ChatAssistant({
     
     if (!input.trim() || loading) return
 
+    const currentInput = input
+    
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: currentInput,
       timestamp: new Date(),
     }
 
     setMessages(function(prev) {
-      return prev.concat(userMessage)
+      const newMessages = prev.slice()
+      newMessages.push(userMessage)
+      return newMessages
     })
     
-    const currentInput = input
     setInput('')
     setLoading(true)
 
@@ -141,7 +146,9 @@ export default function ChatAssistant({
       }
 
       setMessages(function(prev) {
-        return prev.concat(assistantMessage)
+        const newMessages = prev.slice()
+        newMessages.push(assistantMessage)
+        return newMessages
       })
     } catch (error: any) {
       console.error('Error sending message:', error)
@@ -167,7 +174,9 @@ export default function ChatAssistant({
       }
 
       setMessages(function(prev) {
-        return prev.concat(errorMessage)
+        const newMessages = prev.slice()
+        newMessages.push(errorMessage)
+        return newMessages
       })
     } finally {
       setLoading(false)
