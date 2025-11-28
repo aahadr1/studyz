@@ -32,6 +32,10 @@ export async function GET(
     const allCookies = cookieStore.getAll()
     console.log('🍪 Cookies received:', allCookies.length, 'cookies')
     
+    // Log cookie names for debugging
+    const cookieNames = allCookies.map(c => c.name)
+    console.log('🍪 Cookie names:', cookieNames.join(', '))
+    
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
