@@ -262,16 +262,17 @@ export default function StudyPage() {
 
         {/* Assistant Content */}
         <div className="flex-1 overflow-hidden">
-          {assistantMode === 'chat' ? (
+          {currentDocument && assistantMode === 'chat' && (
             <ChatAssistant
-              documentId={currentDocument?.id}
+              documentId={currentDocument.id}
               pageNumber={currentPage}
               lessonId={lessonId}
               getPageImage={getPageImageFn}
             />
-          ) : (
+          )}
+          {currentDocument && assistantMode === 'voice' && (
             <VoiceAssistant
-              documentId={currentDocument?.id}
+              documentId={currentDocument.id}
               pageNumber={currentPage}
               lessonId={lessonId}
             />
