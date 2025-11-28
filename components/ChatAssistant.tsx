@@ -37,7 +37,9 @@ export default function ChatAssistant({
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   useEffect(() => {
@@ -46,15 +48,15 @@ export default function ChatAssistant({
 
   useEffect(() => {
     // Update context when page changes
-    setMessages((prev) => [
-      ...prev,
-      {
+    setMessages(function(prev) {
+      const newMessage: Message = {
         id: Date.now().toString(),
         role: 'assistant',
         content: `I can now see Page ${pageNumber}. What would you like to know about this page?`,
         timestamp: new Date(),
-      },
-    ])
+      }
+      return prev.concat(newMessage)
+    })
   }, [pageNumber, documentId])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,7 +71,11 @@ export default function ChatAssistant({
       timestamp: new Date(),
     }
 
-    setMessages((prev) => [...prev, userMessage])
+    setMessages(function(prev) {
+      return prev.concat(userMessage)
+    })
+    
+    const currentInput = input
     setInput('')
     setLoading(true)
 
@@ -88,7 +94,7 @@ export default function ChatAssistant({
         console.log('⚠️ getPageImage function not available')
       }
 
-      // Prepare conversation history safely (avoid arrow function minification issues)
+      // Prepare conversation history safely (avoid minification issues)
       const conversationHistory = messages.map(function(msg) {
         return {
           role: msg.role,
@@ -100,18 +106,24 @@ export default function ChatAssistant({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: input,
-          documentId,
-          pageNumber,
-          lessonId,
-          pageImageData,
-          conversationHistory,
+          message: currentInput,
+          documentId: documentId,
+          pageNumber: pageNumber,
+          lessonId: lessonId,
+          pageImageData: pageImageData,
+          conversationHistory: conversationHistory,
         }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to get response')
+        let errorData: any = {}
+        try {
+          errorData = await response.json()
+        } catch (e) {
+          // Ignore JSON parse errors
+        }
+        const errorMessage = errorData.error || 'Failed to get response'
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
@@ -128,18 +140,20 @@ export default function ChatAssistant({
         timestamp: new Date(),
       }
 
-      setMessages((prev) => [...prev, assistantMessage])
+      setMessages(function(prev) {
+        return prev.concat(assistantMessage)
+      })
     } catch (error: any) {
       console.error('Error sending message:', error)
       
       let errorContent = 'Sorry, I encountered an error. Please try again.'
       
       // Provide more specific error messages
-      if (error.message?.includes('API key')) {
+      if (error.message && error.message.includes('API key')) {
         errorContent = '⚠️ OpenAI API is not configured. Please contact support.'
-      } else if (error.message?.includes('quota')) {
+      } else if (error.message && error.message.includes('quota')) {
         errorContent = '⚠️ API quota exceeded. Please try again later.'
-      } else if (error.message?.includes('Failed to fetch')) {
+      } else if (error.message && error.message.includes('Failed to fetch')) {
         errorContent = '⚠️ Network error. Please check your connection and try again.'
       } else if (error.message) {
         errorContent = `⚠️ ${error.message}`
@@ -152,7 +166,9 @@ export default function ChatAssistant({
         timestamp: new Date(),
       }
 
-      setMessages((prev) => [...prev, errorMessage])
+      setMessages(function(prev) {
+        return prev.concat(errorMessage)
+      })
     } finally {
       setLoading(false)
     }
@@ -170,51 +186,56 @@ export default function ChatAssistant({
       
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
+        {messages.map(function(message) {
+          const isUser = message.role === 'user'
+          const timeString = message.timestamp.toLocaleTimeString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+          
+          return (
             <div
-              className={`flex items-start space-x-2 max-w-[85%] ${
-                message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-              }`}
+              key={message.id}
+              className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                  message.role === 'user'
-                    ? 'bg-primary-100'
-                    : 'bg-purple-100'
+                className={`flex items-start space-x-2 max-w-[85%] ${
+                  isUser ? 'flex-row-reverse space-x-reverse' : ''
                 }`}
               >
-                {message.role === 'user' ? (
-                  <FiUser className="w-4 h-4 text-primary-600" />
-                ) : (
-                  <FiCpu className="w-4 h-4 text-purple-600" />
-                )}
-              </div>
-              <div
-                className={`px-4 py-3 rounded-2xl ${
-                  message.role === 'user'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-900'
-                }`}
-              >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                <p
-                  className={`text-xs mt-1 ${
-                    message.role === 'user' ? 'text-primary-100' : 'text-gray-500'
+                <div
+                  className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                    isUser
+                      ? 'bg-primary-100'
+                      : 'bg-purple-100'
                   }`}
                 >
-                  {message.timestamp.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
+                  {isUser ? (
+                    <FiUser className="w-4 h-4 text-primary-600" />
+                  ) : (
+                    <FiCpu className="w-4 h-4 text-purple-600" />
+                  )}
+                </div>
+                <div
+                  className={`px-4 py-3 rounded-2xl ${
+                    isUser
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-900'
+                  }`}
+                >
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <p
+                    className={`text-xs mt-1 ${
+                      isUser ? 'text-primary-100' : 'text-gray-500'
+                    }`}
+                  >
+                    {timeString}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
         {loading && (
           <div className="flex justify-start">
             <div className="flex items-start space-x-2 max-w-[85%]">
@@ -240,7 +261,7 @@ export default function ChatAssistant({
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={function(e) { setInput(e.target.value) }}
             placeholder="Ask about this page..."
             className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
             disabled={loading}
@@ -260,4 +281,3 @@ export default function ChatAssistant({
     </div>
   )
 }
-
