@@ -21,36 +21,44 @@ export async function POST(request: NextRequest) {
       pageNumber,
       lessonId,
       conversationHistory,
+      pageImageData, // Base64 image data from frontend
     } = await request.json()
 
-    if (!message || !documentId || !pageNumber) {
+    if (!message || !pageNumber) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    // Get the page image URL
-    const { data: pageData, error: pageError } = await supabase
-      .from('document_pages')
-      .select('image_path')
-      .eq('document_id', documentId)
-      .eq('page_number', pageNumber)
-      .single()
+    let imageUrl = null
 
-    if (pageError) {
-      return NextResponse.json(
-        { error: 'Page not found or not yet processed' },
-        { status: 404 }
-      )
+    // Try to use the page image data sent from frontend first
+    if (pageImageData) {
+      imageUrl = pageImageData
+    } else if (documentId) {
+      // Fallback: try to get from document_pages table
+      const { data: pageData, error: pageError } = await supabase
+        .from('document_pages')
+        .select('image_path')
+        .eq('document_id', documentId)
+        .eq('page_number', pageNumber)
+        .single()
+
+      if (!pageError && pageData) {
+        const { data: urlData } = supabase.storage
+          .from('document-pages')
+          .getPublicUrl(pageData.image_path)
+        imageUrl = urlData.publicUrl
+      }
     }
 
-    // Get public URL for the image
-    const { data: urlData } = supabase.storage
-      .from('document-pages')
-      .getPublicUrl(pageData.image_path)
-
-    const imageUrl = urlData.publicUrl
+    if (!imageUrl) {
+      return NextResponse.json(
+        { error: 'No page image available. The AI needs to see the page to answer questions.' },
+        { status: 400 }
+      )
+    }
 
     // Prepare conversation history for OpenAI
     const messages: any[] = [

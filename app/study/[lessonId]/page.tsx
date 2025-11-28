@@ -5,7 +5,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiMic } from 'react-icons/fi'
 import { getCurrentUser } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
-import DocumentViewer from '@/components/DocumentViewer'
+import PDFViewer from '@/components/PDFViewer'
 import ChatAssistant from '@/components/ChatAssistant'
 import VoiceAssistant from '@/components/VoiceAssistant'
 
@@ -28,8 +28,10 @@ export default function StudyPage() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [currentDocIndex, setCurrentDocIndex] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
   const [assistantMode, setAssistantMode] = useState<'chat' | 'voice'>('chat')
+  const [getPageImageFn, setGetPageImageFn] = useState<(() => Promise<string | null>) | null>(null)
 
   useEffect(() => {
     const loadDocuments = async () => {
@@ -64,7 +66,7 @@ export default function StudyPage() {
   }
 
   const handleNextPage = () => {
-    if (currentDocument && currentPage < currentDocument.page_count) {
+    if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1)
     }
   }
@@ -73,6 +75,7 @@ export default function StudyPage() {
     if (currentDocIndex > 0) {
       setCurrentDocIndex(currentDocIndex - 1)
       setCurrentPage(1)
+      setTotalPages(0)
     }
   }
 
@@ -80,6 +83,7 @@ export default function StudyPage() {
     if (currentDocIndex < documents.length - 1) {
       setCurrentDocIndex(currentDocIndex + 1)
       setCurrentPage(1)
+      setTotalPages(0)
     }
   }
 
@@ -127,7 +131,7 @@ export default function StudyPage() {
                 {currentDocument?.name}
               </h2>
               <p className="text-sm text-gray-600">
-                Page {currentPage} of {currentDocument?.page_count || 0}
+                Page {currentPage} of {totalPages || '...'}
               </p>
             </div>
 
@@ -142,7 +146,7 @@ export default function StudyPage() {
               </button>
               <button
                 onClick={handleNextPage}
-                disabled={currentPage >= (currentDocument?.page_count || 0)}
+                disabled={currentPage >= totalPages}
                 className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <FiChevronRight className="w-5 h-5" />
@@ -175,12 +179,15 @@ export default function StudyPage() {
         </div>
 
         {/* Document Content */}
-        <div className="flex-1 overflow-auto p-8 flex items-center justify-center bg-gray-100">
-          <DocumentViewer
+        <div className="flex-1 overflow-hidden bg-gray-100">
+          <PDFViewer
             documentId={currentDocument?.id}
-            pageNumber={currentPage}
             filePath={currentDocument?.file_path}
-            fileType={currentDocument?.file_type}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            totalPages={totalPages}
+            onTotalPagesChange={setTotalPages}
+            onCanvasRefReady={(getImageFn) => setGetPageImageFn(() => getImageFn)}
           />
         </div>
       </div>
@@ -228,6 +235,7 @@ export default function StudyPage() {
               documentId={currentDocument?.id}
               pageNumber={currentPage}
               lessonId={lessonId}
+              getPageImage={getPageImageFn || undefined}
             />
           ) : (
             <VoiceAssistant

@@ -7,6 +7,7 @@ interface ChatAssistantProps {
   documentId: string
   pageNumber: number
   lessonId: string
+  getPageImage?: () => Promise<string | null>
 }
 
 interface Message {
@@ -20,6 +21,7 @@ export default function ChatAssistant({
   documentId,
   pageNumber,
   lessonId,
+  getPageImage,
 }: ChatAssistantProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -71,6 +73,12 @@ export default function ChatAssistant({
     setLoading(true)
 
     try {
+      // Get current page image if function provided
+      let pageImageData = null
+      if (getPageImage) {
+        pageImageData = await getPageImage()
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,6 +87,7 @@ export default function ChatAssistant({
           documentId,
           pageNumber,
           lessonId,
+          pageImageData,
           conversationHistory: messages.map((m) => ({
             role: m.role,
             content: m.content,
