@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { FiSend, FiUser, FiCpu } from 'react-icons/fi'
+import { FiSend, FiUser, FiCpu, FiEye } from 'react-icons/fi'
 
 interface ChatAssistantProps {
   documentId: string
@@ -27,12 +27,13 @@ export default function ChatAssistant({
     {
       id: '1',
       role: 'assistant',
-      content: `Hi! I'm Studyz Guy, your AI study assistant. I can see the current page you're viewing (Page ${pageNumber}). Ask me anything about this page, and I'll help you understand it better!`,
+      content: `Hi! I'm Studyz Guy, your AI study assistant. 👋\n\nI can see the current page you're viewing (Page ${pageNumber}). I have full visual context of your document, so feel free to ask me:\n\n• Questions about specific text or diagrams you see\n• Explanations of concepts on this page\n• Clarifications about anything unclear\n• Help with understanding formulas or examples\n\nJust ask naturally about what you're looking at, and I'll help! 📚`,
       timestamp: new Date(),
     },
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [hasVisualContext, setHasVisualContext] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -73,10 +74,18 @@ export default function ChatAssistant({
     setLoading(true)
 
     try {
-      // Get current page image if function provided
+      // Always try to get current page image for GPT context
       let pageImageData = null
       if (getPageImage) {
+        console.log('📸 Capturing page image for GPT context...')
         pageImageData = await getPageImage()
+        if (pageImageData) {
+          console.log('✅ Page image ready for GPT (with visual context)')
+        } else {
+          console.log('⚠️ No page image available (text-only mode)')
+        }
+      } else {
+        console.log('⚠️ getPageImage function not available')
       }
 
       const response = await fetch('/api/chat', {
@@ -101,6 +110,11 @@ export default function ChatAssistant({
       }
 
       const data = await response.json()
+
+      // Update visual context status
+      if (data.hasVisualContext !== undefined) {
+        setHasVisualContext(data.hasVisualContext)
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -141,6 +155,14 @@ export default function ChatAssistant({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Visual Context Indicator */}
+      {hasVisualContext && (
+        <div className="px-4 py-2 bg-green-500/10 border-b border-green-500/20 flex items-center space-x-2 text-xs text-green-400">
+          <FiEye className="w-4 h-4" />
+          <span>GPT can see your page (visual context enabled)</span>
+        </div>
+      )}
+      
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message) => (

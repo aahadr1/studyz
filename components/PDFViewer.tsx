@@ -29,20 +29,30 @@ export default function PDFViewer({
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   // Provide function to capture current page image
+  // Update whenever page renders to ensure we always capture the current page
   useEffect(() => {
-    if (onCanvasRefReady && canvasRef.current) {
+    if (onCanvasRefReady && canvasRef.current && pdfDoc) {
       const getImage = async (): Promise<string | null> => {
-        if (!canvasRef.current) return null
+        if (!canvasRef.current) {
+          console.warn('Canvas not available for image capture')
+          return null
+        }
         try {
-          return canvasRef.current.toDataURL('image/jpeg', 0.8)
+          // Capture at high quality for GPT vision
+          const imageData = canvasRef.current.toDataURL('image/jpeg', 0.95)
+          console.log('✅ Page image captured successfully', {
+            size: Math.round(imageData.length / 1024) + 'KB',
+            page: currentPage
+          })
+          return imageData
         } catch (err) {
-          console.error('Error capturing page image:', err)
+          console.error('❌ Error capturing page image:', err)
           return null
         }
       }
       onCanvasRefReady(getImage)
     }
-  }, [onCanvasRefReady, canvasRef.current])
+  }, [onCanvasRefReady, pdfDoc, currentPage])
 
   // Load PDF document
   useEffect(() => {

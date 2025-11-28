@@ -36,7 +36,12 @@ export async function POST(request: NextRequest) {
     // Try to use the page image data sent from frontend first
     if (pageImageData) {
       imageUrl = pageImageData
+      console.log('✅ Using page image from frontend', {
+        pageNumber,
+        imageSize: Math.round(pageImageData.length / 1024) + 'KB'
+      })
     } else if (documentId) {
+      console.log('⚠️ No page image from frontend, trying database fallback...')
       // Fallback: try to get from document_pages table
       const { data: pageData, error: pageError } = await supabase
         .from('document_pages')
@@ -115,8 +120,11 @@ Always be helpful, patient, and educational in your responses.`,
 
     // Call OpenAI API
     // Use gpt-4o for vision when image available, gpt-4o-mini for text-only
+    const model = imageUrl ? 'gpt-4o' : 'gpt-4o-mini'
+    console.log(`🤖 Calling OpenAI ${model} (${imageUrl ? 'WITH' : 'WITHOUT'} visual context)`)
+    
     const completion = await openai.chat.completions.create({
-      model: imageUrl ? 'gpt-4o' : 'gpt-4o-mini',
+      model: model,
       messages: messages,
       max_tokens: 1000,
       temperature: 0.7,
@@ -125,10 +133,13 @@ Always be helpful, patient, and educational in your responses.`,
     const assistantResponse = completion.choices[0]?.message?.content || 
       'Sorry, I could not generate a response.'
 
+    console.log('✅ GPT response generated successfully')
+
     return NextResponse.json({
       response: assistantResponse,
       pageNumber,
       documentId,
+      hasVisualContext: !!imageUrl, // Let frontend know if GPT saw the image
     })
   } catch (error: any) {
     console.error('Error in chat API:', error)
