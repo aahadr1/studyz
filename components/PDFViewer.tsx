@@ -47,24 +47,30 @@ export default function PDFViewer(props: PDFViewerProps) {
     const updateContainerWidth = function() {
       if (containerRef.current) {
         const width = containerRef.current.clientWidth
-        setContainerWidth(width)
+        // Only update if width actually changed to avoid unnecessary re-renders
+        setContainerWidth(function(prevWidth) {
+          return prevWidth !== width ? width : prevWidth
+        })
       }
     }
 
-    // Initial measurement
-    updateContainerWidth()
+    // Delay initial measurement to ensure DOM is ready
+    const timer = setTimeout(function() {
+      updateContainerWidth()
+    }, 100)
 
     // Listen for resize events
     window.addEventListener('resize', updateContainerWidth)
 
     return function() {
+      clearTimeout(timer)
       window.removeEventListener('resize', updateContainerWidth)
     }
   }, [])
 
   // Register image capture function whenever canvas or page changes
   useEffect(function() {
-    if (!onCanvasRefReady || !canvasRef.current || !pdfDoc) {
+    if (!onCanvasRefReady || !pdfDoc) {
       return
     }
 
@@ -88,7 +94,7 @@ export default function PDFViewer(props: PDFViewerProps) {
 
     // Register the capture function
     onCanvasRefReady(capturePageImage)
-  }, [onCanvasRefReady, pdfDoc, currentPage, canvasRef.current])
+  }, [onCanvasRefReady, pdfDoc, currentPage])
 
   // Load PDF document via backend API
   useEffect(function() {
@@ -180,12 +186,19 @@ export default function PDFViewer(props: PDFViewerProps) {
 
   // Render current page
   useEffect(function() {
-    if (!pdfDoc || !canvasRef.current || !containerWidth) {
+    // Don't render if essential dependencies are missing
+    if (!pdfDoc || !canvasRef.current) {
+      return
+    }
+
+    // Wait for container width to be measured (skip first render with 0 width)
+    if (containerWidth === 0) {
       return
     }
 
     // Skip if already rendering
     if (isRenderingRef.current) {
+      console.log('⏭️ Skipping render - already rendering')
       return
     }
 
@@ -203,6 +216,7 @@ export default function PDFViewer(props: PDFViewerProps) {
     }
 
     const pageToRender = currentPage
+    const currentContainerWidth = containerWidth
 
     pdfDoc.getPage(pageToRender).then(function(page: any) {
       const canvas = canvasRef.current
@@ -214,7 +228,7 @@ export default function PDFViewer(props: PDFViewerProps) {
       // Calculate scale to fit the page width with some padding
       const pageViewport = page.getViewport({ scale: 1.0 })
       const padding = 32 // 16px on each side
-      const availableWidth = containerWidth - padding
+      const availableWidth = currentContainerWidth - padding
       const autoScale = availableWidth / pageViewport.width
       
       // Use the calculated auto scale, but respect manual zoom adjustments
@@ -242,7 +256,7 @@ export default function PDFViewer(props: PDFViewerProps) {
       renderTask.promise.then(function() {
         renderTaskRef.current = null
         isRenderingRef.current = false
-        console.log('✅ Page rendered at scale:', finalScale.toFixed(2), 'width:', viewport.width + 'px')
+        console.log('✅ Page', pageToRender, 'rendered at scale:', finalScale.toFixed(2), 'width:', viewport.width + 'px')
       }).catch(function(err: any) {
         renderTaskRef.current = null
         isRenderingRef.current = false
