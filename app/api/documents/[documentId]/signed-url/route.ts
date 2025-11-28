@@ -18,6 +18,8 @@ export async function GET(
   try {
     const documentId = params.documentId
 
+    console.log('🔍 Signed URL request for document:', documentId)
+
     if (!documentId) {
       return NextResponse.json(
         { error: 'Missing document ID' },
@@ -26,14 +28,26 @@ export async function GET(
     }
 
     // Create auth client to verify user
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
+    const allCookies = cookieStore.getAll()
+    console.log('🍪 Cookies received:', allCookies.length, 'cookies')
+    
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {
+              // Called from Server Component - can ignore
+            }
           },
         },
       }
@@ -42,14 +56,26 @@ export async function GET(
     // Get current user
     const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
 
+    if (authError) {
+      console.error('❌ Auth error:', authError.message)
+    }
+
+    if (!user) {
+      console.error('❌ No user found in session')
+    }
+
     if (authError || !user) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Please log in to view this document' },
         { status: 401 }
       )
     }
 
+    console.log('✅ User authenticated:', user.email)
+
     // Get document info and verify ownership through lesson
+    console.log('Fetching document:', documentId, 'for user:', user.id)
+    
     const { data: document, error: docError } = await supabaseAdmin
       .from('documents')
       .select(`
@@ -74,9 +100,14 @@ export async function GET(
       )
     }
 
+    console.log('Document found:', document.name, 'lesson_id:', document.lesson_id)
+
     // Verify user owns this document (through lesson ownership)
     const lessonData = document.lessons as any
+    console.log('Document owner:', lessonData.user_id, 'Current user:', user.id)
+    
     if (lessonData.user_id !== user.id) {
+      console.error('Access denied: User', user.id, 'does not own document owned by', lessonData.user_id)
       return NextResponse.json(
         { error: 'Access denied' },
         { status: 403 }
