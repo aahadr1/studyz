@@ -27,6 +27,7 @@ export default function PDFViewer(props: PDFViewerProps) {
   const [error, setError] = useState<string | null>(null)
   const [scale, setScale] = useState(1.5)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const renderTaskRef = useRef<any>(null)
 
   // Register image capture function whenever canvas or page changes
   useEffect(function() {
@@ -115,6 +116,12 @@ export default function PDFViewer(props: PDFViewerProps) {
       return
     }
 
+    // Cancel any ongoing render task
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel()
+      renderTaskRef.current = null
+    }
+
     const renderPage = async function() {
       try {
         const page = await pdfDoc.getPage(currentPage)
@@ -138,14 +145,30 @@ export default function PDFViewer(props: PDFViewerProps) {
           viewport: viewport,
         }
 
+        // Store the render task so we can cancel it if needed
         const renderTask = page.render(renderContext)
+        renderTaskRef.current = renderTask
+        
         await renderTask.promise
+        renderTaskRef.current = null
       } catch (err: any) {
+        // Ignore cancellation errors
+        if (err && err.name === 'RenderingCancelledException') {
+          return
+        }
         console.error('Error rendering page:', err)
       }
     }
 
     renderPage()
+
+    // Cleanup function to cancel render on unmount or re-render
+    return function() {
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel()
+        renderTaskRef.current = null
+      }
+    }
   }, [pdfDoc, currentPage, scale])
 
   if (loading) {
