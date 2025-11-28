@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { FiMic, FiMicOff, FiVolume2, FiVolumeX, FiAlertCircle, FiLoader } from 'react-icons/fi'
+import { FiMic, FiMicOff, FiVolume2, FiVolumeX, FiAlertCircle, FiLoader, FiEye } from 'react-icons/fi'
 
 interface VoiceAssistantProps {
   documentId: string
@@ -11,7 +11,7 @@ interface VoiceAssistantProps {
 }
 
 interface Message {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
 }
@@ -30,30 +30,31 @@ export default function VoiceAssistant({
   const [status, setStatus] = useState<string>('Ready to start')
   const [conversation, setConversation] = useState<Message[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [currentPageContext, setCurrentPageContext] = useState<string>('')
+  const [hasPageContext, setHasPageContext] = useState(false)
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
   const dataChannelRef = useRef<RTCDataChannel | null>(null)
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
+  const currentPageRef = useRef<number>(pageNumber)
 
-  // Extract page context when starting session
-  const extractPageContext = async (): Promise<string> => {
-    if (!getPageImage) {
-      return ''
-    }
-
+  // Extract page text context from PDF using PDF.js
+  const extractPageTextFromPDF = async (): Promise<string> => {
     try {
-      setStatus('Analyzing page...')
-      console.log('📸 Capturing page for context...')
+      console.log('📄 Extracting text from PDF page', pageNumber)
       
+      if (!getPageImage) {
+        return ''
+      }
+
+      // Get page image for OCR extraction
       const pageImageData = await getPageImage()
       if (!pageImageData) {
         console.warn('⚠️ No page image available')
         return ''
       }
 
-      console.log('📄 Extracting text from page...')
-
-      // Use GPT-4o-mini to extract text from page
+      // Use our API to extract text via GPT-4o-mini
       const response = await fetch('/api/voice-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,18 +67,66 @@ export default function VoiceAssistant({
       })
 
       if (!response.ok) {
-        console.warn('⚠️ Failed to extract page context')
-        return ''
+        throw new Error('Failed to extract page text')
       }
 
       const data = await response.json()
-      console.log('✅ Page context extracted')
+      const pageText = data.pageContext || ''
       
-      return data.pageContext || ''
+      console.log('✅ Page text extracted:', pageText.substring(0, 150) + '...')
+      return pageText
+
+    } catch (error: any) {
+      console.error('❌ Error extracting page text:', error)
+      return ''
+    }
+  }
+
+  // Send context update to Realtime API
+  const sendContextUpdate = (pageText: string, pageNum: number) => {
+    if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open') {
+      console.warn('⚠️ Data channel not ready for context update')
+      return
+    }
+
+    console.log(`📤 Sending context update for page ${pageNum}`)
+
+    // Create a conversation item with system message containing page context
+    const contextMessage = {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: `CURRENT PAGE UPDATE - Page ${pageNum}:
+
+${pageText}
+
+The user is now viewing this page. Please reference this content when answering questions. Be specific about what's on this page.`,
+          },
+        ],
+      },
+    }
+
+    try {
+      dataChannelRef.current.send(JSON.stringify(contextMessage))
+      console.log('✅ Context update sent')
+      
+      setCurrentPageContext(pageText)
+      setHasPageContext(true)
+
+      // Add system message to conversation history
+      const systemMsg: Message = {
+        role: 'system',
+        content: `📄 Now viewing Page ${pageNum}`,
+        timestamp: new Date(),
+      }
+      setConversation(prev => [...prev, systemMsg])
 
     } catch (error) {
-      console.error('❌ Error extracting page context:', error)
-      return ''
+      console.error('❌ Error sending context update:', error)
     }
   }
 
@@ -87,19 +136,22 @@ export default function VoiceAssistant({
       setError(null)
       setStatus('Preparing...')
 
-      // Extract page context first
-      const pageContext = await extractPageContext()
+      // Extract initial page context
+      setStatus('Analyzing page...')
+      const pageText = await extractPageTextFromPDF()
+      setCurrentPageContext(pageText)
+      setHasPageContext(!!pageText)
 
       setStatus('Connecting...')
       console.log('🔌 Starting OpenAI Realtime API session with WebRTC')
 
-      // Get ephemeral token from our backend
+      // Get ephemeral token from our backend (with initial context)
       const tokenResponse = await fetch('/api/realtime-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pageNumber,
-          pageContext,
+          pageContext: pageText,
         }),
       })
 
@@ -146,21 +198,34 @@ export default function VoiceAssistant({
         setIsConnecting(false)
         setIsListening(true)
         setStatus('Listening...')
+        currentPageRef.current = pageNumber
 
-        // Send session update with instructions
+        // Configure session
         const sessionUpdate = {
           type: 'session.update',
           session: {
-            turn_detection: { type: 'server_vad' },
-            input_audio_transcription: { model: 'whisper-1' },
+            turn_detection: { 
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 500,
+            },
+            input_audio_transcription: { 
+              model: 'whisper-1' 
+            },
           },
         }
         dc.send(JSON.stringify(sessionUpdate))
 
+        // Send initial page context
+        if (pageText) {
+          sendContextUpdate(pageText, pageNumber)
+        }
+
         // Add welcome message
         const welcomeMsg: Message = {
           role: 'assistant',
-          content: `Hi! I'm your voice study assistant. I can see page ${pageNumber} of your document. Ask me anything!`,
+          content: `Hi! I'm your voice study assistant. I can see page ${pageNumber} of your document${pageText ? ' and I understand its content' : ''}. Ask me anything!`,
           timestamp: new Date(),
         }
         setConversation([welcomeMsg])
@@ -228,7 +293,8 @@ export default function VoiceAssistant({
   }
 
   const handleRealtimeEvent = (event: any) => {
-    console.log('📨 Realtime event:', event.type)
+    // Uncomment for detailed debugging:
+    // console.log('📨 Realtime event:', event.type)
 
     switch (event.type) {
       case 'conversation.item.input_audio_transcription.completed':
@@ -241,6 +307,23 @@ export default function VoiceAssistant({
             timestamp: new Date(),
           }
           setConversation(prev => [...prev, userMsg])
+        }
+        break
+
+      case 'response.audio_transcript.delta':
+        // AI response text chunk (for live transcript)
+        break
+
+      case 'response.audio_transcript.done':
+        // Complete AI response transcript
+        const aiTranscript = event.transcript
+        if (aiTranscript) {
+          const assistantMsg: Message = {
+            role: 'assistant',
+            content: aiTranscript,
+            timestamp: new Date(),
+          }
+          setConversation(prev => [...prev, assistantMsg])
         }
         break
 
@@ -259,28 +342,6 @@ export default function VoiceAssistant({
         setStatus('Listening...')
         break
 
-      case 'response.text.delta':
-        // AI response text chunk (for transcript)
-        break
-
-      case 'response.text.done':
-        // Complete AI response text
-        const aiText = event.text
-        if (aiText) {
-          const assistantMsg: Message = {
-            role: 'assistant',
-            content: aiText,
-            timestamp: new Date(),
-          }
-          setConversation(prev => [...prev, assistantMsg])
-        }
-        break
-
-      case 'error':
-        console.error('❌ Realtime API error:', event.error)
-        setError(event.error.message || 'An error occurred')
-        break
-
       case 'input_audio_buffer.speech_started':
         setIsListening(true)
         setStatus('Listening...')
@@ -288,6 +349,11 @@ export default function VoiceAssistant({
 
       case 'input_audio_buffer.speech_stopped':
         setStatus('Processing...')
+        break
+
+      case 'error':
+        console.error('❌ Realtime API error:', event.error)
+        setError(event.error.message || 'An error occurred')
         break
 
       default:
@@ -319,6 +385,8 @@ export default function VoiceAssistant({
     setIsListening(false)
     setIsSpeaking(false)
     setStatus('Session ended')
+    setCurrentPageContext('')
+    setHasPageContext(false)
   }
 
   const toggleMicrophone = () => {
@@ -339,6 +407,44 @@ export default function VoiceAssistant({
     }
   }
 
+  // Update context when page changes
+  useEffect(() => {
+    const updatePageContext = async () => {
+      if (!isActive || !dataChannelRef.current) {
+        return
+      }
+
+      // Only update if page actually changed
+      if (currentPageRef.current === pageNumber) {
+        return
+      }
+
+      console.log(`📄 Page changed: ${currentPageRef.current} → ${pageNumber}`)
+      currentPageRef.current = pageNumber
+
+      // Extract new page context
+      setStatus('Updating context...')
+      const newPageText = await extractPageTextFromPDF()
+      
+      if (newPageText) {
+        // Send context update to Realtime API
+        sendContextUpdate(newPageText, pageNumber)
+        setStatus('Listening...')
+      } else {
+        // Just notify about page change
+        const systemMsg: Message = {
+          role: 'system',
+          content: `📄 Now viewing Page ${pageNumber}`,
+          timestamp: new Date(),
+        }
+        setConversation(prev => [...prev, systemMsg])
+        setStatus('Listening...')
+      }
+    }
+
+    updatePageContext()
+  }, [pageNumber, isActive])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -346,21 +452,16 @@ export default function VoiceAssistant({
     }
   }, [])
 
-  // Update context when page changes
-  useEffect(() => {
-    if (isActive && dataChannelRef.current?.readyState === 'open') {
-      // Notify about page change
-      const pageChangeMsg: Message = {
-        role: 'assistant',
-        content: `[Now viewing Page ${pageNumber}]`,
-        timestamp: new Date(),
-      }
-      setConversation(prev => [...prev, pageChangeMsg])
-    }
-  }, [pageNumber])
-
   return (
     <div className="flex flex-col h-full bg-dark-elevated">
+      {/* Context Indicator */}
+      {hasPageContext && isActive && (
+        <div className="px-4 py-2 bg-green-500/10 border-b border-green-500/20 flex items-center space-x-2 text-xs text-green-400">
+          <FiEye className="w-4 h-4" />
+          <span>AI has page context • Page {pageNumber}</span>
+        </div>
+      )}
+
       {/* Main Voice Interface */}
       <div className="flex-1 flex flex-col items-center justify-center p-6">
         {!isActive && !isConnecting ? (
@@ -376,7 +477,7 @@ export default function VoiceAssistant({
               </h3>
               <p className="text-sm text-gray-400 max-w-sm">
                 Start a real-time voice conversation about page {pageNumber}. 
-                Powered by OpenAI Realtime API with WebRTC.
+                The AI will understand the page content and follow along as you navigate.
               </p>
             </div>
 
@@ -396,7 +497,7 @@ export default function VoiceAssistant({
         ) : isConnecting ? (
           <>
             {/* Connecting State */}
-            <div className="w-32 h-32 bg-dark-surface rounded-full flex items-center justify-center mb-6 animate-pulse">
+            <div className="w-32 h-32 bg-dark-surface rounded-full flex items-center justify-center mb-6">
               <FiLoader className="w-16 h-16 text-accent-purple animate-spin" />
             </div>
             
@@ -405,7 +506,7 @@ export default function VoiceAssistant({
                 {status}
               </h3>
               <p className="text-sm text-gray-400">
-                Setting up secure WebRTC connection...
+                This may take a few seconds...
               </p>
             </div>
           </>
@@ -474,30 +575,39 @@ export default function VoiceAssistant({
         )}
       </div>
 
-      {/* Conversation History */}
+      {/* Conversation Transcript */}
       {conversation.length > 0 && (
-        <div className="border-t border-dark-border p-4 max-h-64 overflow-y-auto bg-dark-bg">
-          <h4 className="text-sm font-semibold text-gray-400 mb-3">Conversation</h4>
+        <div className="border-t border-dark-border p-4 max-h-80 overflow-y-auto bg-dark-bg">
+          <h4 className="text-sm font-semibold text-gray-400 mb-3 flex items-center space-x-2">
+            <span>Conversation Transcript</span>
+            {hasPageContext && <FiEye className="w-3 h-3 text-green-400" title="AI has page context" />}
+          </h4>
           <div className="space-y-3">
             {conversation.map((msg, index) => (
               <div
                 key={index}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : msg.role === 'system' ? 'justify-center' : 'justify-start'}`}
               >
-                <div
-                  className={`px-3 py-2 rounded-lg max-w-[80%] ${
-                    msg.role === 'user'
-                      ? 'bg-accent-purple text-white'
-                      : 'bg-dark-surface text-gray-300'
-                  }`}
-                >
-                  <p className="text-sm">{msg.content}</p>
-                  <p className={`text-xs mt-1 ${
-                    msg.role === 'user' ? 'text-purple-200' : 'text-gray-500'
-                  }`}>
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
+                {msg.role === 'system' ? (
+                  <div className="px-3 py-1 rounded-full bg-dark-surface text-gray-500 text-xs">
+                    {msg.content}
+                  </div>
+                ) : (
+                  <div
+                    className={`px-3 py-2 rounded-lg max-w-[80%] ${
+                      msg.role === 'user'
+                        ? 'bg-accent-purple text-white'
+                        : 'bg-dark-surface text-gray-300'
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    <p className={`text-xs mt-1 ${
+                      msg.role === 'user' ? 'text-purple-200' : 'text-gray-500'
+                    }`}>
+                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
