@@ -28,6 +28,7 @@ export default function PDFViewer(props: PDFViewerProps) {
   const [scale, setScale] = useState(1.5)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const renderTaskRef = useRef<any>(null)
+  const isRenderingRef = useRef<boolean>(false)
 
   // Register image capture function whenever canvas or page changes
   useEffect(function() {
@@ -116,58 +117,80 @@ export default function PDFViewer(props: PDFViewerProps) {
       return
     }
 
-    // Cancel any ongoing render task
+    // Skip if already rendering
+    if (isRenderingRef.current) {
+      return
+    }
+
+    // Set flag to prevent concurrent renders
+    isRenderingRef.current = true
+
+    // Cancel any ongoing render task first
     if (renderTaskRef.current) {
-      renderTaskRef.current.cancel()
+      try {
+        renderTaskRef.current.cancel()
+      } catch (e) {
+        // Ignore cancel errors
+      }
       renderTaskRef.current = null
     }
 
-    const renderPage = async function() {
-      try {
-        const page = await pdfDoc.getPage(currentPage)
-        const viewport = page.getViewport({ scale: scale })
+    const pageToRender = currentPage
+    const scaleToUse = scale
 
-        const canvas = canvasRef.current
-        if (!canvas) {
-          return
-        }
-
-        const context = canvas.getContext('2d')
-        if (!context) {
-          return
-        }
-
-        canvas.height = viewport.height
-        canvas.width = viewport.width
-
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport,
-        }
-
-        // Store the render task so we can cancel it if needed
-        const renderTask = page.render(renderContext)
-        renderTaskRef.current = renderTask
-        
-        await renderTask.promise
-        renderTaskRef.current = null
-      } catch (err: any) {
-        // Ignore cancellation errors
-        if (err && err.name === 'RenderingCancelledException') {
-          return
-        }
-        console.error('Error rendering page:', err)
+    pdfDoc.getPage(pageToRender).then(function(page: any) {
+      const canvas = canvasRef.current
+      if (!canvas) {
+        isRenderingRef.current = false
+        return
       }
-    }
 
-    renderPage()
+      const viewport = page.getViewport({ scale: scaleToUse })
+      const context = canvas.getContext('2d')
+      
+      if (!context) {
+        isRenderingRef.current = false
+        return
+      }
 
-    // Cleanup function to cancel render on unmount or re-render
+      canvas.height = viewport.height
+      canvas.width = viewport.width
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+      }
+
+      const renderTask = page.render(renderContext)
+      renderTaskRef.current = renderTask
+
+      renderTask.promise.then(function() {
+        renderTaskRef.current = null
+        isRenderingRef.current = false
+      }).catch(function(err: any) {
+        renderTaskRef.current = null
+        isRenderingRef.current = false
+        // Ignore cancellation errors
+        if (err && err.name !== 'RenderingCancelledException') {
+          console.error('Error rendering page:', err)
+        }
+      })
+    }).catch(function(err: any) {
+      isRenderingRef.current = false
+      console.error('Error getting page:', err)
+    })
+
+    // Cleanup function
     return function() {
       if (renderTaskRef.current) {
-        renderTaskRef.current.cancel()
+        try {
+          renderTaskRef.current.cancel()
+        } catch (e) {
+          // Ignore
+        }
         renderTaskRef.current = null
       }
+      isRenderingRef.current = false
     }
   }, [pdfDoc, currentPage, scale])
 
