@@ -18,15 +18,33 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENAI_API_KEY
 
     if (!apiKey) {
+      console.error('❌ OpenAI API key not configured')
       return NextResponse.json(
         { error: 'OpenAI API key not configured' },
         { status: 500 }
       )
     }
 
-    const { pageNumber, pageImageData } = await request.json()
+    let requestData
+    try {
+      requestData = await request.json()
+      console.log('📥 Request received:', { 
+        pageNumber: requestData.pageNumber,
+        hasImageData: !!requestData.pageImageData,
+        imageDataLength: requestData.pageImageData?.length || 0
+      })
+    } catch (parseError: any) {
+      console.error('❌ Failed to parse request JSON:', parseError)
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      )
+    }
+
+    const { pageNumber, pageImageData } = requestData
 
     if (!pageNumber) {
+      console.error('❌ Missing pageNumber in request')
       return NextResponse.json(
         { error: 'Missing pageNumber' },
         { status: 400 }
@@ -128,10 +146,23 @@ Always be helpful, patient, and educational.`,
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-      console.error('❌ STEP 2 failed:', error)
+      const errorText = await response.text()
+      console.error('❌ STEP 2 failed with status:', response.status)
+      console.error('❌ Error response:', errorText)
+      
+      let error
+      try {
+        error = JSON.parse(errorText)
+      } catch {
+        error = { error: errorText }
+      }
+      
       return NextResponse.json(
-        { error: 'Failed to generate session token', details: error },
+        { 
+          error: 'Failed to generate session token', 
+          details: error,
+          status: response.status 
+        },
         { status: response.status }
       )
     }
@@ -149,8 +180,13 @@ Always be helpful, patient, and educational.`,
 
   } catch (error: any) {
     console.error('❌ Error in two-step token generation:', error)
+    console.error('Error stack:', error.stack)
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { 
+        error: error.message || 'Internal server error',
+        details: error.toString(),
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     )
   }
