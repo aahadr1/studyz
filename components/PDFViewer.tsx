@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 
 interface PDFViewerProps {
   documentId: string
@@ -21,154 +21,83 @@ interface SignedUrlResponse {
   expiresIn: number
 }
 
-export default function PDFViewer(props: PDFViewerProps) {
-  const documentId = props.documentId
-  const currentPage = props.currentPage
-  const onTotalPagesChange = props.onTotalPagesChange
-  const onCanvasRefReady = props.onCanvasRefReady
-
+export default function PDFViewer({
+  documentId,
+  currentPage,
+  onTotalPagesChange,
+  onCanvasRefReady,
+}: PDFViewerProps) {
   const [pdfDoc, setPdfDoc] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [scale, setScale] = useState(1.0)
-  const [retryCount, setRetryCount] = useState(0)
-  const [containerWidth, setContainerWidth] = useState(0)
+  const [rendering, setRendering] = useState(false)
+  
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const renderTaskRef = useRef<any>(null)
-  const isRenderingRef = useRef<boolean>(false)
+  const mountedRef = useRef(true)
 
-  // Monitor container width for responsive scaling
-  useEffect(function() {
-    if (!containerRef.current) {
-      return
-    }
+  // Load PDF document once
+  useEffect(() => {
+    let cancelled = false
 
-    const updateContainerWidth = function() {
-      if (containerRef.current) {
-        const width = containerRef.current.clientWidth
-        // Only update if width actually changed to avoid unnecessary re-renders
-        setContainerWidth(function(prevWidth) {
-          return prevWidth !== width ? width : prevWidth
-        })
-      }
-    }
-
-    // Delay initial measurement to ensure DOM is ready
-    const timer = setTimeout(function() {
-      updateContainerWidth()
-    }, 100)
-
-    // Listen for resize events
-    window.addEventListener('resize', updateContainerWidth)
-
-    return function() {
-      clearTimeout(timer)
-      window.removeEventListener('resize', updateContainerWidth)
-    }
-  }, [])
-
-  // Register image capture function whenever canvas or page changes
-  useEffect(function() {
-    if (!onCanvasRefReady || !pdfDoc) {
-      return
-    }
-
-    const capturePageImage = async function(): Promise<string | null> {
-      if (!canvasRef.current) {
-        console.warn('⚠️ Canvas not available for capture')
-        return null
-      }
-
-      try {
-        // Capture at maximum quality for GPT Vision
-        const imageDataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95)
-        const sizeKB = Math.round(imageDataUrl.length / 1024)
-        console.log('✅ Page image captured: ' + sizeKB + 'KB for page ' + currentPage)
-        return imageDataUrl
-      } catch (err) {
-        console.error('❌ Failed to capture page image:', err)
-        return null
-      }
-    }
-
-    // Register the capture function
-    onCanvasRefReady(capturePageImage)
-  }, [onCanvasRefReady, pdfDoc, currentPage])
-
-  // Load PDF document via backend API
-  useEffect(function() {
-    if (!documentId) {
-      return
-    }
-
-    let isCancelled = false
-
-    const loadPDF = async function() {
+    const loadPDF = async () => {
       try {
         setLoading(true)
         setError(null)
 
         console.log('📄 Loading PDF for document:', documentId)
 
-        // Get signed URL from our backend API
-        const response = await fetch('/api/documents/' + documentId + '/signed-url', {
+        // Get signed URL from backend
+        const response = await fetch(`/api/documents/${documentId}/signed-url`, {
           method: 'GET',
           credentials: 'include',
         })
 
         if (!response.ok) {
-          const errorData = await response.json().catch(function() {
-            return { error: 'Failed to load document' }
-          })
+          const errorData = await response.json().catch(() => ({ error: 'Failed to load document' }))
           throw new Error(errorData.error || 'Failed to get document URL')
         }
 
         const data: SignedUrlResponse = await response.json()
-
-        if (isCancelled) return
+        if (cancelled) return
 
         console.log('✅ Got signed URL for:', data.fileName)
 
         // Dynamically import PDF.js
         const pdfjsLib = await import('pdfjs-dist')
-        
-        // Set worker with explicit version
         const pdfVersion = pdfjsLib.version || '3.11.174'
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + pdfVersion + '/pdf.worker.min.js'
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfVersion}/pdf.worker.min.js`
 
-        if (isCancelled) return
+        if (cancelled) return
 
-        // Load the PDF
+        // Load PDF
         const loadingTask = pdfjsLib.getDocument({
           url: data.signedUrl,
           withCredentials: false,
-          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + pdfVersion + '/cmaps/',
+          cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfVersion}/cmaps/`,
           cMapPacked: true,
         })
         
         const pdf = await loadingTask.promise
-
-        if (isCancelled) return
+        if (cancelled) return
 
         console.log('✅ PDF loaded, pages:', pdf.numPages)
-
         setPdfDoc(pdf)
         onTotalPagesChange(pdf.numPages)
         setLoading(false)
-        setRetryCount(0)
-      } catch (err: any) {
-        if (isCancelled) return
 
+      } catch (err: any) {
+        if (cancelled) return
         console.error('❌ Error loading PDF:', err)
         
-        // More descriptive error messages
         let errorMessage = err.message || 'Failed to load PDF'
-        if (err.message && err.message.includes('Unauthorized')) {
+        if (err.message?.includes('Unauthorized')) {
           errorMessage = 'Please log in to view this document'
-        } else if (err.message && err.message.includes('Access denied')) {
+        } else if (err.message?.includes('Access denied')) {
           errorMessage = 'You do not have access to this document'
-        } else if (err.message && err.message.includes('not found')) {
+        } else if (err.message?.includes('not found')) {
           errorMessage = 'Document not found'
         }
         
@@ -179,99 +108,21 @@ export default function PDFViewer(props: PDFViewerProps) {
 
     loadPDF()
 
-    return function() {
-      isCancelled = true
+    return () => {
+      cancelled = true
     }
-  }, [documentId, onTotalPagesChange, retryCount])
+  }, [documentId, onTotalPagesChange])
 
-  // Render current page
-  useEffect(function() {
-    // Don't render if essential dependencies are missing
-    if (!pdfDoc || !canvasRef.current) {
+  // Render page whenever page number or scale changes
+  useEffect(() => {
+    if (!pdfDoc || !canvasRef.current || !containerRef.current || rendering) {
       return
     }
 
-    // Wait for container width to be measured (skip first render with 0 width)
-    if (containerWidth === 0) {
-      return
-    }
+    const renderPage = async () => {
+      setRendering(true)
 
-    // Skip if already rendering
-    if (isRenderingRef.current) {
-      console.log('⏭️ Skipping render - already rendering')
-      return
-    }
-
-    // Set flag to prevent concurrent renders
-    isRenderingRef.current = true
-
-    // Cancel any ongoing render task first
-    if (renderTaskRef.current) {
-      try {
-        renderTaskRef.current.cancel()
-      } catch (e) {
-        // Ignore cancel errors
-      }
-      renderTaskRef.current = null
-    }
-
-    const pageToRender = currentPage
-    const currentContainerWidth = containerWidth
-
-    pdfDoc.getPage(pageToRender).then(function(page: any) {
-      const canvas = canvasRef.current
-      if (!canvas) {
-        isRenderingRef.current = false
-        return
-      }
-
-      // Calculate scale to fit the page width with some padding
-      const pageViewport = page.getViewport({ scale: 1.0 })
-      const padding = 32 // 16px on each side
-      const availableWidth = currentContainerWidth - padding
-      const autoScale = availableWidth / pageViewport.width
-      
-      // Use the calculated auto scale, but respect manual zoom adjustments
-      const finalScale = autoScale * scale
-      
-      const viewport = page.getViewport({ scale: finalScale })
-      const context = canvas.getContext('2d')
-      
-      if (!context) {
-        isRenderingRef.current = false
-        return
-      }
-
-      canvas.height = viewport.height
-      canvas.width = viewport.width
-
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-      }
-
-      const renderTask = page.render(renderContext)
-      renderTaskRef.current = renderTask
-
-      renderTask.promise.then(function() {
-        renderTaskRef.current = null
-        isRenderingRef.current = false
-        console.log('✅ Page', pageToRender, 'rendered at scale:', finalScale.toFixed(2), 'width:', viewport.width + 'px')
-      }).catch(function(err: any) {
-        renderTaskRef.current = null
-        isRenderingRef.current = false
-        // Ignore cancellation errors
-        if (err && err.name !== 'RenderingCancelledException') {
-          console.error('Error rendering page:', err)
-        }
-      })
-    }).catch(function(err: any) {
-      isRenderingRef.current = false
-      console.error('Error getting page:', err)
-    })
-
-    // Cleanup function
-    return function() {
+      // Cancel any ongoing render
       if (renderTaskRef.current) {
         try {
           renderTaskRef.current.cancel()
@@ -280,20 +131,110 @@ export default function PDFViewer(props: PDFViewerProps) {
         }
         renderTaskRef.current = null
       }
-      isRenderingRef.current = false
+
+      try {
+        const canvas = canvasRef.current
+        const container = containerRef.current
+        if (!canvas || !container) return
+
+        const page = await pdfDoc.getPage(currentPage)
+        
+        // Calculate scale to fit container width
+        const containerWidth = container.clientWidth
+        const pageViewport = page.getViewport({ scale: 1.0 })
+        const autoScale = (containerWidth - 40) / pageViewport.width // 20px padding each side
+        
+        // Apply both auto-scale and user zoom
+        const finalScale = autoScale * scale
+        const viewport = page.getViewport({ scale: finalScale })
+        
+        const context = canvas.getContext('2d')
+        if (!context) return
+
+        canvas.height = viewport.height
+        canvas.width = viewport.width
+
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+        }
+
+        const renderTask = page.render(renderContext)
+        renderTaskRef.current = renderTask
+
+        await renderTask.promise
+        
+        if (mountedRef.current) {
+          console.log('✅ Page', currentPage, 'rendered successfully')
+          renderTaskRef.current = null
+          setRendering(false)
+        }
+
+      } catch (err: any) {
+        if (err?.name !== 'RenderingCancelledException') {
+          console.error('Error rendering page:', err)
+        }
+        if (mountedRef.current) {
+          setRendering(false)
+        }
+      }
     }
-  }, [pdfDoc, currentPage, scale, containerWidth])
 
-  function handleRetry() {
-    setRetryCount(function(c) { return c + 1 })
+    renderPage()
+
+    return () => {
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel()
+        } catch (e) {
+          // Ignore
+        }
+        renderTaskRef.current = null
+      }
+    }
+  }, [pdfDoc, currentPage, scale, rendering])
+
+  // Register canvas capture function
+  const captureCanvas = useCallback(async (): Promise<string | null> => {
+    if (!canvasRef.current) {
+      console.warn('⚠️ Canvas not available for capture')
+      return null
+    }
+
+    try {
+      const imageDataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95)
+      const sizeKB = Math.round(imageDataUrl.length / 1024)
+      console.log('✅ Page image captured:', sizeKB, 'KB')
+      return imageDataUrl
+    } catch (err) {
+      console.error('❌ Failed to capture page image:', err)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (onCanvasRefReady && pdfDoc) {
+      onCanvasRefReady(captureCanvas)
+    }
+  }, [onCanvasRefReady, pdfDoc, captureCanvas])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const handleZoomIn = () => {
+    setScale(prev => Math.min(3, prev + 0.25))
   }
 
-  function handleZoomOut() {
-    setScale(function(s) { return Math.max(0.5, s - 0.25) })
+  const handleZoomOut = () => {
+    setScale(prev => Math.max(0.5, prev - 0.25))
   }
 
-  function handleZoomIn() {
-    setScale(function(s) { return Math.min(3, s + 0.25) })
+  const handleRetry = () => {
+    window.location.reload()
   }
 
   if (loading) {
@@ -309,7 +250,7 @@ export default function PDFViewer(props: PDFViewerProps) {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full bg-dark-bg">
+      <div className="flex items-center justify-center h-full bg-dark-bg p-4">
         <div className="text-center p-8 glass-card max-w-md">
           <div className="text-red-400 mb-4">
             <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -334,33 +275,38 @@ export default function PDFViewer(props: PDFViewerProps) {
   return (
     <div className="flex flex-col h-full w-full bg-dark-bg">
       {/* Zoom controls */}
-      <div className="flex items-center justify-center space-x-2 p-2 glass-card border-b border-dark-border">
+      <div className="flex items-center justify-center space-x-3 p-3 glass-card border-b border-dark-border bg-dark-elevated">
         <button
           onClick={handleZoomOut}
-          className="px-3 py-1 glass-button rounded text-sm font-medium transition hover:text-primary-400"
+          className="px-4 py-2 glass-button rounded-lg text-sm font-medium transition hover:text-primary-400 hover:bg-dark-surface"
+          disabled={scale <= 0.5}
         >
           −
         </button>
-        <span className="text-sm text-gray-300 min-w-[60px] text-center">
+        <span className="text-sm text-gray-300 min-w-[70px] text-center font-medium">
           {Math.round(scale * 100)}%
         </span>
         <button
           onClick={handleZoomIn}
-          className="px-3 py-1 glass-button rounded text-sm font-medium transition hover:text-primary-400"
+          className="px-4 py-2 glass-button rounded-lg text-sm font-medium transition hover:text-primary-400 hover:bg-dark-surface"
+          disabled={scale >= 3}
         >
           +
         </button>
       </div>
 
-      {/* PDF Canvas */}
+      {/* PDF Canvas Container */}
       <div 
         ref={containerRef}
-        className="flex-1 overflow-auto flex items-start justify-center p-4 w-full"
+        className="flex-1 overflow-auto bg-gradient-to-b from-dark-bg to-dark-surface"
       >
-        <canvas
-          ref={canvasRef}
-          className="shadow-2xl bg-white max-w-full h-auto"
-        />
+        <div className="min-h-full flex items-center justify-center p-6">
+          <canvas
+            ref={canvasRef}
+            className="shadow-2xl rounded-lg bg-white"
+            style={{ maxWidth: '100%', height: 'auto' }}
+          />
+        </div>
       </div>
     </div>
   )
