@@ -82,37 +82,40 @@ export default function VoiceAssistant({
     }
   }
 
-  // Send context update to Realtime API
+  // Send context update to Realtime API using session.update (PERSISTENT)
   const sendContextUpdate = (pageText: string, pageNum: number) => {
     if (!dataChannelRef.current || dataChannelRef.current.readyState !== 'open') {
       console.warn('⚠️ Data channel not ready for context update')
       return
     }
 
-    console.log(`📤 Sending context update for page ${pageNum}`)
+    console.log(`📤 Sending PERSISTENT context update for page ${pageNum}`)
 
-    // Create a conversation item with system message containing page context
-    const contextMessage = {
-      type: 'conversation.item.create',
-      item: {
-        type: 'message',
-        role: 'system',
-        content: [
-          {
-            type: 'input_text',
-            text: `CURRENT PAGE UPDATE - Page ${pageNum}:
+    // Update session instructions with new page context (THIS PERSISTS!)
+    const sessionUpdate = {
+      type: 'session.update',
+      session: {
+        instructions: `You are Studyz Guy, a friendly voice-based AI study assistant. You are helping a student understand their study materials through voice conversation.
 
+=== CURRENT PAGE CONTEXT (Page ${pageNum}) ===
 ${pageText}
+=== END OF PAGE CONTEXT ===
 
-The user is now viewing this page. Please reference this content when answering questions. Be specific about what's on this page.`,
-          },
-        ],
+Your role is to:
+- Answer questions about the content shown above from Page ${pageNum}
+- Explain concepts clearly and conversationally (this is voice, not text)
+- Keep responses concise and easy to understand when spoken aloud (under 3-4 sentences)
+- Be encouraging and supportive
+- Reference specific parts of the page content when relevant
+- Always refer to "this page" or "page ${pageNum}" when discussing the content above
+
+IMPORTANT: The content above is what the student is currently viewing. Use it to answer their questions accurately.`,
       },
     }
 
     try {
-      dataChannelRef.current.send(JSON.stringify(contextMessage))
-      console.log('✅ Context update sent')
+      dataChannelRef.current.send(JSON.stringify(sessionUpdate))
+      console.log('✅ PERSISTENT context update sent via session.update')
       
       setCurrentPageContext(pageText)
       setHasPageContext(true)
@@ -200,7 +203,7 @@ The user is now viewing this page. Please reference this content when answering 
         setStatus('Listening...')
         currentPageRef.current = pageNumber
 
-        // Configure session
+        // Configure session turn detection (instructions were already set in token)
         const sessionUpdate = {
           type: 'session.update',
           session: {
@@ -216,10 +219,18 @@ The user is now viewing this page. Please reference this content when answering 
           },
         }
         dc.send(JSON.stringify(sessionUpdate))
-
-        // Send initial page context
+        console.log('✅ Session configured with turn detection')
+        
+        // If we have page text, also update instructions to include it
         if (pageText) {
-          sendContextUpdate(pageText, pageNumber)
+          setTimeout(() => {
+            sendContextUpdate(pageText, pageNumber)
+          }, 100)
+        }
+
+        if (pageText) {
+          setCurrentPageContext(pageText)
+          setHasPageContext(true)
         }
 
         // Add welcome message
@@ -257,7 +268,7 @@ The user is now viewing this page. Please reference this content when answering 
       await pc.setLocalDescription(offer)
 
       // Send offer to OpenAI and get answer
-      const sdpResponse = await fetch('https://api.openai.com/v1/realtime', {
+      const sdpResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${clientSecret}`,
