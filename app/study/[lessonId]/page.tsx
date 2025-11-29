@@ -23,12 +23,9 @@ export default function StudyPage() {
   
   const lessonId = params.lessonId as string
   
-  // Get document IDs without optional chaining
-  let documentIds: string[] = []
+  // Get document IDs from URL params - stable reference
   const documentsParam = searchParams.get('documents')
-  if (documentsParam) {
-    documentIds = documentsParam.split(',')
-  }
+  const documentIds = documentsParam ? documentsParam.split(',') : []
 
   const [documents, setDocuments] = useState<Document[]>([])
   const [currentDocIndex, setCurrentDocIndex] = useState(0)
@@ -73,7 +70,7 @@ export default function StudyPage() {
     } else {
       setLoading(false)
     }
-  }, [documentIds.join(',')])
+  }, [documentsParam])
 
   // Get current document safely
   let currentDocument: Document | null = null
