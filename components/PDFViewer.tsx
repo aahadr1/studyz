@@ -72,12 +72,10 @@ export default function PDFViewer({
 
         if (cancelled) return
 
-        // Load PDF
+        // Load PDF - removed cMapUrl to avoid CORS issues and improve loading speed
         const loadingTask = pdfjsLib.getDocument({
           url: data.signedUrl,
           withCredentials: false,
-          cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfVersion}/cmaps/`,
-          cMapPacked: true,
         })
         
         const pdf = await loadingTask.promise
