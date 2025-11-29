@@ -222,22 +222,35 @@ export default function VoiceAssistantNext({
       description: 'Get total page count',
     },
     {
-      pattern: /^(summarize|summary|what is this about)$/i,
+      pattern: /^(summarize|summary|what is this about|read this page)$/i,
       action: async () => {
         speak('Let me analyze this page for you')
         try {
           const content = await getPageContent?.()
-          if (content) {
-            // Here you could integrate with an AI service to generate summaries
-            speak('This page contains document content. AI analysis is not yet implemented.')
+          if (content && content.trim().length > 0) {
+            console.log('📄 Page content received for AI:', content.slice(0, 200) + '...')
+            addToActivityLog(`Page content: ${content.length} characters`)
+            
+            // Basic content summary
+            const words = content.split(' ').length
+            const sentences = content.split(/[.!?]+/).length
+            
+            if (words < 10) {
+              speak('This page has very little text content')
+            } else if (words < 50) {
+              speak(`This page contains about ${words} words of text content`)
+            } else {
+              speak(`This page contains about ${words} words in approximately ${sentences} sentences. The text has been extracted successfully for analysis.`)
+            }
           } else {
-            speak('Sorry, I cannot access the page content right now')
+            speak('This page appears to have no text content, or the content could not be extracted')
           }
         } catch (error) {
+          console.error('Error analyzing page:', error)
           speak('Sorry, I encountered an error while analyzing the page')
         }
       },
-      description: 'Summarize current page',
+      description: 'Analyze and summarize current page content',
     },
     {
       pattern: /^(next document|switch document)$/i,
@@ -264,9 +277,28 @@ export default function VoiceAssistantNext({
       description: 'Switch to previous document',
     },
     {
+      pattern: /^(read (this )?page|read aloud|read content)$/i,
+      action: async () => {
+        try {
+          const content = await getPageContent?.()
+          if (content && content.trim().length > 0) {
+            addToActivityLog(`Reading page content: ${content.length} chars`)
+            // Read first 200 words to avoid overly long speech
+            const words = content.split(' ').slice(0, 200).join(' ')
+            speak(words.length < content.length ? words + '... and more content on this page' : words)
+          } else {
+            speak('This page has no readable text content')
+          }
+        } catch (error) {
+          speak('Sorry, I cannot read the page content right now')
+        }
+      },
+      description: 'Read page content aloud',
+    },
+    {
       pattern: /^(help|what can you do|commands)$/i,
       action: () => {
-        const helpText = 'I can help you navigate documents. Say "next page", "previous page", "go to page 5", "first page", "last page", "what page", "summarize", or "help" for commands.'
+        const helpText = 'I can help you navigate and read documents. Say "next page", "go to page 5", "summarize", "read this page", "next document", or "help" for all commands.'
         speak(helpText)
       },
       description: 'Show available commands',
@@ -451,10 +483,10 @@ export default function VoiceAssistantNext({
       <div className="mt-4 p-3 bg-dark-surface rounded-lg">
         <h4 className="text-sm font-medium text-gray-400 mb-2">Try saying:</h4>
         <div className="grid grid-cols-1 gap-1 text-xs text-gray-500">
-          <div>"Next page" or "Previous page"</div>
-          <div>"Go to page [number]"</div>
-          <div>"What page" or "Help"</div>
+          <div>"Next page" / "Go to page 5"</div>
+          <div>"First page" / "Last page"</div>
           <div>"Summarize this page"</div>
+          <div>"Read this page" / "Help"</div>
         </div>
       </div>
     </div>

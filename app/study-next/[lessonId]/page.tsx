@@ -18,7 +18,7 @@ import {
   FiMinimize2
 } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase'
-import DocumentViewerNext from '@/components/DocumentViewerNext'
+import DocumentViewerSmart from '@/components/DocumentViewerSmart'
 import VoiceAssistantNext from '@/components/VoiceAssistantNext'
 import ChatAssistant from '@/components/ChatAssistant'
 
@@ -366,7 +366,7 @@ export default function StudyPageNext() {
               </div>
 
               {/* Document Display */}
-              <DocumentViewerNext
+              <DocumentViewerSmart
                 documentId={currentDocument.id}
                 currentPage={currentPage}
                 onTotalPagesChange={setTotalPages}
