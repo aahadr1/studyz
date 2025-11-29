@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/TextLayer.css'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 
-// Set worker
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+// Worker from CDN
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
 
 interface PdfPagerProps {
   src: string
@@ -28,57 +28,47 @@ export default function PdfPager({
   const [scale, setScale] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const pdfRef = useRef<any>(null)
 
-  const onLoadSuccess = useCallback((pdf: any) => {
-    const total = pdf.numPages
-    setNumPages(total)
-    setPage(Math.min(Math.max(1, initialPage), total))
+  const onLoadSuccess = (pdf: any) => {
+    pdfRef.current = pdf
+    setNumPages(pdf.numPages)
+    setPage(Math.min(Math.max(1, initialPage), pdf.numPages))
     setLoading(false)
-    onTotalPagesChange?.(total)
-
-    // Extract text for AI context
-    pdf.getPage(initialPage).then((p: any) => {
-      p.getTextContent().then((tc: any) => {
-        const text = tc.items.map((i: any) => i.str).join(' ')
-        onTextExtracted?.(text)
-      })
-    })
-  }, [initialPage, onTotalPagesChange, onTextExtracted])
+    onTotalPagesChange?.(pdf.numPages)
+    extractText(pdf, initialPage)
+  }
 
   const onLoadError = (err: any) => {
-    console.error('PDF load error:', err)
+    console.error('PDF error:', err)
     setError('Failed to load PDF')
     setLoading(false)
   }
 
-  // Extract text when page changes
-  useEffect(() => {
-    if (!src || numPages === 0) return
-
-    pdfjs.getDocument(src).promise.then((pdf) => {
-      pdf.getPage(page).then((p) => {
-        p.getTextContent().then((tc: any) => {
-          const text = tc.items.map((i: any) => i.str).join(' ')
-          onTextExtracted?.(text)
-        })
-      })
-    }).catch(console.error)
-  }, [src, page, numPages, onTextExtracted])
+  const extractText = async (pdf: any, pageNum: number) => {
+    if (!onTextExtracted || !pdf) return
+    try {
+      const p = await pdf.getPage(pageNum)
+      const tc = await p.getTextContent()
+      const text = tc.items.map((i: any) => i.str).join(' ')
+      onTextExtracted(text)
+    } catch (e) {
+      console.error('Text extraction error:', e)
+    }
+  }
 
   const goToPage = (p: number) => {
     const newPage = Math.min(Math.max(1, p), numPages)
     setPage(newPage)
     onPageChange?.(newPage)
+    if (pdfRef.current) extractText(pdfRef.current, newPage)
   }
-
-  const next = () => goToPage(page + 1)
-  const prev = () => goToPage(page - 1)
 
   // Keyboard navigation
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') next()
-      if (e.key === 'ArrowLeft') prev()
+      if (e.key === 'ArrowRight' && page < numPages) goToPage(page + 1)
+      if (e.key === 'ArrowLeft' && page > 1) goToPage(page - 1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -88,11 +78,8 @@ export default function PdfPager({
     return (
       <div className="flex-1 flex items-center justify-center bg-dark-bg">
         <div className="text-center p-6">
-          <p className="text-red-400 mb-2">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-accent-purple text-white rounded-lg"
-          >
+          <p className="text-red-400 mb-4">{error}</p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-accent-purple text-white rounded-lg">
             Retry
           </button>
         </div>
@@ -104,21 +91,13 @@ export default function PdfPager({
     <div className="flex-1 flex flex-col h-full bg-dark-bg">
       {/* Toolbar */}
       <div className="flex items-center justify-center gap-4 p-3 bg-dark-elevated border-b border-dark-border">
-        <button
-          onClick={prev}
-          disabled={page <= 1}
-          className="px-3 py-1 glass-button rounded disabled:opacity-30"
-        >
+        <button onClick={() => goToPage(page - 1)} disabled={page <= 1} className="px-3 py-1 glass-button rounded disabled:opacity-30">
           ◀
         </button>
         <span className="text-gray-300 text-sm min-w-[80px] text-center">
           {loading ? '...' : `${page} / ${numPages}`}
         </span>
-        <button
-          onClick={next}
-          disabled={page >= numPages}
-          className="px-3 py-1 glass-button rounded disabled:opacity-30"
-        >
+        <button onClick={() => goToPage(page + 1)} disabled={page >= numPages} className="px-3 py-1 glass-button rounded disabled:opacity-30">
           ▶
         </button>
         <div className="w-px h-6 bg-dark-border mx-2" />
@@ -127,7 +106,7 @@ export default function PdfPager({
         <button onClick={() => setScale(s => Math.min(2.5, s + 0.2))} className="px-2 py-1 glass-button rounded">+</button>
       </div>
 
-      {/* PDF Page */}
+      {/* PDF */}
       <div className="flex-1 overflow-auto flex items-start justify-center p-4 bg-gradient-to-b from-dark-surface to-dark-bg">
         <Document
           file={src}
@@ -153,4 +132,3 @@ export default function PdfPager({
     </div>
   )
 }
-
