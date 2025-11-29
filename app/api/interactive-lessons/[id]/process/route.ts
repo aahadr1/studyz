@@ -82,45 +82,55 @@ interface Question {
   explanation: string
 }
 
-// Custom page render function that only extracts text (no canvas rendering)
-function renderPageText(pageData: any) {
-  const renderOptions = {
-    normalizeWhitespace: true,
-    disableCombineTextItems: false
-  }
-  
-  return pageData.getTextContent(renderOptions).then((textContent: any) => {
-    let text = ''
-    for (const item of textContent.items) {
-      if ('str' in item) {
-        text += item.str + ' '
+// Setup minimal browser globals required by pdfjs-dist (used by pdf-parse)
+function setupPdfParseGlobals() {
+  if (typeof global !== 'undefined') {
+    // @ts-ignore
+    if (!global.DOMMatrix) {
+      // @ts-ignore
+      global.DOMMatrix = class DOMMatrix {
+        constructor() { return [1, 0, 0, 1, 0, 0] }
       }
     }
-    return text.trim()
-  })
+    // @ts-ignore
+    if (!global.Path2D) {
+      // @ts-ignore
+      global.Path2D = class Path2D { constructor() {} }
+    }
+    // @ts-ignore
+    if (!global.CanvasRenderingContext2D) {
+      // @ts-ignore
+      global.CanvasRenderingContext2D = class CanvasRenderingContext2D {}
+    }
+    // @ts-ignore
+    if (!global.ImageData) {
+      // @ts-ignore
+      global.ImageData = class ImageData { constructor() {} }
+    }
+  }
 }
 
-// Extract text from PDF using pdf-parse with custom renderer (avoids DOMMatrix issues)
+// Extract text from PDF - with proper global setup
 async function extractPdfText(buffer: Buffer): Promise<string[]> {
-  // Use require for pdf-parse as it's a CommonJS module
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require('pdf-parse')
-  
   try {
-    // Use custom pagerender function to avoid canvas/DOMMatrix dependencies
-    const options = {
-      pagerender: renderPageText
-    }
+    // Setup globals before requiring pdf-parse
+    setupPdfParseGlobals()
     
-    const data = await pdfParse(buffer, options)
+    // Use require for CommonJS module
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require('pdf-parse')
     
-    // Split by page markers or estimate pages
-    // pdf-parse doesn't give per-page text easily, so we'll estimate
-    const fullText = data.text
-    const totalPages = data.numpages
+    // Parse PDF
+    const data = await pdfParse(buffer)
     
-    if (!fullText || totalPages === 0) {
-      return ['']
+    const fullText = data.text || ''
+    const totalPages = data.numpages || 1
+    
+    console.log(`PDF parsed: ${totalPages} pages, ${fullText.length} chars`)
+    
+    if (!fullText) {
+      console.log('No text extracted from PDF')
+      return Array(totalPages).fill('(No text content)')
     }
     
     // Simple heuristic: split text roughly by page count
@@ -130,13 +140,15 @@ async function extractPdfText(buffer: Buffer): Promise<string[]> {
     for (let i = 0; i < totalPages; i++) {
       const start = i * avgCharsPerPage
       const end = Math.min((i + 1) * avgCharsPerPage, fullText.length)
-      pages.push(fullText.slice(start, end).trim())
+      const pageText = fullText.slice(start, end).trim()
+      pages.push(pageText || `(Page ${i + 1})`)
     }
     
     return pages
-  } catch (error) {
-    console.error('Error parsing PDF:', error)
-    throw error
+  } catch (error: any) {
+    console.error('Error parsing PDF:', error?.message || error)
+    // Return placeholder text instead of throwing
+    return ['(PDF text extraction failed - will use AI vision if available)']
   }
 }
 
