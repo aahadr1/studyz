@@ -31,6 +31,14 @@ export async function GET(
       )
     }
 
+    // Validate document ID format
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)) {
+      return NextResponse.json(
+        { error: 'Invalid document ID format' },
+        { status: 400 }
+      )
+    }
+
     // Create auth client to verify user
     const cookieStore = await cookies()
     const allCookies = cookieStore.getAll()

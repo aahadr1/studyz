@@ -136,7 +136,7 @@ export default function LessonDetailPage() {
     }
 
     const selectedIds = Array.from(selectedDocuments).join(',')
-    router.push(`/study/${lessonId}?documents=${selectedIds}`)
+    router.push(`/study-next/${lessonId}?documents=${selectedIds}`)
   }
 
   if (loading) {
