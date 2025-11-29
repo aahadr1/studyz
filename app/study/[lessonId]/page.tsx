@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiMic, FiSkipBack, FiSkipForward, FiMaximize2 } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase'
-import PDFViewer from '@/components/PDFViewer'
+import PDFViewerV2 from '@/components/PDFViewerV2'
 import ChatAssistant from '@/components/ChatAssistant'
-import VoiceAssistant from '@/components/VoiceAssistant'
+import VoiceAssistantV2 from '@/components/VoiceAssistantV2'
 
 interface Document {
   id: string
@@ -275,12 +275,9 @@ export default function StudyPage() {
         {/* Document Content Area */}
         <div className="flex-1 overflow-hidden bg-dark-bg flex flex-col">
           {isPdf ? (
-            <PDFViewer
+            <PDFViewerV2
               documentId={docId}
-              filePath={docFilePath}
               currentPage={currentPage}
-              onPageChange={handlePageChange}
-              totalPages={totalPages}
               onTotalPagesChange={handleTotalPagesChange}
               onCanvasRefReady={handleCanvasReady}
             />
@@ -339,7 +336,7 @@ export default function StudyPage() {
             />
           )}
           {assistantMode === 'voice' && (
-            <VoiceAssistant
+            <VoiceAssistantV2
               documentId={docId}
               pageNumber={currentPage}
               lessonId={lessonId}

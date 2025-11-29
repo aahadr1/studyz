@@ -4,6 +4,10 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic' // Ensure fresh URLs each time
+
+// Cache signed URLs briefly to avoid regenerating on rapid requests
+const urlCache = new Map<string, { url: string; expires: number }>()
 
 // Service role client for storage operations
 const supabaseAdmin = createClient(
@@ -123,6 +127,21 @@ export async function GET(
       )
     }
 
+    // Check cache first (avoid regenerating URLs rapidly)
+    const cacheKey = `${documentId}:${user.id}`
+    const cached = urlCache.get(cacheKey)
+    if (cached && cached.expires > Date.now()) {
+      console.log('✅ Serving cached signed URL')
+      return NextResponse.json({
+        signedUrl: cached.url,
+        documentId: document.id,
+        fileName: document.name,
+        fileType: document.file_type,
+        pageCount: document.page_count,
+        expiresIn: Math.floor((cached.expires - Date.now()) / 1000),
+      })
+    }
+
     // Generate signed URL (valid for 1 hour)
     const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
       .from('documents')
@@ -135,6 +154,14 @@ export async function GET(
         { status: 500 }
       )
     }
+
+    // Cache the URL (expires in 50 minutes to be safe)
+    urlCache.set(cacheKey, {
+      url: signedUrlData.signedUrl,
+      expires: Date.now() + (50 * 60 * 1000),
+    })
+
+    console.log('✅ Generated and cached new signed URL')
 
     return NextResponse.json({
       signedUrl: signedUrlData.signedUrl,

@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { pageNumber, pageImageData } = requestData
+    const { pageNumber, pageImageData, feature = 'general' } = requestData
 
     if (!pageNumber) {
       console.error('❌ Missing pageNumber in request')
@@ -106,7 +106,55 @@ export async function POST(request: NextRequest) {
     }
 
     // ===== STEP 2: Create Realtime API session with extracted text =====
-    console.log(`🔑 STEP 2: Creating Realtime API session with ${pageContext ? 'page context' : 'no context'}...`)
+    console.log(`🔑 STEP 2: Creating Realtime API session (${feature} mode) with ${pageContext ? 'page context' : 'no context'}...`)
+    
+    // Generate instructions based on feature mode
+    const getInstructions = () => {
+      const baseContext = pageContext 
+        ? `=== CURRENT PAGE CONTEXT (Page ${pageNumber}) ===
+${pageContext}
+=== END OF PAGE CONTEXT ===
+
+` : ''
+
+      const featureInstructions: { [key: string]: string } = {
+        explain: `${baseContext}You are Studyz Guy, a patient AI tutor. Your job is to EXPLAIN concepts from this page in detail.
+- Break down complex ideas into simple terms
+- Use analogies and examples
+- Ask if the student understood before moving on
+- Keep responses conversational and under 4-5 sentences
+- Reference specific parts of page ${pageNumber} when explaining`,
+
+        summarize: `${baseContext}You are Studyz Guy, a summarization expert. Your job is to SUMMARIZE content from this page.
+- Create concise, clear summaries
+- Highlight the most important points
+- Use bullet-point style when listing multiple items
+- Keep summaries brief (2-3 sentences for voice)
+- Always mention this is from page ${pageNumber}`,
+
+        quiz: `${baseContext}You are Studyz Guy, a quiz master. Your job is to QUIZ the student on this page's content.
+- Ask one question at a time
+- Wait for their answer before revealing if it's correct
+- Give encouraging feedback
+- Explain the correct answer if they're wrong
+- Make questions based on key concepts from page ${pageNumber}`,
+
+        keypoints: `${baseContext}You are Studyz Guy, a study guide creator. Your job is to identify KEY POINTS from this page.
+- List the 3-5 most important concepts
+- Keep each point concise
+- Explain why each point matters
+- Reference page ${pageNumber} in your response`,
+
+        general: `${baseContext}You are Studyz Guy, a friendly AI study assistant helping students through voice conversation.
+- Answer questions about page ${pageNumber}
+- Explain concepts clearly and conversationally
+- Keep responses concise for voice (under 4 sentences)
+- Be encouraging and supportive
+- Reference specific parts of the page when relevant`
+      }
+
+      return featureInstructions[feature] || featureInstructions.general
+    }
     
     const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
       method: 'POST',
@@ -117,31 +165,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model: 'gpt-4o-realtime-preview-2024-12-17',
         voice: 'alloy',
-        instructions: pageContext 
-          ? `You are Studyz Guy, a friendly voice-based AI study assistant helping a student understand their study materials through voice conversation.
-
-=== CURRENT PAGE CONTEXT (Page ${pageNumber}) ===
-${pageContext}
-=== END OF PAGE CONTEXT ===
-
-Your role is to:
-- Answer questions about the content shown above from Page ${pageNumber}
-- Explain concepts clearly and conversationally (this is voice, keep it natural)
-- Keep responses concise for voice (2-4 sentences typically)
-- Be encouraging and supportive
-- Reference specific parts of the page content when relevant
-- When the student asks "what's on this page" or "explain this page", refer to the content between the === markers above
-
-CRITICAL: The content between the === PAGE CONTEXT === markers is exactly what the student is viewing right now on their screen. Use this content to answer their questions accurately. This is their study material.`
-          : `You are Studyz Guy, a friendly voice-based AI study assistant helping a student understand their study materials on Page ${pageNumber}.
-
-Your role is to:
-- Help the student with their study materials
-- Explain concepts clearly and conversationally  
-- Keep responses concise for voice (2-4 sentences)
-- Be encouraging and supportive
-
-Always be helpful, patient, and educational.`,
+        instructions: getInstructions(),
       }),
     })
 
