@@ -9,7 +9,6 @@ interface VoiceAssistantNextProps {
   totalPages: number
   onPageChange: (page: number) => void
   onDocumentChange?: (direction: 'next' | 'previous') => void
-  getPageContent?: () => Promise<string | null>
   className?: string
 }
 
@@ -20,19 +19,15 @@ interface VoiceCommand {
 }
 
 export default function VoiceAssistantNext({
-  documentId,
   currentPage,
   totalPages,
   onPageChange,
   onDocumentChange,
-  getPageContent,
   className = '',
 }: VoiceAssistantNextProps) {
   const [isListening, setIsListening] = useState(false)
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const [lastCommand, setLastCommand] = useState<string>('')
   const [transcript, setTranscript] = useState<string>('')
-  const [isEnabled, setIsEnabled] = useState(true)
+  const [isEnabled, setIsEnabled] = useState(false)
   const [volume, setVolume] = useState(0.8)
   const [showSettings, setShowSettings] = useState(false)
   const [activityLog, setActivityLog] = useState<string[]>([])
@@ -45,7 +40,6 @@ export default function VoiceAssistantNext({
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    // Initialize speech recognition
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition()
@@ -54,23 +48,16 @@ export default function VoiceAssistantNext({
       recognition.lang = 'en-US'
 
       recognition.onstart = () => {
-        console.log('🎤 Voice recognition started')
         setIsListening(true)
-        addToActivityLog('Voice recognition activated')
+        addToActivityLog('Listening...')
       }
 
       recognition.onend = () => {
-        console.log('🎤 Voice recognition ended')
         setIsListening(false)
         if (isEnabled) {
-          // Auto-restart if enabled
           setTimeout(() => {
             if (isEnabled && !isProcessingRef.current) {
-              try {
-                recognition.start()
-              } catch (e) {
-                console.log('Recognition restart failed:', e)
-              }
+              try { recognition.start() } catch (e) {}
             }
           }, 1000)
         }
@@ -92,31 +79,21 @@ export default function VoiceAssistantNext({
         setTranscript(interimTranscript)
 
         if (finalTranscript) {
-          console.log('🗣️ Final transcript:', finalTranscript)
           processVoiceCommand(finalTranscript.trim())
         }
       }
 
-      recognition.onerror = (event) => {
-        console.error('🎤 Speech recognition error:', event.error)
-        setIsListening(false)
-      }
-
+      recognition.onerror = () => setIsListening(false)
       recognitionRef.current = recognition
     }
 
-    // Initialize speech synthesis
     if (window.speechSynthesis) {
       synthRef.current = window.speechSynthesis
     }
 
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop()
-      }
-      if (synthRef.current) {
-        synthRef.current.cancel()
-      }
+      recognitionRef.current?.stop()
+      synthRef.current?.cancel()
     }
   }, [isEnabled])
 
@@ -127,56 +104,40 @@ export default function VoiceAssistantNext({
 
   const speak = (text: string) => {
     if (!synthRef.current || !isEnabled) return
-
     synthRef.current.cancel()
-    setIsSpeaking(true)
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.volume = volume
     utterance.rate = 0.9
-    utterance.pitch = 1.0
-
-    utterance.onstart = () => {
-      console.log('🔊 Speaking:', text)
-      addToActivityLog(`Speaking: ${text.slice(0, 50)}...`)
-    }
-
-    utterance.onend = () => {
-      setIsSpeaking(false)
-    }
-
-    utterance.onerror = () => {
-      setIsSpeaking(false)
-    }
-
+    addToActivityLog(`Speaking: ${text.slice(0, 40)}...`)
     synthRef.current.speak(utterance)
   }
 
-  // Voice commands configuration
+  // Voice commands - Navigation only
   const voiceCommands: VoiceCommand[] = [
     {
       pattern: /^(next page|page forward|forward)$/i,
       action: () => {
         if (currentPage < totalPages) {
           onPageChange(currentPage + 1)
-          speak(`Moving to page ${currentPage + 1}`)
+          speak(`Page ${currentPage + 1}`)
         } else {
-          speak('You are already on the last page')
+          speak('Last page')
         }
       },
-      description: 'Go to next page',
+      description: 'Next page',
     },
     {
       pattern: /^(previous page|page back|back|go back)$/i,
       action: () => {
         if (currentPage > 1) {
           onPageChange(currentPage - 1)
-          speak(`Moving to page ${currentPage - 1}`)
+          speak(`Page ${currentPage - 1}`)
         } else {
-          speak('You are already on the first page')
+          speak('First page')
         }
       },
-      description: 'Go to previous page',
+      description: 'Previous page',
     },
     {
       pattern: /^(go to page|page) (\d+)$/i,
@@ -184,124 +145,62 @@ export default function VoiceAssistantNext({
         const page = parseInt(matches[2])
         if (page >= 1 && page <= totalPages) {
           onPageChange(page)
-          speak(`Moving to page ${page}`)
+          speak(`Page ${page}`)
         } else {
-          speak(`Invalid page number. Please choose between 1 and ${totalPages}`)
+          speak(`Invalid page. Choose between 1 and ${totalPages}`)
         }
       },
-      description: 'Go to specific page (e.g., "go to page 5")',
+      description: 'Go to page X',
     },
     {
       pattern: /^(first page|beginning|start)$/i,
       action: () => {
         onPageChange(1)
-        speak('Moving to the first page')
+        speak('First page')
       },
-      description: 'Go to first page',
+      description: 'First page',
     },
     {
       pattern: /^(last page|end)$/i,
       action: () => {
         onPageChange(totalPages)
-        speak(`Moving to the last page, page ${totalPages}`)
+        speak(`Last page, page ${totalPages}`)
       },
-      description: 'Go to last page',
+      description: 'Last page',
     },
     {
       pattern: /^(what page|current page)$/i,
       action: () => {
-        speak(`You are currently on page ${currentPage} of ${totalPages}`)
+        speak(`Page ${currentPage} of ${totalPages}`)
       },
-      description: 'Get current page information',
-    },
-    {
-      pattern: /^(how many pages|total pages)$/i,
-      action: () => {
-        speak(`This document has ${totalPages} pages`)
-      },
-      description: 'Get total page count',
-    },
-    {
-      pattern: /^(summarize|summary|what is this about|read this page)$/i,
-      action: async () => {
-        speak('Let me analyze this page for you')
-        try {
-          const content = await getPageContent?.()
-          if (content && content.trim().length > 0) {
-            console.log('📄 Page content received for AI:', content.slice(0, 200) + '...')
-            addToActivityLog(`Page content: ${content.length} characters`)
-            
-            // Basic content summary
-            const words = content.split(' ').length
-            const sentences = content.split(/[.!?]+/).length
-            
-            if (words < 10) {
-              speak('This page has very little text content')
-            } else if (words < 50) {
-              speak(`This page contains about ${words} words of text content`)
-            } else {
-              speak(`This page contains about ${words} words in approximately ${sentences} sentences. The text has been extracted successfully for analysis.`)
-            }
-          } else {
-            speak('This page appears to have no text content, or the content could not be extracted')
-          }
-        } catch (error) {
-          console.error('Error analyzing page:', error)
-          speak('Sorry, I encountered an error while analyzing the page')
-        }
-      },
-      description: 'Analyze and summarize current page content',
+      description: 'Current page',
     },
     {
       pattern: /^(next document|switch document)$/i,
       action: () => {
         if (onDocumentChange) {
           onDocumentChange('next')
-          speak('Switching to the next document')
-        } else {
-          speak('Document switching is not available')
+          speak('Next document')
         }
       },
-      description: 'Switch to next document',
+      description: 'Next document',
     },
     {
       pattern: /^(previous document)$/i,
       action: () => {
         if (onDocumentChange) {
           onDocumentChange('previous')
-          speak('Switching to the previous document')
-        } else {
-          speak('Document switching is not available')
+          speak('Previous document')
         }
       },
-      description: 'Switch to previous document',
-    },
-    {
-      pattern: /^(read (this )?page|read aloud|read content)$/i,
-      action: async () => {
-        try {
-          const content = await getPageContent?.()
-          if (content && content.trim().length > 0) {
-            addToActivityLog(`Reading page content: ${content.length} chars`)
-            // Read first 200 words to avoid overly long speech
-            const words = content.split(' ').slice(0, 200).join(' ')
-            speak(words.length < content.length ? words + '... and more content on this page' : words)
-          } else {
-            speak('This page has no readable text content')
-          }
-        } catch (error) {
-          speak('Sorry, I cannot read the page content right now')
-        }
-      },
-      description: 'Read page content aloud',
+      description: 'Previous document',
     },
     {
       pattern: /^(help|what can you do|commands)$/i,
       action: () => {
-        const helpText = 'I can help you navigate and read documents. Say "next page", "go to page 5", "summarize", "read this page", "next document", or "help" for all commands.'
-        speak(helpText)
+        speak('Say next page, previous page, go to page 5, first page, last page, or help')
       },
-      description: 'Show available commands',
+      description: 'Help',
     },
   ]
 
@@ -309,8 +208,7 @@ export default function VoiceAssistantNext({
     if (isProcessingRef.current) return
     
     isProcessingRef.current = true
-    setLastCommand(command)
-    addToActivityLog(`Recognized: "${command}"`)
+    addToActivityLog(`"${command}"`)
 
     const normalizedCommand = command.toLowerCase().trim()
     let commandFound = false
@@ -319,29 +217,21 @@ export default function VoiceAssistantNext({
       const matches = normalizedCommand.match(voiceCommand.pattern)
       if (matches) {
         commandFound = true
-        try {
-          voiceCommand.action(matches)
-        } catch (error) {
-          console.error('Error executing command:', error)
-          speak('Sorry, I encountered an error executing that command')
-        }
+        try { voiceCommand.action(matches) } catch (e) {}
         break
       }
     }
 
     if (!commandFound) {
-      speak("Sorry, I didn't understand that command. Say 'help' for available commands.")
-      addToActivityLog('Command not recognized')
+      speak("Say help for commands")
     }
 
-    setTimeout(() => {
-      isProcessingRef.current = false
-    }, 1000)
+    setTimeout(() => { isProcessingRef.current = false }, 1000)
   }
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      speak('Voice recognition is not supported in this browser')
+      speak('Voice not supported')
       return
     }
 
@@ -349,23 +239,13 @@ export default function VoiceAssistantNext({
       setIsEnabled(false)
       recognitionRef.current.stop()
       synthRef.current?.cancel()
-      addToActivityLog('Voice assistant disabled')
+      addToActivityLog('Stopped')
     } else {
       setIsEnabled(true)
       try {
         recognitionRef.current.start()
-        addToActivityLog('Voice assistant enabled')
-      } catch (error) {
-        console.error('Failed to start recognition:', error)
-      }
-    }
-  }
-
-  const toggleMute = () => {
-    if (volume > 0) {
-      setVolume(0)
-    } else {
-      setVolume(0.8)
+        addToActivityLog('Started')
+      } catch (e) {}
     }
   }
 
@@ -375,7 +255,7 @@ export default function VoiceAssistantNext({
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white flex items-center">
           <FiMic className="w-5 h-5 mr-2" />
-          Voice Assistant
+          Voice Navigation
         </h3>
         <button
           onClick={() => setShowSettings(!showSettings)}
@@ -390,12 +270,12 @@ export default function VoiceAssistantNext({
         <div className="flex items-center space-x-2">
           <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-400 animate-pulse' : isEnabled ? 'bg-green-400' : 'bg-gray-400'}`}></div>
           <span className="text-sm text-gray-400">
-            {isListening ? 'Listening...' : isEnabled ? 'Ready' : 'Disabled'}
+            {isListening ? 'Listening...' : isEnabled ? 'Ready' : 'Off'}
           </span>
         </div>
         <div className="flex items-center space-x-1">
           <button
-            onClick={toggleMute}
+            onClick={() => setVolume(v => v > 0 ? 0 : 0.8)}
             className="p-1 glass-button rounded hover:bg-dark-surface transition"
           >
             {volume > 0 ? <FiVolume2 className="w-4 h-4" /> : <FiVolumeX className="w-4 h-4" />}
@@ -403,68 +283,58 @@ export default function VoiceAssistantNext({
           <button
             onClick={() => setActivityLog([])}
             className="p-1 glass-button rounded hover:bg-dark-surface transition"
-            title="Clear activity log"
           >
             <FiActivity className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="space-y-3 mb-4">
-        <button
-          onClick={toggleListening}
-          className={`w-full py-3 px-4 rounded-lg font-medium transition ${
-            isEnabled
-              ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white'
-              : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white'
-          }`}
-        >
-          {isEnabled ? (
-            <>
-              <FiMicOff className="w-5 h-5 inline mr-2" />
-              Stop Listening
-            </>
-          ) : (
-            <>
-              <FiMic className="w-5 h-5 inline mr-2" />
-              Start Listening
-            </>
-          )}
-        </button>
-
-        {transcript && (
-          <div className="p-3 bg-dark-surface rounded-lg">
-            <div className="text-xs text-gray-400 mb-1">Hearing...</div>
-            <div className="text-white">{transcript}</div>
-          </div>
+      {/* Start/Stop Button */}
+      <button
+        onClick={toggleListening}
+        className={`w-full py-3 px-4 rounded-lg font-medium transition mb-4 ${
+          isEnabled
+            ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white'
+            : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white'
+        }`}
+      >
+        {isEnabled ? (
+          <><FiMicOff className="w-5 h-5 inline mr-2" />Stop</>
+        ) : (
+          <><FiMic className="w-5 h-5 inline mr-2" />Start Voice</>
         )}
-      </div>
+      </button>
 
-      {/* Settings Panel */}
+      {/* Transcript */}
+      {transcript && (
+        <div className="p-3 bg-dark-surface rounded-lg mb-4">
+          <div className="text-xs text-gray-400 mb-1">Hearing...</div>
+          <div className="text-white">{transcript}</div>
+        </div>
+      )}
+
+      {/* Settings */}
       {showSettings && (
-        <div className="mb-4 p-3 bg-dark-surface rounded-lg space-y-3">
-          <div>
-            <label className="text-sm text-gray-400 mb-2 block">
-              Voice Volume: {Math.round(volume * 100)}%
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={volume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-full"
-            />
-          </div>
+        <div className="mb-4 p-3 bg-dark-surface rounded-lg">
+          <label className="text-sm text-gray-400 mb-2 block">
+            Volume: {Math.round(volume * 100)}%
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={volume}
+            onChange={(e) => setVolume(parseFloat(e.target.value))}
+            className="w-full"
+          />
         </div>
       )}
 
       {/* Activity Log */}
       <div className="space-y-2">
-        <h4 className="text-sm font-medium text-gray-400">Recent Activity</h4>
-        <div className="max-h-32 overflow-y-auto space-y-1">
+        <h4 className="text-sm font-medium text-gray-400">Activity</h4>
+        <div className="max-h-24 overflow-y-auto space-y-1">
           {activityLog.length > 0 ? (
             activityLog.map((log, index) => (
               <div key={index} className="text-xs text-gray-500 p-2 bg-dark-surface rounded">
@@ -473,20 +343,19 @@ export default function VoiceAssistantNext({
             ))
           ) : (
             <div className="text-xs text-gray-500 p-2 bg-dark-surface rounded">
-              No recent activity
+              No activity
             </div>
           )}
         </div>
       </div>
 
-      {/* Command Hints */}
+      {/* Commands */}
       <div className="mt-4 p-3 bg-dark-surface rounded-lg">
-        <h4 className="text-sm font-medium text-gray-400 mb-2">Try saying:</h4>
+        <h4 className="text-sm font-medium text-gray-400 mb-2">Commands:</h4>
         <div className="grid grid-cols-1 gap-1 text-xs text-gray-500">
-          <div>"Next page" / "Go to page 5"</div>
+          <div>"Next page" / "Previous page"</div>
+          <div>"Go to page 5"</div>
           <div>"First page" / "Last page"</div>
-          <div>"Summarize this page"</div>
-          <div>"Read this page" / "Help"</div>
         </div>
       </div>
     </div>

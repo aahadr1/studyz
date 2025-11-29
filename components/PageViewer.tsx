@@ -1,57 +1,36 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 
-// Dynamic import to avoid SSR issues
 const PdfPager = dynamic(() => import('./PdfPager'), { ssr: false })
 
 interface PageViewerProps {
   documentId: string
-  currentPage: number
-  onTotalPagesChange: (total: number) => void
-  onPageTextReady?: (getText: () => Promise<string | null>) => void
 }
 
-export default function PageViewer({
-  documentId,
-  currentPage,
-  onTotalPagesChange,
-  onPageTextReady,
-}: PageViewerProps) {
-  const [signedUrl, setSignedUrl] = useState<string | null>(null)
-  const [pageText, setPageText] = useState<string>('')
+export default function PageViewer({ documentId }: PageViewerProps) {
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Get signed URL
   useEffect(() => {
-    const load = async () => {
+    const loadUrl = async () => {
       try {
         const res = await fetch(`/api/documents/${documentId}/signed-url`, {
           credentials: 'include',
         })
         if (!res.ok) throw new Error('Failed to load document')
         const data = await res.json()
-        setSignedUrl(data.signedUrl)
-        if (data.pageCount) onTotalPagesChange(data.pageCount)
+        setPdfUrl(data.signedUrl)
       } catch (err: any) {
         setError(err.message)
       } finally {
         setLoading(false)
       }
     }
-    load()
-  }, [documentId, onTotalPagesChange])
-
-  // Provide text to AI
-  const getText = useCallback(async () => pageText || null, [pageText])
-
-  useEffect(() => {
-    if (onPageTextReady) {
-      onPageTextReady(getText)
-    }
-  }, [onPageTextReady, getText])
+    loadUrl()
+  }, [documentId])
 
   if (loading) {
     return (
@@ -61,7 +40,7 @@ export default function PageViewer({
     )
   }
 
-  if (error || !signedUrl) {
+  if (error || !pdfUrl) {
     return (
       <div className="flex-1 flex items-center justify-center bg-dark-bg">
         <div className="text-center p-6">
@@ -77,16 +56,5 @@ export default function PageViewer({
     )
   }
 
-  return (
-    <PdfPager
-      src={signedUrl}
-      initialPage={currentPage}
-      onTotalPagesChange={onTotalPagesChange}
-      onTextExtracted={setPageText}
-      onPageChange={(page) => {
-        // Notify parent about internal page changes (keyboard nav, etc)
-        console.log('📄 Page changed internally to:', page)
-      }}
-    />
-  )
+  return <PdfPager fileUrl={pdfUrl} />
 }

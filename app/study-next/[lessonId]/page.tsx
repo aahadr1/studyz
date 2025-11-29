@@ -4,22 +4,14 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { 
   FiArrowLeft, 
-  FiChevronLeft, 
-  FiChevronRight, 
   FiSkipBack, 
   FiSkipForward, 
-  FiMessageSquare, 
-  FiMic,
   FiFile,
-  FiBook,
-  FiClock,
-  FiUsers,
   FiMaximize2,
   FiMinimize2
 } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase'
 import PageViewer from '@/components/PageViewer'
-import VoiceAssistantNext from '@/components/VoiceAssistantNext'
 import ChatAssistant from '@/components/ChatAssistant'
 
 interface Document {
@@ -50,11 +42,7 @@ export default function StudyPageNext() {
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
   const [currentDocIndex, setCurrentDocIndex] = useState(0)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [assistantMode, setAssistantMode] = useState<'chat' | 'voice'>('chat')
-  const [getPageContentFn, setGetPageContentFn] = useState<(() => Promise<string | null>) | undefined>()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [documentsPanelCollapsed, setDocumentsPanelCollapsed] = useState(false)
   const [sessionStartTime] = useState(Date.now())
@@ -115,38 +103,20 @@ export default function StudyPageNext() {
   const currentDocument = documents[currentDocIndex] || null
 
   // Navigation handlers
-  const handlePreviousPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1)
-    }
-  }
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1)
-    }
-  }
-
   const handlePreviousDocument = () => {
     if (currentDocIndex > 0) {
       setCurrentDocIndex(currentDocIndex - 1)
-      setCurrentPage(1)
-      setTotalPages(0)
     }
   }
 
   const handleNextDocument = () => {
     if (currentDocIndex < documents.length - 1) {
       setCurrentDocIndex(currentDocIndex + 1)
-      setCurrentPage(1)
-      setTotalPages(0)
     }
   }
 
   const handleDocumentSelect = (index: number) => {
     setCurrentDocIndex(index)
-    setCurrentPage(1)
-    setTotalPages(0)
   }
 
   const handleDocumentChange = (direction: 'next' | 'previous') => {
@@ -258,25 +228,6 @@ export default function StudyPageNext() {
             >
               <FiFile className="w-4 h-4" />
             </button>
-            <div className="w-px h-6 bg-dark-border"></div>
-            <button
-              onClick={() => setAssistantMode('chat')}
-              className={`glass-button p-2 rounded-lg transition ${
-                assistantMode === 'chat' ? 'bg-accent-purple text-white' : 'hover:bg-dark-surface'
-              }`}
-              title="Chat assistant"
-            >
-              <FiMessageSquare className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setAssistantMode('voice')}
-              className={`glass-button p-2 rounded-lg transition ${
-                assistantMode === 'voice' ? 'bg-accent-purple text-white' : 'hover:bg-dark-surface'
-              }`}
-              title="Voice assistant"
-            >
-              <FiMic className="w-4 h-4" />
-            </button>
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className="glass-button p-2 rounded-lg hover:bg-dark-surface transition"
@@ -330,49 +281,7 @@ export default function StudyPageNext() {
         {/* Document Viewer */}
         <div className="flex-1 flex flex-col">
           {currentDocument ? (
-            <>
-              {/* Page Navigation */}
-              <div className="flex items-center justify-between p-4 bg-dark-elevated border-b border-dark-border">
-                <div className="flex items-center space-x-4">
-                  <h2 className="font-medium text-white truncate max-w-md">
-                    {currentDocument.name}
-                  </h2>
-                  <div className="text-sm text-gray-400">
-                    {currentDocument.file_type.toUpperCase()}
-                  </div>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handlePreviousPage}
-                    className="glass-button p-2 rounded-lg hover:bg-dark-surface transition"
-                    disabled={currentPage <= 1}
-                    title="Previous page"
-                  >
-                    <FiChevronLeft className="w-4 h-4" />
-                  </button>
-                  <div className="text-sm text-gray-400 min-w-[80px] text-center">
-                    {totalPages > 0 ? `${currentPage} / ${totalPages}` : 'Loading...'}
-                  </div>
-                  <button
-                    onClick={handleNextPage}
-                    className="glass-button p-2 rounded-lg hover:bg-dark-surface transition"
-                    disabled={currentPage >= totalPages}
-                    title="Next page"
-                  >
-                    <FiChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Document Display */}
-              <PageViewer
-                documentId={currentDocument.id}
-                currentPage={currentPage}
-                onTotalPagesChange={setTotalPages}
-                onPageTextReady={setGetPageContentFn}
-              />
-            </>
+            <PageViewer documentId={currentDocument.id} />
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-gray-400">No document selected</p>
@@ -383,24 +292,11 @@ export default function StudyPageNext() {
         {/* Assistant Panel */}
         {!sidebarCollapsed && (
           <div className="w-96 bg-dark-elevated border-l border-dark-border flex flex-col">
-            {assistantMode === 'voice' ? (
-              <VoiceAssistantNext
-                documentId={currentDocument?.id || ''}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                onDocumentChange={handleDocumentChange}
-                getPageContent={getPageContentFn}
-                className="flex-1 m-4"
-              />
-            ) : (
-              <ChatAssistant
-                lessonId={lessonId}
-                documentId={currentDocument?.id || ''}
-                pageNumber={currentPage}
-                getPageText={getPageContentFn}
-              />
-            )}
+            <ChatAssistant
+              lessonId={lessonId}
+              documentId={currentDocument?.id || ''}
+              pageNumber={1}
+            />
           </div>
         )}
       </div>
