@@ -48,6 +48,59 @@ export default function NewInteractiveLessonPage() {
     setMcqFiles(prev => prev.filter((_, i) => i !== index))
   }
 
+  // Helper function to upload a file using signed URL (bypasses 4.5MB API limit)
+  const uploadFileDirectly = async (lessonId: string, file: File, category: 'lesson' | 'mcq') => {
+    // Step 1: Get signed upload URL
+    const urlResponse = await fetch(`/api/interactive-lessons/${lessonId}/upload-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: file.name,
+        category,
+        contentType: file.type
+      })
+    })
+
+    if (!urlResponse.ok) {
+      const error = await urlResponse.json()
+      throw new Error(error.error || 'Failed to get upload URL')
+    }
+
+    const { uploadUrl, filePath, fileType } = await urlResponse.json()
+
+    // Step 2: Upload file directly to Supabase Storage
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type || 'application/octet-stream',
+      },
+      body: file
+    })
+
+    if (!uploadResponse.ok) {
+      throw new Error('Failed to upload file to storage')
+    }
+
+    // Step 3: Confirm upload and create document record
+    const confirmResponse = await fetch(`/api/interactive-lessons/${lessonId}/confirm-upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filePath,
+        fileName: file.name,
+        category,
+        fileType
+      })
+    })
+
+    if (!confirmResponse.ok) {
+      const error = await confirmResponse.json()
+      throw new Error(error.error || 'Failed to confirm upload')
+    }
+
+    return await confirmResponse.json()
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -79,35 +132,21 @@ export default function NewInteractiveLessonPage() {
 
       const { lesson } = await createResponse.json()
 
-      // Step 2: Upload lesson documents
+      // Step 2: Upload lesson documents (direct to storage)
       for (const file of lessonFiles) {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('category', 'lesson')
-
-        const uploadResponse = await fetch(`/api/interactive-lessons/${lesson.id}/documents`, {
-          method: 'POST',
-          body: formData
-        })
-
-        if (!uploadResponse.ok) {
-          console.error('Failed to upload lesson file:', file.name)
+        try {
+          await uploadFileDirectly(lesson.id, file, 'lesson')
+        } catch (err) {
+          console.error('Failed to upload lesson file:', file.name, err)
         }
       }
 
-      // Step 3: Upload MCQ documents
+      // Step 3: Upload MCQ documents (direct to storage)
       for (const file of mcqFiles) {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('category', 'mcq')
-
-        const uploadResponse = await fetch(`/api/interactive-lessons/${lesson.id}/documents`, {
-          method: 'POST',
-          body: formData
-        })
-
-        if (!uploadResponse.ok) {
-          console.error('Failed to upload MCQ file:', file.name)
+        try {
+          await uploadFileDirectly(lesson.id, file, 'mcq')
+        } catch (err) {
+          console.error('Failed to upload MCQ file:', file.name, err)
         }
       }
 

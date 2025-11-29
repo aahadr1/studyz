@@ -4,6 +4,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60 // 60 seconds for large file uploads
 
 // Lazy initialization of admin client
 let _supabaseAdmin: any = null
