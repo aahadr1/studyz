@@ -2,18 +2,25 @@
 
 ## Overview
 
-This application uses `react-pdf` with a local PDF.js worker to display PDF documents without CORS issues.
+This application uses `react-pdf` with a matching PDF.js worker to display PDF documents.
 
 ## Implementation
 
 ### 1. Dependencies
-- `react-pdf`: React components for PDF rendering
+- `react-pdf`: React components for PDF rendering  
 - `pdfjs-dist`: PDF.js library for PDF processing
 
 ### 2. Worker Configuration
-The PDF worker is served locally to avoid CORS issues:
-- Worker file: `/public/pdf.worker.min.js`
-- Worker source: `pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'`
+The PDF worker is loaded from unpkg CDN with **matching version**:
+```typescript
+import { pdfjs } from 'react-pdf'
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+```
+
+**Important:** 
+- Version 5+ uses `.mjs` module format (not `.js`)
+- `pdfjs.version` ensures API and worker versions always match
+- unpkg CDN provides proper CORS headers
 
 ### 3. Components
 
@@ -77,20 +84,30 @@ The `postinstall` script automatically copies the worker file:
 
 ## Troubleshooting
 
-### Worker Not Found
-If you see "Worker not found" errors:
-1. Check if `/public/pdf.worker.min.js` exists
-2. Run: `npm run postinstall`
-3. Restart the development server
+### Version Mismatch Error
+If you see "API version X ≠ Worker version Y":
+1. This means the worker and API versions don't match
+2. The fix: use dynamic version loading:
+```typescript
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+```
+3. Delete any old worker files from `/public/`
 
 ### CORS Issues
 If CORS errors persist:
-1. Ensure worker source points to local file
-2. Check that signed URLs are properly configured
-3. Verify no external CDN workers are being used
+1. Make sure you're using `unpkg.com` CDN (has proper CORS headers)
+2. Ensure you're using `.mjs` extension for v5+ workers
+3. Check that signed URLs are properly configured
 
 ### Text Extraction Fails
 If text extraction doesn't work:
 1. Check browser console for PDF loading errors
 2. Verify PDF is not image-only (scanned document)
 3. Test with different PDF files
+
+## Migration from Local Worker
+
+If upgrading from local worker setup:
+1. Delete `/public/pdf.worker.min.js` (old file)
+2. Update workerSrc to use CDN with `pdfjs.version`
+3. Remove any `postinstall` scripts that copy worker files

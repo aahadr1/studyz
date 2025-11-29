@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "cp node_modules/pdfjs-dist/legacy/build/pdf.worker.min.js public/pdf.worker.min.js"
+    "postinstall": "echo 'PDF worker loaded from CDN - no local copy needed'"
   },
   "dependencies": {
     "@supabase/ssr": "^0.1.0",
