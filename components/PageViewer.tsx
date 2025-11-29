@@ -1,13 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 
 const PdfPager = dynamic(() => import('./PdfPager'), { ssr: false })
 
-export default function PageViewer({ documentId }: { documentId: string }) {
+interface PageViewerProps {
+  documentId: string
+  onPageChange?: (page: number, total: number) => void
+  onCanvasReady?: (getImage: () => string | null) => void
+}
+
+export default function PageViewer({ documentId, onPageChange, onCanvasReady }: PageViewerProps) {
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     fetch(`/api/documents/${documentId}/signed-url`, { credentials: 'include' })
@@ -15,6 +22,27 @@ export default function PageViewer({ documentId }: { documentId: string }) {
       .then(d => setUrl(d.signedUrl))
       .catch(() => setError(true))
   }, [documentId])
+
+  // Expose function to capture page image
+  useEffect(() => {
+    if (onCanvasReady) {
+      onCanvasReady(() => {
+        if (canvasRef.current) {
+          try {
+            return canvasRef.current.toDataURL('image/jpeg', 0.8)
+          } catch (e) {
+            console.error('Failed to capture canvas:', e)
+            return null
+          }
+        }
+        return null
+      })
+    }
+  }, [onCanvasReady])
+
+  const handlePageRender = (canvas: HTMLCanvasElement | null) => {
+    canvasRef.current = canvas
+  }
 
   if (error) {
     return <div className="flex-1 flex items-center justify-center text-red-400">Failed to load</div>
@@ -24,5 +52,11 @@ export default function PageViewer({ documentId }: { documentId: string }) {
     return <div className="flex-1 flex items-center justify-center text-white">Loading...</div>
   }
 
-  return <PdfPager url={url} />
+  return (
+    <PdfPager 
+      url={url} 
+      onPageChange={onPageChange}
+      onPageRender={handlePageRender}
+    />
+  )
 }

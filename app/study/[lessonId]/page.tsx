@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import PageViewer from '@/components/PageViewer'
+import ChatSidebar from '@/components/ChatSidebar'
 
 interface Doc {
   id: string
@@ -19,8 +20,11 @@ export default function StudyPage() {
   const docIds = searchParams.get('documents')?.split(',') || []
 
   const [docs, setDocs] = useState<Doc[]>([])
-  const [currentDoc, setCurrentDoc] = useState(0)
+  const [currentDocIndex, setCurrentDocIndex] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [getPageImage, setGetPageImage] = useState<() => string | null>(() => () => null)
 
   useEffect(() => {
     if (docIds.length === 0) {
@@ -39,6 +43,21 @@ export default function StudyPage() {
       })
   }, [])
 
+  const handlePageChange = useCallback((page: number, total: number) => {
+    setCurrentPage(page)
+    setTotalPages(total)
+  }, [])
+
+  const handleCanvasReady = useCallback((getImage: () => string | null) => {
+    setGetPageImage(() => getImage)
+  }, [])
+
+  const handleDocSelect = (index: number) => {
+    setCurrentDocIndex(index)
+    setCurrentPage(1)
+    setTotalPages(1)
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen bg-neutral-900 text-white">Loading...</div>
   }
@@ -54,24 +73,24 @@ export default function StudyPage() {
     )
   }
 
-  const doc = docs[currentDoc]
+  const currentDoc = docs[currentDocIndex]
 
   return (
     <div className="flex h-screen bg-neutral-900">
-      {/* Sidebar */}
-      <div className="w-64 border-r border-neutral-700 flex flex-col">
+      {/* Left Sidebar - Document List */}
+      <div className="w-56 border-r border-neutral-700 flex flex-col">
         <div className="p-4 border-b border-neutral-700">
-          <button onClick={() => router.push(`/lessons/${lessonId}`)} className="text-white hover:underline">
-            ← Back
+          <button onClick={() => router.push(`/lessons/${lessonId}`)} className="text-white hover:underline text-sm">
+            ← Back to lesson
           </button>
         </div>
         <div className="flex-1 overflow-auto">
           {docs.map((d, i) => (
             <button
               key={d.id}
-              onClick={() => setCurrentDoc(i)}
-              className={`w-full p-3 text-left text-white border-b border-neutral-800 ${
-                i === currentDoc ? 'bg-purple-600' : 'hover:bg-neutral-800'
+              onClick={() => handleDocSelect(i)}
+              className={`w-full p-3 text-left text-white text-sm border-b border-neutral-800 truncate ${
+                i === currentDocIndex ? 'bg-purple-600' : 'hover:bg-neutral-800'
               }`}
             >
               {d.name}
@@ -80,9 +99,24 @@ export default function StudyPage() {
         </div>
       </div>
 
-      {/* PDF Viewer */}
+      {/* Center - PDF Viewer */}
       <div className="flex-1">
-        <PageViewer key={doc.id} documentId={doc.id} />
+        <PageViewer 
+          key={currentDoc.id} 
+          documentId={currentDoc.id}
+          onPageChange={handlePageChange}
+          onCanvasReady={handleCanvasReady}
+        />
+      </div>
+
+      {/* Right Sidebar - Chat */}
+      <div className="w-80">
+        <ChatSidebar
+          documentId={currentDoc.id}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          getPageImage={getPageImage}
+        />
       </div>
     </div>
   )
