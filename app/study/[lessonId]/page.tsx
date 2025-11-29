@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiMic, FiSkipBack, FiSkipForward, FiMaximize2 } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase'
-import PDFViewerV2 from '@/components/PDFViewerV2'
+import PageViewer from '@/components/PageViewer'
 import ChatAssistant from '@/components/ChatAssistant'
 import VoiceAssistantV2 from '@/components/VoiceAssistantV2'
 
@@ -127,7 +127,7 @@ export default function StudyPage() {
     setTotalPages(total)
   }
 
-  function handleCanvasReady(fn: () => Promise<string | null>) {
+  function handlePageImageReady(fn: () => Promise<string | null>) {
     setGetPageImageFn(function() { return fn })
   }
 
@@ -272,11 +272,11 @@ export default function StudyPage() {
         {/* Document Content Area */}
         <div className="flex-1 overflow-hidden bg-dark-bg flex flex-col">
           {isPdf ? (
-            <PDFViewerV2
+            <PageViewer
               documentId={docId}
               currentPage={currentPage}
               onTotalPagesChange={handleTotalPagesChange}
-              onCanvasRefReady={handleCanvasReady}
+              onPageImageReady={handlePageImageReady}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-4">
