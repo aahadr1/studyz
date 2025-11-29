@@ -1,6 +1,4 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  // No special headers needed - worker loaded from unpkg CDN
-}
+const nextConfig = {}
 
 module.exports = nextConfig
