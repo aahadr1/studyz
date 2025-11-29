@@ -396,6 +396,7 @@ export default function StudyPageNext() {
               />
             ) : (
               <ChatAssistant
+                lessonId={lessonId}
                 documentId={currentDocument?.id || ''}
                 pageNumber={currentPage}
                 getPageImage={getPageContentFn}
