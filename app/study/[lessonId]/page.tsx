@@ -33,7 +33,7 @@ export default function StudyPage() {
   const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
   const [assistantMode, setAssistantMode] = useState<'chat' | 'voice'>('chat')
-  const [getPageImageFn, setGetPageImageFn] = useState<(() => Promise<string | null>) | undefined>(undefined)
+  const [getPageTextFn, setGetPageTextFn] = useState<(() => Promise<string | null>) | undefined>(undefined)
 
   // Load documents - using function keyword instead of arrow
   useEffect(function() {
@@ -127,8 +127,8 @@ export default function StudyPage() {
     setTotalPages(total)
   }
 
-  function handlePageImageReady(fn: () => Promise<string | null>) {
-    setGetPageImageFn(function() { return fn })
+  function handlePageTextReady(fn: () => Promise<string | null>) {
+    setGetPageTextFn(function() { return fn })
   }
 
   // Loading state
@@ -276,7 +276,7 @@ export default function StudyPage() {
               documentId={docId}
               currentPage={currentPage}
               onTotalPagesChange={handleTotalPagesChange}
-              onPageImageReady={handlePageImageReady}
+              onPageTextReady={handlePageTextReady}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-4">
@@ -329,7 +329,7 @@ export default function StudyPage() {
               documentId={docId}
               pageNumber={currentPage}
               lessonId={lessonId}
-              getPageImage={getPageImageFn}
+              getPageText={getPageTextFn}
             />
           )}
           {assistantMode === 'voice' && (
@@ -337,7 +337,7 @@ export default function StudyPage() {
               documentId={docId}
               pageNumber={currentPage}
               lessonId={lessonId}
-              getPageImage={getPageImageFn}
+              getPageText={getPageTextFn}
             />
           )}
         </div>

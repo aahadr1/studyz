@@ -7,7 +7,7 @@ interface VoiceAssistantV2Props {
   documentId: string
   pageNumber: number
   lessonId: string
-  getPageImage?: () => Promise<string | null>
+  getPageText?: () => Promise<string | null>
 }
 
 interface Message {
@@ -22,7 +22,7 @@ export default function VoiceAssistantV2({
   documentId,
   pageNumber,
   lessonId,
-  getPageImage,
+  getPageText,
 }: VoiceAssistantV2Props) {
   const [isActive, setIsActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -95,40 +95,14 @@ You are Studyz Guy, a friendly AI study assistant. You help students understand 
     return featureInstructions[feature]
   }
 
-  // Extract page text context
+  // Get page text from PageViewer
   const extractPageText = async (): Promise<string> => {
     try {
-      if (!getPageImage) return ''
-
-      const pageImageData = await getPageImage()
-      if (!pageImageData) return ''
-
-      console.log('🤖 Extracting text from page', pageNumber)
-
-      const response = await fetch('/api/voice-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: 'EXTRACT_TEXT_ONLY',
-          pageNumber,
-          pageImageData,
-          conversationHistory: [],
-        }),
-      })
-
-      if (!response.ok) throw new Error('Failed to extract text')
-
-      const data = await response.json()
-      const pageText = data.pageContext || ''
-      
-      if (pageText) {
-        console.log(`✅ Extracted ${pageText.length} characters`)
-      }
-      
-      return pageText
-
+      if (!getPageText) return ''
+      const text = await getPageText()
+      return text || ''
     } catch (error: any) {
-      console.error('❌ Text extraction failed:', error)
+      console.error('❌ Failed to get page text:', error)
       return ''
     }
   }
@@ -173,10 +147,10 @@ You are Studyz Guy, a friendly AI study assistant. You help students understand 
       setError(null)
       setStatus('Analyzing page...')
 
-      // Extract page context
-      let pageImageData = null
-      if (getPageImage) {
-        pageImageData = await getPageImage()
+      // Get page text
+      let pageText = ''
+      if (getPageText) {
+        pageText = await getPageText() || ''
       }
 
       setStatus('Connecting...')
@@ -188,7 +162,7 @@ You are Studyz Guy, a friendly AI study assistant. You help students understand 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pageNumber,
-          pageImageData,
+          pageText,
           feature: selectedFeature,
         }),
       })

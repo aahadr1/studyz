@@ -370,7 +370,7 @@ export default function StudyPageNext() {
                 documentId={currentDocument.id}
                 currentPage={currentPage}
                 onTotalPagesChange={setTotalPages}
-                onPageImageReady={setGetPageContentFn}
+                onPageTextReady={setGetPageContentFn}
               />
             </>
           ) : (
@@ -398,7 +398,7 @@ export default function StudyPageNext() {
                 lessonId={lessonId}
                 documentId={currentDocument?.id || ''}
                 pageNumber={currentPage}
-                getPageImage={getPageContentFn}
+                getPageText={getPageContentFn}
               />
             )}
           </div>

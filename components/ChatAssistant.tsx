@@ -7,7 +7,7 @@ interface ChatAssistantProps {
   documentId: string
   pageNumber: number
   lessonId: string
-  getPageImage?: () => Promise<string | null>
+  getPageText?: () => Promise<string | null>
 }
 
 interface Message {
@@ -21,7 +21,7 @@ export default function ChatAssistant(props: ChatAssistantProps) {
   const documentId = props.documentId
   const pageNumber = props.pageNumber
   const lessonId = props.lessonId
-  const getPageImage = props.getPageImage
+  const getPageText = props.getPageText
 
   const initialMessage: Message = {
     id: '1',
@@ -78,13 +78,13 @@ export default function ChatAssistant(props: ChatAssistantProps) {
     setMessages(messagesWithUser)
 
     try {
-      // Get page image
-      let pageImageData = null
-      if (getPageImage) {
-        console.log('📸 Capturing page image for GPT context...')
-        pageImageData = await getPageImage()
-        if (pageImageData) {
-          console.log('✅ Page image ready for GPT')
+      // Get page text
+      let pageTextData = null
+      if (getPageText) {
+        console.log('📄 Getting page text for GPT context...')
+        pageTextData = await getPageText()
+        if (pageTextData) {
+          console.log('✅ Page text ready for GPT')
         } else {
           console.log('⚠️ No page image available')
         }
@@ -106,7 +106,7 @@ export default function ChatAssistant(props: ChatAssistantProps) {
         documentId: documentId,
         pageNumber: pageNumber,
         lessonId: lessonId,
-        pageImageData: pageImageData,
+        pageText: pageTextData,
         conversationHistory: history,
       }
 

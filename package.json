@@ -12,11 +12,13 @@
     "@supabase/ssr": "^0.1.0",
     "@supabase/supabase-js": "^2.39.0",
     "next": "14.0.4",
+    "openai": "^4.20.1",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^3.11.174",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^4.12.0",
-    "openai": "^4.20.1",
-    "pdfjs-dist": "^3.11.174"
+    "react-pdf": "^10.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
