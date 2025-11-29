@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy initialization of OpenAI client
+let _openai: OpenAI | null = null
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return _openai
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,7 +56,7 @@ Be concise and helpful. If the image is provided, use it to give accurate answer
       })
     }
 
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       messages,
       max_tokens: 1000,

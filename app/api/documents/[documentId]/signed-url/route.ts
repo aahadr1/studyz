@@ -9,11 +9,17 @@ export const dynamic = 'force-dynamic' // Ensure fresh URLs each time
 // Cache signed URLs briefly to avoid regenerating on rapid requests
 const urlCache = new Map<string, { url: string; expires: number }>()
 
-// Service role client for storage operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization of service role client
+let _supabaseAdmin: any = null
+function getSupabaseAdmin(): any {
+  if (!_supabaseAdmin) {
+    _supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  }
+  return _supabaseAdmin
+}
 
 export async function GET(
   request: NextRequest,
@@ -97,7 +103,7 @@ export async function GET(
     // Get document info and verify ownership through lesson
     console.log('Fetching document:', documentId, 'for user:', user.id)
     
-    const { data: document, error: docError } = await supabaseAdmin
+    const { data: documentData, error: docError } = await getSupabaseAdmin()
       .from('documents')
       .select(`
         id,
@@ -113,7 +119,7 @@ export async function GET(
       .eq('id', documentId)
       .single()
 
-    if (docError || !document) {
+    if (docError || !documentData) {
       console.error('Document not found:', docError)
       return NextResponse.json(
         { error: 'Document not found' },
@@ -121,6 +127,7 @@ export async function GET(
       )
     }
 
+    const document = documentData as any
     console.log('Document found:', document.name, 'lesson_id:', document.lesson_id)
 
     // Verify user owns this document (through lesson ownership)
@@ -151,7 +158,7 @@ export async function GET(
     }
 
     // Generate signed URL (valid for 1 hour)
-    const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
+    const { data: signedUrlData, error: signedUrlError } = await getSupabaseAdmin().storage
       .from('documents')
       .createSignedUrl(document.file_path, 3600)
 

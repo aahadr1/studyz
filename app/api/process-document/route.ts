@@ -3,11 +3,17 @@ import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 
-// Initialize Supabase with service role key for admin operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization of Supabase admin client
+let _supabase: any = null
+function getSupabase(): any {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  }
+  return _supabase
+}
 
 async function processPDF(fileBuffer: Buffer, documentId: string, userId: string) {
   const pages: string[] = []
@@ -21,7 +27,7 @@ async function processPDF(fileBuffer: Buffer, documentId: string, userId: string
     
     // Set a placeholder page count (will be updated when PDF loads in browser)
     // The actual page count will be determined by PDF.js in the PDFViewer component
-    await supabase
+    await getSupabase()
       .from('documents')
       .update({ page_count: 1 })
       .eq('id', documentId)
@@ -75,7 +81,7 @@ export async function POST(request: NextRequest) {
     const userId = filePath.split('/')[0]
 
     // Download file from Supabase storage
-    const { data: fileData, error: downloadError } = await supabase.storage
+    const { data: fileData, error: downloadError } = await getSupabase().storage
       .from('documents')
       .download(filePath)
 

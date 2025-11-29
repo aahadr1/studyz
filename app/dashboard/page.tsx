@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiBook, FiFileText, FiLogOut, FiPlus, FiTrendingUp, FiClock, FiArrowRight } from 'react-icons/fi'
+import { FiBook, FiFileText, FiLogOut, FiPlus, FiTrendingUp, FiClock, FiArrowRight, FiPlay, FiLayers } from 'react-icons/fi'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
-  const [stats, setStats] = useState({ totalLessons: 0, totalDocuments: 0 })
+  const [stats, setStats] = useState({ totalLessons: 0, totalDocuments: 0, interactiveLessons: 0 })
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -32,9 +32,15 @@ export default function DashboardPage() {
           .select('*', { count: 'exact', head: true })
           .eq('user_id', authUser.id)
 
+        const { count: interactiveLessonsCount } = await supabase
+          .from('interactive_lessons')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', authUser.id)
+
         setStats({
           totalLessons: lessonsCount || 0,
           totalDocuments: 0,
+          interactiveLessons: interactiveLessonsCount || 0,
         })
       } catch (err: any) {
         console.error('Dashboard error:', err)
@@ -151,6 +157,32 @@ export default function DashboardPage() {
         <div className="glass-card p-8 mb-10 animate-slide-up" style={{ animationDelay: '300ms' }}>
           <h2 className="text-2xl font-bold text-white mb-6">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Interactive Lessons - Featured */}
+            <a
+              href="/interactive-lessons"
+              className="group relative overflow-hidden rounded-xl p-6 bg-gradient-to-br from-violet-500/10 to-fuchsia-600/10 border border-violet-500/20 hover:border-violet-500/50 transition-all duration-300 md:col-span-2"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-500/0 to-fuchsia-600/0 group-hover:from-violet-500/10 group-hover:to-fuchsia-600/10 transition-all duration-300"></div>
+              <div className="relative flex items-center space-x-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                  <FiLayers className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-lg font-semibold text-white">Interactive Lessons</h3>
+                    <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs font-medium rounded-full">New</span>
+                  </div>
+                  <p className="text-sm text-gray-400">Gamified learning with PDF pages & quizzes. Progress through sections by passing MCQs.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {stats.interactiveLessons > 0 && (
+                    <span className="text-2xl font-bold text-violet-400">{stats.interactiveLessons}</span>
+                  )}
+                  <FiArrowRight className="w-5 h-5 text-gray-400 group-hover:text-white group-hover:translate-x-2 transition-all duration-300" />
+                </div>
+              </div>
+            </a>
+
             {/* View Lessons */}
             <a
               href="/lessons"

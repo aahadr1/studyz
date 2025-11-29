@@ -3,9 +3,16 @@ import OpenAI from 'openai'
 
 export const runtime = 'nodejs'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy initialization of OpenAI client
+let _openai: OpenAI | null = null
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return _openai
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,7 +39,7 @@ export async function POST(request: NextRequest) {
       console.log('📄 Extracting text from page image...')
       
       try {
-        const extractionCompletion = await openai.chat.completions.create({
+        const extractionCompletion = await getOpenAI().chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
             {
@@ -112,7 +119,7 @@ Important: Keep your responses under 3-4 sentences for voice conversations. Be n
     // Step 3: Get AI response using gpt-4o-mini (fast and cost-effective for text)
     console.log('🤖 Calling OpenAI GPT-4o-mini for voice response')
     
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       messages: messages,
       max_tokens: 300, // Keep responses shorter for voice

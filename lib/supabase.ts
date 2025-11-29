@@ -1,18 +1,18 @@
 import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
 // Check if we're on the client side
 const isBrowser = typeof window !== 'undefined'
 
 // Singleton instance to avoid multiple client warnings
 let supabaseInstance: SupabaseClient | null = null
 
-export function createClient() {
+export function createClient(): SupabaseClient {
   if (supabaseInstance) {
     return supabaseInstance
   }
+  
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   
   supabaseInstance = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -54,6 +54,3 @@ export function createClient() {
   
   return supabaseInstance
 }
-
-// Export singleton instance for convenience
-export const supabase = createClient()
