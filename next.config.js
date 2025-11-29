@@ -1,20 +1,34 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  images: {
-    domains: ['localhost'],
-    remotePatterns: [
+  // Configure headers for PDF.js worker and CSP
+  async headers() {
+    return [
       {
-        protocol: 'https',
-        hostname: '**.supabase.co',
+        // PDF worker file headers
+        source: '/pdf.worker.min.js',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/javascript',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
       },
-    ],
-  },
-  webpack: (config) => {
-    config.resolve.alias.canvas = false;
-    return config;
+      {
+        // CSP headers for PDF.js worker support
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "worker-src 'self' blob:; script-src 'self' 'unsafe-eval' 'unsafe-inline';",
+          },
+        ],
+      },
+    ]
   },
 }
 
 module.exports = nextConfig
-

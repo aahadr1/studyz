@@ -83,6 +83,10 @@ export default function PageViewer({
       initialPage={currentPage}
       onTotalPagesChange={onTotalPagesChange}
       onTextExtracted={setPageText}
+      onPageChange={(page) => {
+        // Notify parent about internal page changes (keyboard nav, etc)
+        console.log('📄 Page changed internally to:', page)
+      }}
     />
   )
 }

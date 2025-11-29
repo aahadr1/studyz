@@ -5,8 +5,8 @@ import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/TextLayer.css'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 
-// Worker from CDN
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
+// IMPORTANT: legacy -> .js (local worker, no CORS issues)
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
 
 interface PdfPagerProps {
   src: string
@@ -48,12 +48,20 @@ export default function PdfPager({
   const extractText = async (pdf: any, pageNum: number) => {
     if (!onTextExtracted || !pdf) return
     try {
+      console.log('📄 Extracting text from page', pageNum)
       const p = await pdf.getPage(pageNum)
       const tc = await p.getTextContent()
-      const text = tc.items.map((i: any) => i.str).join(' ')
+      const text = tc.items
+        .map((i: any) => i.str)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      
+      console.log('✅ Extracted text:', text.length, 'characters')
       onTextExtracted(text)
     } catch (e) {
-      console.error('Text extraction error:', e)
+      console.error('❌ Text extraction error:', e)
+      onTextExtracted('') // Fallback to empty text
     }
   }
 
@@ -63,6 +71,13 @@ export default function PdfPager({
     onPageChange?.(newPage)
     if (pdfRef.current) extractText(pdfRef.current, newPage)
   }
+
+  // Sync with external page changes
+  useEffect(() => {
+    if (initialPage !== page && initialPage >= 1 && initialPage <= numPages) {
+      goToPage(initialPage)
+    }
+  }, [initialPage, numPages, page])
 
   // Keyboard navigation
   useEffect(() => {
