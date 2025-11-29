@@ -1,12 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createBrowserClient } from '@/lib/supabase'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
+
+// Helper to create authenticated Supabase client
+async function createAuthClient() {
+  const cookieStore = await cookies()
+  
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set(name, value, options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set(name, '', options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+      },
+    }
+  )
+}
 
 // GET: List user's interactive lessons
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createBrowserClient()
+    const supabase = await createAuthClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
@@ -34,7 +66,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Add document counts by category
-    const lessonsWithCounts = lessons.map(lesson => {
+    const lessonsWithCounts = (lessons || []).map(lesson => {
       const docs = lesson.interactive_lesson_documents || []
       return {
         ...lesson,
@@ -57,7 +89,7 @@ export async function GET(request: NextRequest) {
 // POST: Create new interactive lesson
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createBrowserClient()
+    const supabase = await createAuthClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
@@ -110,4 +142,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

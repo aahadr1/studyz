@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@supabase/ssr'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
 
@@ -16,6 +17,37 @@ function getSupabaseAdmin(): any {
   return _supabaseAdmin
 }
 
+// Helper to create authenticated Supabase client
+async function createAuthClient() {
+  const cookieStore = await cookies()
+  
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set(name, value, options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set(name, '', options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+      },
+    }
+  )
+}
+
 interface SubmitRequest {
   sectionId: string
   answers: Record<string, number> // questionId -> selectedIndex
@@ -28,7 +60,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = await createAuthClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
@@ -214,4 +246,3 @@ export async function POST(
     )
   }
 }
-

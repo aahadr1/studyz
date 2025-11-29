@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@supabase/ssr'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { cookies } from 'next/headers'
 
 export const runtime = 'nodejs'
 
@@ -16,6 +17,37 @@ function getSupabaseAdmin(): any {
   return _supabaseAdmin
 }
 
+// Helper to create authenticated Supabase client
+async function createAuthClient() {
+  const cookieStore = await cookies()
+  
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set(name, value, options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set(name, '', options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+      },
+    }
+  )
+}
+
 // GET: Get full interactive lesson data for the player
 export async function GET(
   request: NextRequest,
@@ -23,7 +55,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = await createAuthClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
@@ -38,7 +70,7 @@ export async function GET(
       .from('interactive_lessons')
       .select(`
         id, name, subject, level, language, mode, status, error_message, created_at,
-        interactive_lesson_documents!inner(
+        interactive_lesson_documents(
           id, category, name, file_path, file_type, page_count
         )
       `)
@@ -47,29 +79,17 @@ export async function GET(
       .single()
 
     if (lessonError) {
-      // Try without !inner in case there are no documents
-      const { data: lessonNoDoc, error: lessonNoDocError } = await supabase
-        .from('interactive_lessons')
-        .select(`
-          id, name, subject, level, language, mode, status, error_message, created_at
-        `)
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .single()
-      
-      if (lessonNoDocError) {
+      if (lessonError.code === 'PGRST116') {
         return NextResponse.json(
           { error: 'Interactive lesson not found' },
           { status: 404 }
         )
       }
-      
-      return NextResponse.json({
-        lesson: { ...lessonNoDoc, interactive_lesson_documents: [] },
-        sections: [],
-        progress: [],
-        documentUrls: {}
-      })
+      console.error('Error fetching lesson:', lessonError)
+      return NextResponse.json(
+        { error: 'Failed to fetch lesson' },
+        { status: 500 }
+      )
     }
 
     // Get sections with questions
@@ -155,4 +175,3 @@ export async function GET(
     )
   }
 }
-

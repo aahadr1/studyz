@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@supabase/ssr'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { cookies } from 'next/headers'
 import OpenAI from 'openai'
 
 export const runtime = 'nodejs'
@@ -27,6 +28,37 @@ function getOpenAI() {
     })
   }
   return _openai
+}
+
+// Helper to create authenticated Supabase client
+async function createAuthClient() {
+  const cookieStore = await cookies()
+  
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set(name, value, options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set(name, '', options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+      },
+    }
+  )
 }
 
 interface PageText {
@@ -345,7 +377,7 @@ export async function POST(
   const { id } = await params
   
   try {
-    const supabase = createClient()
+    const supabase = await createAuthClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
