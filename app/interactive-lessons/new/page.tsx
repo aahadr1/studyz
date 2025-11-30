@@ -133,15 +133,40 @@ export default function NewInteractiveLessonPage() {
         await uploadFileDirectly(lesson.id, file, 'mcq')
       }
 
-      // 3. Démarrer le traitement en arrière-plan si on a des fichiers leçon
+      // 3. Set status to 'processing' immediately and start AI processing
       if (lessonFiles.length > 0) {
         setProcessingMessage('Démarrage du traitement IA...')
         
-        // Déclencher le traitement (fire-and-forget)
+        // First, set the lesson status to 'processing' immediately
+        const statusUpdateResponse = await fetch(`/api/interactive-lessons/${lesson.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'processing',
+            processing_step: 'transcribing',
+            processing_message: 'Initialisation du traitement...',
+            processing_percent: 0
+          })
+        })
+
+        if (!statusUpdateResponse.ok) {
+          throw new Error('Failed to initialize processing status')
+        }
+
+        // Then trigger the processing API (fire-and-forget)
         fetch(`/api/interactive-lessons/${lesson.id}/process-vision`, {
           method: 'POST'
         }).catch(error => {
-          console.error('Processing error:', error)
+          console.error('Processing API error:', error)
+          // Update status to error if API call fails
+          fetch(`/api/interactive-lessons/${lesson.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'error',
+              processing_message: `Erreur lors du démarrage: ${error.message || 'Erreur inconnue'}`
+            })
+          })
         })
       }
 

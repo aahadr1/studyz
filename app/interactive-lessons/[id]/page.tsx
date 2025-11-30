@@ -133,6 +133,68 @@ export default function InteractiveLessonDetailPage() {
     router.push(`/interactive-lessons/${lessonId}/player`)
   }
 
+  const handleRetryProcessing = async () => {
+    try {
+      // Reset status to processing
+      const statusUpdateResponse = await fetch(`/api/interactive-lessons/${lessonId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'processing',
+          processing_step: 'transcribing',
+          processing_message: 'Reprise du traitement...',
+          processing_percent: 0,
+          error_message: null
+        })
+      })
+
+      if (!statusUpdateResponse.ok) {
+        throw new Error('Failed to reset status')
+      }
+
+      // Trigger processing API
+      const processResponse = await fetch(`/api/interactive-lessons/${lessonId}/process-vision`, {
+        method: 'POST'
+      })
+
+      if (!processResponse.ok) {
+        throw new Error('Failed to start processing')
+      }
+
+      // Reload to show progress
+      await loadLesson()
+    } catch (err) {
+      console.error('Retry error:', err)
+      setError('Échec de la relance du traitement. Veuillez réessayer.')
+    }
+  }
+
+  const handleCancelProcessing = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir annuler le traitement en cours ?')) return
+
+    try {
+      const response = await fetch(`/api/interactive-lessons/${lessonId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'draft',
+          processing_step: null,
+          processing_message: 'Traitement annulé',
+          processing_percent: 0
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to cancel processing')
+      }
+
+      await loadLesson()
+    } catch (err) {
+      console.error('Cancel error:', err)
+      setError('Échec de l\'annulation. Veuillez réessayer.')
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -258,9 +320,15 @@ export default function InteractiveLessonDetailPage() {
                 </p>
                 {lesson.processing_progress !== null && lesson.processing_total !== null && lesson.processing_total > 1 && (
                   <p className="text-sm text-text-tertiary mt-1">
-                    Étape {lesson.processing_progress} sur {lesson.processing_total}
+                    Page {lesson.processing_progress} sur {lesson.processing_total}
                   </p>
                 )}
+                <button
+                  onClick={handleCancelProcessing}
+                  className="mt-3 text-sm text-text-tertiary hover:text-error transition-colors"
+                >
+                  Annuler le traitement
+                </button>
               </div>
 
               {/* Steps Timeline - Horizontal on desktop */}
@@ -392,10 +460,26 @@ export default function InteractiveLessonDetailPage() {
                 <FiAlertCircle className="w-7 h-7 text-error" />
               </div>
               <h2 className="text-xl font-semibold text-text-primary mb-2">Erreur de traitement</h2>
-              <p className="text-error mb-4">{lesson.error_message || 'Une erreur est survenue'}</p>
-              <p className="text-sm text-text-tertiary max-w-md mx-auto">
-                Retournez sur la page de création pour relancer le traitement avec vos documents.
+              <p className="text-error mb-4">{lesson.processing_message || lesson.error_message || 'Une erreur est survenue lors du traitement'}</p>
+              <p className="text-sm text-text-tertiary max-w-md mx-auto mb-6">
+                Le traitement de votre document a échoué. Vous pouvez réessayer le traitement ou retourner à la liste des leçons.
               </p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={handleRetryProcessing}
+                  className="btn-primary px-6 py-2.5"
+                >
+                  <FiZap className="w-4 h-4" />
+                  Réessayer le traitement
+                </button>
+                <button
+                  onClick={() => router.push('/interactive-lessons')}
+                  className="btn-secondary px-6 py-2.5"
+                >
+                  <FiArrowLeft className="w-4 h-4" />
+                  Retour à la liste
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -18,18 +18,7 @@ export async function POST(
     const supabase = getSupabaseServerClient()
     const openai = getOpenAI()
 
-    // 1. Marquer comme en cours de traitement
-    await (supabase as any)
-      .from('interactive_lessons')
-      .update({
-        status: 'processing',
-        processing_step: 'transcribing',
-        processing_message: 'Transcription IA en cours...',
-        processing_percent: 0
-      })
-      .eq('id', lessonId)
-
-    // 2. Récupérer les documents de la leçon
+    // 1. Récupérer les documents de la leçon
     const { data: documents, error: docsError } = await (supabase as any)
       .from('interactive_lesson_documents')
       .select('id, name, file_path, file_type')
@@ -37,15 +26,21 @@ export async function POST(
       .eq('category', 'lesson')
 
     if (docsError || !documents || documents.length === 0) {
-      throw new Error(`No lesson documents found: ${docsError?.message}`)
+      throw new Error(`Aucun document trouvé pour cette leçon. Veuillez uploader au moins un fichier PDF.`)
     }
 
     console.log(`[PROCESS-VISION] Found ${documents.length} documents`)
 
+    // Validate that all documents are PDFs
+    const nonPdfDocs = documents.filter(doc => !doc.file_path.toLowerCase().endsWith('.pdf'))
+    if (nonPdfDocs.length > 0) {
+      throw new Error(`Certains fichiers ne sont pas des PDF: ${nonPdfDocs.map(d => d.name).join(', ')}`)
+    }
+
     let totalProcessedPages = 0
     const allTranscriptions: Array<{pageNumber: number, text: string, docId: string}> = []
 
-    // 3. Pour chaque document PDF
+    // 2. Pour chaque document PDF
     for (const doc of documents) {
       if (!doc.file_path.endsWith('.pdf')) {
         console.log(`[PROCESS-VISION] Skipping non-PDF: ${doc.name}`)
@@ -76,82 +71,97 @@ export async function POST(
 
       console.log(`[PROCESS-VISION] Converted ${pngPages.length} pages`)
 
-      // 4. Traiter chaque page (conversion + transcription)
+      // 3. Traiter chaque page (conversion + transcription)
       for (let i = 0; i < pngPages.length; i++) {
         const page = pngPages[i]
-        if (!page.content) continue
+        if (!page.content) {
+          console.warn(`[PROCESS-VISION] Skipping page ${page.pageNumber} - no content`)
+          continue
+        }
 
         const localPageNumber = page.pageNumber
         const globalPageNumber = totalProcessedPages + localPageNumber
 
-        // Mettre à jour le statut avec la page en cours
-        await (supabase as any)
-          .from('interactive_lessons')
-          .update({
-            processing_message: `Transcription IA page ${globalPageNumber}...`,
-            processing_percent: Math.round((globalPageNumber / (pngPages.length * documents.length)) * 80) // 0-80% pour transcription
-          })
-          .eq('id', lessonId)
+        try {
+          // Mettre à jour le statut avec la page en cours
+          await (supabase as any)
+            .from('interactive_lessons')
+            .update({
+              processing_message: `Transcription IA page ${globalPageNumber}...`,
+              processing_percent: Math.round((globalPageNumber / (pngPages.length * documents.length)) * 80), // 0-80% pour transcription
+              processing_progress: globalPageNumber,
+              processing_total: pngPages.length * documents.length
+            })
+            .eq('id', lessonId)
 
-        console.log(`[PROCESS-VISION] Processing page ${globalPageNumber}`)
+          console.log(`[PROCESS-VISION] Processing page ${globalPageNumber}/${pngPages.length * documents.length}`)
 
-        // Convertir Buffer en base64
-        const base64Image = page.content.toString('base64')
+          // Convertir Buffer en base64
+          const base64Image = page.content.toString('base64')
 
-        // Appeler GPT-4o-mini vision
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'Tu es un expert en transcription de documents. Tu dois extraire tout le texte visible dans cette image de page de document, en préservant la structure et les sauts de ligne. Décris aussi brièvement les éléments visuels (diagrammes, tableaux, images) s\'il y en a.'
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Transcris cette page ${localPageNumber} de document en français :`
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/png;base64,${base64Image}`,
-                    detail: 'high'
+          // Appeler GPT-4o-mini vision
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: 'Tu es un expert en transcription de documents. Tu dois extraire tout le texte visible dans cette image de page de document, en préservant la structure et les sauts de ligne. Décris aussi brièvement les éléments visuels (diagrammes, tableaux, images) s\'il y en a.'
+              },
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: `Transcris cette page ${localPageNumber} de document en français :`
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:image/png;base64,${base64Image}`,
+                      detail: 'high'
+                    }
                   }
-                }
-              ]
-            }
-          ],
-          max_tokens: 4000
-        })
+                ]
+              }
+            ],
+            max_tokens: 4000
+          })
 
-        const transcription = completion.choices[0]?.message?.content || ''
-        
-        // Sauvegarder la transcription
-        await (supabase as any)
-          .from('interactive_lesson_page_texts')
-          .upsert({
-            document_id: doc.id,
-            page_number: localPageNumber,
-            text_content: transcription,
-            transcription_type: 'vision',
-            has_visual_content: transcription.includes('diagramme') || transcription.includes('tableau') || transcription.includes('image')
-          }, { onConflict: 'document_id,page_number' })
+          const transcription = completion.choices[0]?.message?.content || ''
+          
+          // Sauvegarder la transcription
+          await (supabase as any)
+            .from('interactive_lesson_page_texts')
+            .upsert({
+              document_id: doc.id,
+              page_number: localPageNumber,
+              text_content: transcription,
+              transcription_type: 'vision',
+              has_visual_content: transcription.includes('diagramme') || transcription.includes('tableau') || transcription.includes('image')
+            }, { onConflict: 'document_id,page_number' })
 
-        allTranscriptions.push({
-          pageNumber: globalPageNumber,
-          text: transcription,
-          docId: doc.id
-        })
+          allTranscriptions.push({
+            pageNumber: globalPageNumber,
+            text: transcription,
+            docId: doc.id
+          })
 
-        console.log(`[PROCESS-VISION] ✓ Transcribed page ${globalPageNumber}: ${transcription.length} chars`)
+          console.log(`[PROCESS-VISION] ✓ Transcribed page ${globalPageNumber}: ${transcription.length} chars`)
+        } catch (pageError) {
+          console.error(`[PROCESS-VISION] Error processing page ${globalPageNumber}:`, pageError)
+          // Continue with other pages even if one fails
+          allTranscriptions.push({
+            pageNumber: globalPageNumber,
+            text: `[Erreur lors du traitement de cette page]`,
+            docId: doc.id
+          })
+        }
       }
 
       totalProcessedPages += pngPages.length
     }
 
-    // 5. Analyser la structure et créer les checkpoints
+    // 4. Analyser la structure et créer les checkpoints
     await (supabase as any)
       .from('interactive_lessons')
       .update({
@@ -263,7 +273,7 @@ export async function POST(
       }
     }
 
-    // 6. Finaliser
+    // 5. Finaliser
     await (supabase as any)
       .from('interactive_lessons')
       .update({
