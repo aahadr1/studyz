@@ -1,27 +1,40 @@
-import { createCanvas } from 'canvas'
-import * as pdfjsLib from 'pdfjs-dist'
+// Dynamic imports to avoid build-time evaluation
+let pdfjsLib: any = null
+let createCanvas: any = null
+let canvasFactory: any = null
 
-// Configure PDF.js to use the worker
-// @ts-ignore - pdfjs-dist types don't match the actual module structure
-pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+async function initPdfJs() {
+  if (!pdfjsLib) {
+    // Dynamic import to avoid build-time evaluation
+    pdfjsLib = (await import('pdfjs-dist')).default
 
-// Custom canvas factory for Node.js environment
-const canvasFactory = {
-  create: (width: number, height: number) => {
-    const canvas = createCanvas(width, height)
-    return {
-      canvas,
-      context: canvas.getContext('2d'),
+    // Configure PDF.js to use the worker
+    // @ts-ignore - pdfjs-dist types don't match the actual module structure
+    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+
+    // Import canvas dynamically
+    const canvasModule = await import('canvas')
+    createCanvas = canvasModule.createCanvas
+
+    // Custom canvas factory for Node.js environment
+    canvasFactory = {
+      create: (width: number, height: number) => {
+        const canvas = createCanvas(width, height)
+        return {
+          canvas,
+          context: canvas.getContext('2d'),
+        }
+      },
+      reset: (canvasAndContext: { canvas: any; context: any }, width: number, height: number) => {
+        canvasAndContext.canvas.width = width
+        canvasAndContext.canvas.height = height
+      },
+      destroy: (canvasAndContext: { canvas: any; context: any }) => {
+        canvasAndContext.canvas.width = 0
+        canvasAndContext.canvas.height = 0
+      },
     }
-  },
-  reset: (canvasAndContext: { canvas: any; context: any }, width: number, height: number) => {
-    canvasAndContext.canvas.width = width
-    canvasAndContext.canvas.height = height
-  },
-  destroy: (canvasAndContext: { canvas: any; context: any }) => {
-    canvasAndContext.canvas.width = 0
-    canvasAndContext.canvas.height = 0
-  },
+  }
 }
 
 export interface PageImage {
@@ -41,6 +54,9 @@ export async function convertPdfToImages(
   pdfBuffer: Buffer,
   scale: number = 1.5
 ): Promise<PageImage[]> {
+  // Initialize PDF.js at runtime
+  await initPdfJs()
+
   // Load the PDF document
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(pdfBuffer),
@@ -88,6 +104,9 @@ export async function convertPdfToImages(
  * Get the number of pages in a PDF
  */
 export async function getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
+  // Initialize PDF.js at runtime
+  await initPdfJs()
+
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(pdfBuffer),
   })
