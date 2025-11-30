@@ -4,6 +4,9 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import OpenAI from 'openai'
 
+export const runtime = 'nodejs'
+export const maxDuration = 60 // 1 minute for vision explanation
+
 // Lazy initialization
 let _supabaseAdmin: any = null
 function getSupabaseAdmin(): any {
