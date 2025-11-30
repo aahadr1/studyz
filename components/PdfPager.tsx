@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi'
 
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 
@@ -16,7 +17,6 @@ export default function PdfPager({ url, onPageChange, onPageRender }: PdfPagerPr
   const [page, setPage] = useState(1)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  // Notify parent when page changes
   useEffect(() => {
     if (numPages > 0) {
       onPageChange?.(page, numPages)
@@ -24,7 +24,6 @@ export default function PdfPager({ url, onPageChange, onPageRender }: PdfPagerPr
   }, [page, numPages, onPageChange])
 
   const handlePageRender = () => {
-    // Find the canvas rendered by react-pdf
     const container = document.querySelector('.react-pdf__Page__canvas') as HTMLCanvasElement
     canvasRef.current = container
     onPageRender?.(container)
@@ -34,39 +33,44 @@ export default function PdfPager({ url, onPageChange, onPageRender }: PdfPagerPr
   const goToNext = () => setPage(p => Math.min(numPages, p + 1))
 
   return (
-    <div className="flex flex-col h-full bg-neutral-900">
-      <div className="flex items-center justify-center gap-4 p-3 border-b border-neutral-700">
+    <div className="flex flex-col h-full bg-surface">
+      <div className="flex items-center justify-center gap-4 py-3 border-b border-border">
         <button 
           onClick={goToPrev} 
           disabled={page <= 1}
-          className="px-4 py-2 bg-neutral-800 rounded disabled:opacity-30 text-white"
+          className="btn-ghost p-2 disabled:opacity-30"
         >
-          ◀
+          <FiChevronLeft className="w-5 h-5" />
         </button>
-        <span className="text-white min-w-[100px] text-center">
-          {page} / {numPages || '...'}
+        <span className="text-sm text-text-primary min-w-[100px] text-center">
+          Page {page} / {numPages || '...'}
         </span>
         <button 
           onClick={goToNext} 
           disabled={page >= numPages}
-          className="px-4 py-2 bg-neutral-800 rounded disabled:opacity-30 text-white"
+          className="btn-ghost p-2 disabled:opacity-30"
         >
-          ▶
+          <FiChevronRight className="w-5 h-5" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto flex justify-center p-4 bg-neutral-800">
+      <div className="flex-1 overflow-auto flex justify-center p-4 bg-elevated">
         <Document
           file={url}
           onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-          loading={<div className="text-white">Loading...</div>}
-          error={<div className="text-red-400">Error loading PDF</div>}
+          loading={
+            <div className="flex items-center justify-center p-8">
+              <div className="spinner"></div>
+            </div>
+          }
+          error={<div className="text-error">Error loading PDF</div>}
         >
           <Page 
             pageNumber={page} 
             renderTextLayer={false} 
             renderAnnotationLayer={false}
             onRenderSuccess={handlePageRender}
+            className="shadow-md"
           />
         </Document>
       </div>

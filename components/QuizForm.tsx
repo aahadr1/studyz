@@ -42,12 +42,11 @@ export default function QuizForm({
   const [showExplanations, setShowExplanations] = useState(false)
 
   const handleAnswerChange = (questionId: string, choiceIndex: number) => {
-    if (result) return // Don't allow changes after submission
+    if (result) return
     setAnswers(prev => ({ ...prev, [questionId]: choiceIndex }))
   }
 
   const handleSubmit = async () => {
-    // Check if all questions are answered
     const unanswered = questions.filter(q => answers[q.id] === undefined)
     if (unanswered.length > 0) {
       alert(`Please answer all questions. ${unanswered.length} remaining.`)
@@ -60,7 +59,6 @@ export default function QuizForm({
       setResult(quizResult)
       
       if (quizResult.passed) {
-        // Small delay before triggering pass callback
         setTimeout(() => onPass(), 1500)
       }
     } catch (error) {
@@ -81,58 +79,55 @@ export default function QuizForm({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-neutral-700 bg-neutral-800">
-        <h3 className="font-semibold text-white mb-1">Quiz: {sectionTitle}</h3>
-        <p className="text-sm text-gray-400">
-          Answer all {questions.length} questions. You need {threshold}% to pass.
+      <div className="px-5 py-4 border-b border-border">
+        <h3 className="font-medium text-text-primary mb-1">Quiz: {sectionTitle}</h3>
+        <p className="text-sm text-text-tertiary">
+          {questions.length} questions • {threshold}% to pass
         </p>
       </div>
 
       {/* Result banner */}
       {result && (
-        <div className={`p-4 ${result.passed ? 'bg-emerald-900/30' : 'bg-amber-900/30'}`}>
+        <div className={`p-4 ${result.passed ? 'bg-success-muted' : 'bg-warning-muted'}`}>
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              result.passed ? 'bg-emerald-500' : 'bg-amber-500'
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+              result.passed ? 'bg-success' : 'bg-warning'
             }`}>
               {result.passed ? (
-                <FiCheck className="w-5 h-5 text-white" />
+                <FiCheck className="w-4 h-4 text-white" />
               ) : (
-                <FiAlertCircle className="w-5 h-5 text-white" />
+                <FiAlertCircle className="w-4 h-4 text-white" />
               )}
             </div>
             <div>
-              <p className={`font-semibold ${result.passed ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {result.passed ? 'Congratulations! You passed!' : 'Not quite there yet'}
+              <p className={`font-medium ${result.passed ? 'text-success' : 'text-warning'}`}>
+                {result.passed ? 'Passed!' : 'Not quite'}
               </p>
-              <p className="text-sm text-gray-300">
-                Score: {result.score}% ({result.correctCount}/{result.totalQuestions} correct)
-                {result.attempts > 1 && ` • Attempt ${result.attempts}`}
+              <p className="text-sm text-text-secondary">
+                {result.score}% ({result.correctCount}/{result.totalQuestions})
               </p>
             </div>
           </div>
           {!result.passed && (
             <button
               onClick={handleRetry}
-              className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition"
+              className="btn-secondary w-full mt-3 text-sm"
             >
               <FiRefreshCw className="w-4 h-4" />
               Try Again
             </button>
           )}
-          {result && (
-            <button
-              onClick={() => setShowExplanations(!showExplanations)}
-              className="mt-2 w-full px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg transition text-sm"
-            >
-              {showExplanations ? 'Hide Explanations' : 'Show Explanations'}
-            </button>
-          )}
+          <button
+            onClick={() => setShowExplanations(!showExplanations)}
+            className="btn-ghost w-full mt-2 text-sm"
+          >
+            {showExplanations ? 'Hide' : 'Show'} Explanations
+          </button>
         </div>
       )}
 
       {/* Questions */}
-      <div className="flex-1 overflow-auto p-4 space-y-6">
+      <div className="flex-1 overflow-auto p-5 space-y-5">
         {questions.map((question, qIndex) => {
           const userAnswer = answers[question.id]
           const questionResult = result?.results[question.id]
@@ -145,22 +140,22 @@ export default function QuizForm({
               className={`p-4 rounded-lg ${
                 result
                   ? isCorrect
-                    ? 'bg-emerald-900/20 border border-emerald-800'
-                    : 'bg-red-900/20 border border-red-800'
-                  : 'bg-neutral-800'
+                    ? 'bg-success-muted border border-success/20'
+                    : 'bg-error-muted border border-error/20'
+                  : 'bg-elevated'
               }`}
             >
               <div className="flex items-start gap-3 mb-3">
                 <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                   result
                     ? isCorrect
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-red-500 text-white'
-                    : 'bg-violet-500 text-white'
+                      ? 'bg-success text-white'
+                      : 'bg-error text-white'
+                    : 'bg-accent text-white'
                 }`}>
                   {qIndex + 1}
                 </span>
-                <p className="text-white font-medium">{question.question}</p>
+                <p className="text-text-primary text-sm font-medium">{question.question}</p>
               </div>
 
               <div className="space-y-2 ml-9">
@@ -173,16 +168,16 @@ export default function QuizForm({
                   return (
                     <label
                       key={cIndex}
-                      className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                      className={`flex items-center gap-3 p-3 rounded-md cursor-pointer text-sm transition-colors ${
                         result
                           ? showAsCorrect
-                            ? 'bg-emerald-900/30 border border-emerald-700'
+                            ? 'bg-success/10 border border-success/30'
                             : showAsWrong
-                            ? 'bg-red-900/30 border border-red-700'
-                            : 'bg-neutral-700/30 border border-transparent'
+                            ? 'bg-error/10 border border-error/30'
+                            : 'bg-surface/50 border border-transparent'
                           : isSelected
-                          ? 'bg-violet-900/30 border border-violet-600'
-                          : 'bg-neutral-700/50 border border-transparent hover:bg-neutral-700'
+                          ? 'bg-accent-muted border border-accent/30'
+                          : 'bg-surface hover:bg-subtle border border-transparent'
                       }`}
                     >
                       <input
@@ -193,33 +188,33 @@ export default function QuizForm({
                         disabled={!!result}
                         className="sr-only"
                       />
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
                         result
                           ? showAsCorrect
-                            ? 'border-emerald-500 bg-emerald-500'
+                            ? 'border-success bg-success'
                             : showAsWrong
-                            ? 'border-red-500 bg-red-500'
+                            ? 'border-error bg-error'
                             : isSelected
-                            ? 'border-gray-500 bg-gray-500'
-                            : 'border-gray-600'
+                            ? 'border-border bg-border'
+                            : 'border-border'
                           : isSelected
-                          ? 'border-violet-500 bg-violet-500'
-                          : 'border-gray-500'
+                          ? 'border-accent bg-accent'
+                          : 'border-border'
                       }`}>
                         {(isSelected || showAsCorrect) && (
                           result ? (
                             showAsCorrect ? (
-                              <FiCheck className="w-3 h-3 text-white" />
+                              <FiCheck className="w-2.5 h-2.5 text-white" />
                             ) : showAsWrong ? (
-                              <FiX className="w-3 h-3 text-white" />
+                              <FiX className="w-2.5 h-2.5 text-white" />
                             ) : null
                           ) : (
-                            <div className="w-2 h-2 rounded-full bg-white" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
                           )
                         )}
                       </div>
-                      <span className={`text-sm ${
-                        showAsCorrect ? 'text-emerald-300' : showAsWrong ? 'text-red-300' : 'text-gray-300'
+                      <span className={`${
+                        showAsCorrect ? 'text-success' : showAsWrong ? 'text-error' : 'text-text-secondary'
                       }`}>
                         {choice}
                       </span>
@@ -230,9 +225,9 @@ export default function QuizForm({
 
               {/* Explanation */}
               {showExplanations && result && question.explanation && (
-                <div className="mt-3 ml-9 p-3 bg-neutral-700/30 rounded-lg">
-                  <p className="text-sm text-gray-300">
-                    <span className="text-violet-400 font-medium">Explanation: </span>
+                <div className="mt-3 ml-9 p-3 bg-surface rounded-md">
+                  <p className="text-sm text-text-secondary">
+                    <span className="text-accent font-medium">Explanation: </span>
                     {question.explanation}
                   </p>
                 </div>
@@ -244,23 +239,23 @@ export default function QuizForm({
 
       {/* Submit button */}
       {!result && (
-        <div className="p-4 border-t border-neutral-700 bg-neutral-800">
+        <div className="p-4 border-t border-border">
           <button
             onClick={handleSubmit}
             disabled={!allAnswered || submitting}
-            className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-neutral-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition flex items-center justify-center gap-2"
+            className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="spinner w-4 h-4"></div>
                 Submitting...
               </>
             ) : (
               <>
                 Submit Answers
                 {!allAnswered && (
-                  <span className="text-sm opacity-75">
-                    ({questions.length - Object.keys(answers).length} remaining)
+                  <span className="text-sm opacity-75 ml-1">
+                    ({questions.length - Object.keys(answers).length} left)
                   </span>
                 )}
               </>
@@ -271,4 +266,3 @@ export default function QuizForm({
     </div>
   )
 }
-

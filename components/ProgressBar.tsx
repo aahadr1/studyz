@@ -1,6 +1,6 @@
 'use client'
 
-import { FiCheck, FiLock, FiPlay } from 'react-icons/fi'
+import { FiCheck, FiLock } from 'react-icons/fi'
 
 interface Section {
   id: string
@@ -32,10 +32,13 @@ export default function ProgressBar({
     return index === 0 ? 'current' : 'locked'
   }
 
+  const completedCount = Array.from(progressMap.values()).filter(p => p.status === 'completed').length
+  const progressPercent = sections.length > 0 ? (completedCount / sections.length) * 100 : 0
+
   return (
-    <div className="bg-neutral-900 border-b border-neutral-800">
+    <div className="bg-surface border-b border-border">
       <div className="px-4 py-3">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="flex items-center gap-2 overflow-x-auto">
           {sections.map((section, index) => {
             const status = getProgressStatus(section.id, index)
             const isActive = index === currentSectionIndex
@@ -47,36 +50,36 @@ export default function ProgressBar({
                 key={section.id}
                 onClick={() => isClickable && onSectionClick(index)}
                 disabled={!isClickable}
-                className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg transition ${
+                className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
                   isActive
-                    ? 'bg-violet-600 text-white'
+                    ? 'bg-accent text-white'
                     : status === 'completed'
-                    ? 'bg-emerald-900/50 text-emerald-400 hover:bg-emerald-900/70'
+                    ? 'bg-success-muted text-success hover:bg-success/20'
                     : status === 'current'
-                    ? 'bg-neutral-800 text-white hover:bg-neutral-700'
-                    : 'bg-neutral-800/50 text-gray-500 cursor-not-allowed'
+                    ? 'bg-elevated text-text-primary hover:bg-subtle'
+                    : 'bg-elevated/50 text-text-tertiary cursor-not-allowed'
                 }`}
               >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium ${
                   status === 'completed'
-                    ? 'bg-emerald-500 text-white'
+                    ? 'bg-success text-white'
                     : status === 'current'
-                    ? 'bg-violet-500 text-white'
-                    : 'bg-neutral-700 text-gray-400'
+                    ? 'bg-accent text-white'
+                    : 'bg-border text-text-tertiary'
                 }`}>
                   {status === 'completed' ? (
-                    <FiCheck className="w-3.5 h-3.5" />
+                    <FiCheck className="w-3 h-3" />
                   ) : status === 'locked' ? (
-                    <FiLock className="w-3 h-3" />
+                    <FiLock className="w-2.5 h-2.5" />
                   ) : (
                     index + 1
                   )}
                 </div>
-                <span className="text-sm font-medium whitespace-nowrap">
-                  {section.title.length > 20 ? section.title.slice(0, 20) + '...' : section.title}
+                <span className="whitespace-nowrap">
+                  {section.title.length > 18 ? section.title.slice(0, 18) + '...' : section.title}
                 </span>
                 {progress?.score !== undefined && status === 'completed' && (
-                  <span className="text-xs bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                  <span className="text-xs bg-success/20 px-1.5 py-0.5 rounded">
                     {progress.score}%
                   </span>
                 )}
@@ -86,16 +89,13 @@ export default function ProgressBar({
         </div>
       </div>
 
-      {/* Overall progress bar */}
-      <div className="h-1 bg-neutral-800">
+      {/* Progress indicator */}
+      <div className="h-0.5 bg-border">
         <div
-          className="h-full bg-gradient-to-r from-violet-500 to-emerald-500 transition-all"
-          style={{
-            width: `${(Array.from(progressMap.values()).filter(p => p.status === 'completed').length / sections.length) * 100}%`
-          }}
+          className="h-full bg-accent transition-all"
+          style={{ width: `${progressPercent}%` }}
         />
       </div>
     </div>
   )
 }
-

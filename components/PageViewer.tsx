@@ -23,7 +23,6 @@ export default function PageViewer({ documentId, onPageChange, onCanvasReady }: 
       .catch(() => setError(true))
   }, [documentId])
 
-  // Expose function to capture page image
   useEffect(() => {
     if (onCanvasReady) {
       onCanvasReady(() => {
@@ -45,11 +44,19 @@ export default function PageViewer({ documentId, onPageChange, onCanvasReady }: 
   }
 
   if (error) {
-    return <div className="flex-1 flex items-center justify-center text-red-400">Failed to load</div>
+    return (
+      <div className="flex-1 flex items-center justify-center bg-surface text-error">
+        Failed to load document
+      </div>
+    )
   }
 
   if (!url) {
-    return <div className="flex-1 flex items-center justify-center text-white">Loading...</div>
+    return (
+      <div className="flex-1 flex items-center justify-center bg-surface">
+        <div className="spinner"></div>
+      </div>
+    )
   }
 
   return (

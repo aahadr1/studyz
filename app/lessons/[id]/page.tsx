@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { FiArrowLeft, FiFileText, FiUpload, FiCheck, FiPlay, FiTrash2 } from 'react-icons/fi'
+import { FiArrowLeft, FiFileText, FiUpload, FiCheck, FiPlay } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase'
 
 interface Document {
@@ -40,7 +40,6 @@ export default function LessonDetailPage() {
         return
       }
 
-      // Load lesson
       const { data: lessonData, error: lessonError } = await supabase
         .from('lessons')
         .select('*')
@@ -51,7 +50,6 @@ export default function LessonDetailPage() {
       if (lessonError) throw lessonError
       setLesson(lessonData)
 
-      // Load documents
       const { data: documentsData, error: documentsError } = await supabase
         .from('documents')
         .select('*')
@@ -71,7 +69,6 @@ export default function LessonDetailPage() {
     if (lessonId) {
       loadLessonData()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,73 +138,71 @@ export default function LessonDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center animate-fade-in">
-          <div className="spinner mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading lesson...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="spinner mx-auto mb-3"></div>
+          <p className="text-text-tertiary text-sm">Loading lesson...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="glass-card border-b border-dark-border sticky top-0 z-40 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4 flex-1 min-w-0">
-              <button
-                onClick={() => router.push('/lessons')}
-                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg flex-shrink-0"
-              >
-                <FiArrowLeft className="w-5 h-5" />
-              </button>
-              <h1 className="text-xl font-bold text-white truncate">{lesson?.name}</h1>
-            </div>
+      <header className="h-14 border-b border-border sticky top-0 bg-background z-40">
+        <div className="max-w-4xl mx-auto px-6 h-full flex items-center justify-between">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <button
+              onClick={() => router.push('/lessons')}
+              className="btn-ghost p-2"
+            >
+              <FiArrowLeft className="w-4 h-4" />
+            </button>
+            <h1 className="text-lg font-semibold text-text-primary truncate">{lesson?.name}</h1>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <label className="btn-secondary cursor-pointer">
+              <FiUpload className="w-4 h-4" />
+              <span>{uploading ? 'Uploading...' : 'Upload'}</span>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.pptx,.ppt,.docx,.doc"
+                onChange={handleFileUpload}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
             
-            <div className="flex space-x-3 flex-shrink-0">
-              <label className="btn-secondary flex items-center space-x-2 cursor-pointer">
-                <FiUpload className="w-5 h-5" />
-                <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload'}</span>
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.pptx,.ppt,.docx,.doc"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  disabled={uploading}
-                />
-              </label>
-              
-              {selectedDocuments.size > 0 && (
-                <button
-                  onClick={handleStudyLesson}
-                  className="btn-accent flex items-center space-x-2"
-                >
-                  <FiPlay className="w-5 h-5" />
-                  <span>Study ({selectedDocuments.size})</span>
-                </button>
-              )}
-            </div>
+            {selectedDocuments.size > 0 && (
+              <button
+                onClick={handleStudyLesson}
+                className="btn-primary"
+              >
+                <FiPlay className="w-4 h-4" />
+                Study ({selectedDocuments.size})
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto section-padding">
+      {/* Content */}
+      <main className="max-w-4xl mx-auto px-6 py-8">
         {documents.length === 0 ? (
-          <div className="glass-card p-12 text-center animate-scale-in">
-            <div className="w-20 h-20 bg-gradient-to-br from-accent-purple to-accent-blue rounded-2xl mx-auto mb-6 flex items-center justify-center glow-primary">
-              <FiFileText className="w-10 h-10 text-white" />
+          <div className="card p-12 text-center">
+            <div className="w-12 h-12 bg-elevated rounded-lg flex items-center justify-center mx-auto mb-4">
+              <FiFileText className="w-6 h-6 text-text-tertiary" />
             </div>
-            <h3 className="text-2xl font-bold text-white mb-3">No documents yet</h3>
-            <p className="text-gray-400 mb-6 max-w-md mx-auto">
-              Upload documents to start studying this lesson with AI assistance
+            <h3 className="text-lg font-semibold text-text-primary mb-2">No documents yet</h3>
+            <p className="text-text-secondary mb-6 max-w-sm mx-auto">
+              Upload documents to start studying with AI assistance
             </p>
-            <label className="btn-accent flex items-center space-x-2 mx-auto cursor-pointer group">
-              <FiUpload className="w-5 h-5" />
-              <span>Upload Documents</span>
+            <label className="btn-primary cursor-pointer">
+              <FiUpload className="w-4 h-4" />
+              Upload Documents
               <input
                 type="file"
                 multiple
@@ -219,55 +214,43 @@ export default function LessonDetailPage() {
             </label>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Info Banner */}
-            <div className="glass-card p-4 border-l-4 border-primary-500">
-              <p className="text-sm text-gray-300 font-medium mb-1">📚 Select documents to study</p>
-              <p className="text-sm text-gray-500">
-                Click on documents below to select them, then click "Study" to begin your AI-assisted learning session.
-              </p>
+          <div className="space-y-4">
+            {/* Info */}
+            <div className="text-sm text-text-secondary mb-6">
+              Select documents to study, then click "Study" to begin your AI-assisted learning session.
             </div>
 
-            {/* Documents Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {documents.map((doc, index) => {
+            {/* Documents */}
+            <div className="space-y-2">
+              {documents.map((doc) => {
                 const isSelected = selectedDocuments.has(doc.id)
                 
                 return (
                   <div
                     key={doc.id}
                     onClick={() => toggleDocumentSelection(doc.id)}
-                    className={`glass-card p-6 cursor-pointer transition-all duration-300 animate-slide-up group ${
-                      isSelected
-                        ? 'border-2 border-primary-500 bg-primary-500/10'
-                        : 'border border-dark-border hover:border-primary-500/50'
+                    className={`card card-hover p-4 cursor-pointer flex items-center gap-4 ${
+                      isSelected ? 'border-accent bg-accent-muted' : ''
                     }`}
-                    style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                        isSelected 
-                          ? 'bg-gradient-to-br from-accent-purple to-accent-blue glow-primary' 
-                          : 'bg-dark-surface group-hover:bg-gradient-to-br group-hover:from-accent-purple group-hover:to-accent-blue'
-                      }`}>
-                        <FiFileText className="w-6 h-6 text-white" />
-                      </div>
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                        isSelected
-                          ? 'bg-primary-500 border-primary-500'
-                          : 'border-dark-border group-hover:border-primary-500'
-                      }`}>
-                        {isSelected && <FiCheck className="w-4 h-4 text-white" />}
+                    <div className={`w-10 h-10 rounded-md flex items-center justify-center ${
+                      isSelected ? 'bg-accent text-white' : 'bg-elevated'
+                    }`}>
+                      <FiFileText className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-text-primary truncate">{doc.name}</h3>
+                      <div className="flex items-center gap-3 text-sm text-text-tertiary">
+                        <span className="uppercase">{doc.file_type}</span>
+                        <span>{new Date(doc.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    
-                    <h3 className="font-semibold text-white mb-3 line-clamp-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-accent-purple group-hover:to-accent-blue transition-all duration-300">
-                      {doc.name}
-                    </h3>
-                    
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="uppercase text-gray-400 font-medium">{doc.file_type}</span>
-                      <span className="text-gray-500">{new Date(doc.created_at).toLocaleDateString()}</span>
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                      isSelected
+                        ? 'bg-accent border-accent'
+                        : 'border-border'
+                    }`}>
+                      {isSelected && <FiCheck className="w-3 h-3 text-white" />}
                     </div>
                   </div>
                 )

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { FiArrowLeft, FiFileText } from 'react-icons/fi'
 import PageViewer from '@/components/PageViewer'
 import ChatSidebar from '@/components/ChatSidebar'
 
@@ -59,16 +60,28 @@ export default function StudyPage() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen bg-neutral-900 text-white">Loading...</div>
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="spinner mx-auto mb-3"></div>
+          <p className="text-text-tertiary text-sm">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   if (docs.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-neutral-900 text-white gap-4">
-        <p>No documents selected</p>
-        <button onClick={() => router.push(`/lessons/${lessonId}`)} className="px-4 py-2 bg-purple-600 rounded">
-          Back to lesson
-        </button>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-text-secondary mb-4">No documents selected</p>
+          <button 
+            onClick={() => router.push(`/lessons/${lessonId}`)} 
+            className="btn-primary"
+          >
+            Back to lesson
+          </button>
+        </div>
       </div>
     )
   }
@@ -76,31 +89,38 @@ export default function StudyPage() {
   const currentDoc = docs[currentDocIndex]
 
   return (
-    <div className="flex h-screen bg-neutral-900">
+    <div className="flex h-screen bg-background">
       {/* Left Sidebar - Document List */}
-      <div className="w-56 border-r border-neutral-700 flex flex-col">
-        <div className="p-4 border-b border-neutral-700">
-          <button onClick={() => router.push(`/lessons/${lessonId}`)} className="text-white hover:underline text-sm">
-            ← Back to lesson
+      <aside className="w-56 border-r border-border flex flex-col bg-surface">
+        <div className="h-12 flex items-center px-4 border-b border-border">
+          <button 
+            onClick={() => router.push(`/lessons/${lessonId}`)} 
+            className="btn-ghost p-1.5 mr-2"
+          >
+            <FiArrowLeft className="w-4 h-4" />
           </button>
+          <span className="text-sm font-medium text-text-primary truncate">Documents</span>
         </div>
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto py-2">
           {docs.map((d, i) => (
             <button
               key={d.id}
               onClick={() => handleDocSelect(i)}
-              className={`w-full p-3 text-left text-white text-sm border-b border-neutral-800 truncate ${
-                i === currentDocIndex ? 'bg-purple-600' : 'hover:bg-neutral-800'
+              className={`w-full flex items-center gap-2 px-4 py-2 text-left text-sm transition-colors ${
+                i === currentDocIndex 
+                  ? 'bg-accent text-white' 
+                  : 'text-text-secondary hover:bg-elevated hover:text-text-primary'
               }`}
             >
-              {d.name}
+              <FiFileText className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{d.name}</span>
             </button>
           ))}
         </div>
-      </div>
+      </aside>
 
       {/* Center - PDF Viewer */}
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <PageViewer 
           key={currentDoc.id} 
           documentId={currentDoc.id}
@@ -110,7 +130,7 @@ export default function StudyPage() {
       </div>
 
       {/* Right Sidebar - Chat */}
-      <div className="w-80">
+      <div className="w-80 border-l border-border">
         <ChatSidebar
           documentId={currentDoc.id}
           currentPage={currentPage}

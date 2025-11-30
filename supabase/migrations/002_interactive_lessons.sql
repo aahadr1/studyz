@@ -348,3 +348,4 @@ CREATE POLICY "Users can delete their interactive lesson documents"
         auth.uid()::text = (storage.foldername(name))[1]
     );
 
+

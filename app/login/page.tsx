@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiBook, FiMail, FiLock, FiArrowRight } from 'react-icons/fi'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -32,103 +31,69 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-accent-purple/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent-blue/10 rounded-full blur-3xl animate-pulse" />
-      </div>
-
-      {/* Logo link - top left */}
-      <a href="/" className="absolute top-8 left-8 flex items-center space-x-2 text-gray-300 hover:text-white transition-colors z-10">
-        <div className="w-8 h-8 bg-gradient-to-br from-accent-purple to-accent-blue rounded-lg flex items-center justify-center">
-          <FiBook className="w-5 h-5 text-white" />
-        </div>
-        <span className="text-xl font-bold gradient-text">Studyz</span>
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      {/* Logo - top left */}
+      <a 
+        href="/" 
+        className="absolute top-6 left-6 text-lg font-semibold text-text-primary hover:text-text-secondary transition-colors"
+      >
+        Studyz
       </a>
 
       {/* Login Card */}
-      <div className="glass-card p-8 md:p-10 w-full max-w-md relative z-10 animate-scale-in">
+      <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-accent-purple to-accent-blue rounded-2xl mx-auto mb-4 flex items-center justify-center glow-primary">
-            <FiBook className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
-          <p className="text-gray-400">Sign in to continue your learning journey</p>
+          <h1 className="text-2xl font-semibold text-text-primary mb-2">Welcome back</h1>
+          <p className="text-text-secondary">Sign in to continue learning</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-5">
-          {/* Email field */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-300">
-              Email Address
-            </label>
-            <div className="relative">
-              <FiMail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="input-field pl-12"
-                placeholder="you@example.com"
-              />
-            </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="input-label">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="input"
+              placeholder="you@example.com"
+            />
           </div>
 
-          {/* Password field */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-300">
-              Password
-            </label>
-            <div className="relative">
-              <FiLock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className="input-field pl-12"
-                placeholder="••••••••"
-              />
-            </div>
+          <div>
+            <label className="input-label">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              className="input"
+              placeholder="••••••••"
+            />
           </div>
 
-          {/* Error message */}
           {error && (
-            <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl text-sm animate-slide-down">
+            <div className="p-3 bg-error-muted border border-error/30 text-error text-sm rounded-md">
               {error}
             </div>
           )}
 
-          {/* Submit button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full btn-accent flex items-center justify-center space-x-2 group disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary w-full py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>{loading ? 'Signing in...' : 'Sign In'}</span>
-            {!loading && <FiArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
-        {/* Divider */}
-        <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-dark-border"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-dark-elevated text-gray-500">New to Studyz?</span>
-          </div>
+        <div className="mt-6 text-center">
+          <span className="text-text-tertiary text-sm">New to Studyz? </span>
+          <a href="/register" className="text-accent hover:underline text-sm">
+            Create an account
+          </a>
         </div>
-
-        {/* Sign up link */}
-        <a href="/register" className="block text-center">
-          <button className="w-full btn-secondary">
-            Create an Account
-          </button>
-        </a>
       </div>
     </div>
   )

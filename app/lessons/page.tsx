@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FiPlus, FiBook, FiFileText, FiCalendar, FiArrowLeft, FiX, FiUpload, FiChevronRight } from 'react-icons/fi'
+import { FiPlus, FiBook, FiFileText, FiX, FiUpload, FiChevronRight, FiArrowLeft } from 'react-icons/fi'
 import { createClient } from '@/lib/supabase'
 
 interface Lesson {
@@ -19,14 +19,12 @@ export default function LessonsPage() {
   const [loading, setLoading] = useState(true)
   const [showNewLessonModal, setShowNewLessonModal] = useState(false)
   
-  // New lesson form state
   const [lessonName, setLessonName] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Check if ?new=true to auto-open modal
     if (searchParams.get('new') === 'true') {
       setShowNewLessonModal(true)
     }
@@ -50,7 +48,6 @@ export default function LessonsPage() {
 
       if (error) throw error
 
-      // Get document counts
       const lessonsWithCounts = await Promise.all(
         (lessonsData || []).map(async (lesson) => {
           const { count } = await supabase
@@ -75,7 +72,6 @@ export default function LessonsPage() {
 
   useEffect(() => {
     loadLessons()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,7 +97,6 @@ export default function LessonsPage() {
       
       if (!user) throw new Error('Not authenticated')
 
-      // Create lesson
       const { data: lesson, error: lessonError } = await supabase
         .from('lessons')
         .insert({
@@ -113,7 +108,6 @@ export default function LessonsPage() {
 
       if (lessonError) throw lessonError
 
-      // Upload files if any
       for (const file of files) {
         const fileExt = file.name.split('.').pop()
         const fileName = `${user.id}/${lesson.id}/${Date.now()}-${file.name}`
@@ -138,7 +132,6 @@ export default function LessonsPage() {
           })
       }
 
-      // Reset and reload
       setLessonName('')
       setFiles([])
       setShowNewLessonModal(false)
@@ -153,90 +146,82 @@ export default function LessonsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center animate-fade-in">
-          <div className="spinner mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading lessons...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="spinner mx-auto mb-3"></div>
+          <p className="text-text-tertiary text-sm">Loading lessons...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="glass-card border-b border-dark-border sticky top-0 z-40 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg"
-              >
-                <FiArrowLeft className="w-5 h-5" />
-              </button>
-              <h1 className="text-2xl font-bold gradient-text">My Lessons</h1>
-            </div>
+      <header className="h-14 border-b border-border sticky top-0 bg-background z-40">
+        <div className="max-w-4xl mx-auto px-6 h-full flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <button
-              onClick={() => setShowNewLessonModal(true)}
-              className="btn-accent flex items-center space-x-2"
+              onClick={() => router.push('/dashboard')}
+              className="btn-ghost p-2"
             >
-              <FiPlus className="w-5 h-5" />
-              <span>New Lesson</span>
+              <FiArrowLeft className="w-4 h-4" />
             </button>
+            <h1 className="text-lg font-semibold text-text-primary">Lessons</h1>
           </div>
+          <button
+            onClick={() => setShowNewLessonModal(true)}
+            className="btn-primary"
+          >
+            <FiPlus className="w-4 h-4" />
+            New Lesson
+          </button>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto section-padding">
+      {/* Content */}
+      <main className="max-w-4xl mx-auto px-6 py-8">
         {lessons.length === 0 ? (
-          <div className="glass-card p-12 text-center animate-scale-in">
-            <div className="w-20 h-20 bg-gradient-to-br from-accent-purple to-accent-blue rounded-2xl mx-auto mb-6 flex items-center justify-center glow-primary">
-              <FiBook className="w-10 h-10 text-white" />
+          <div className="card p-12 text-center">
+            <div className="w-12 h-12 bg-elevated rounded-lg flex items-center justify-center mx-auto mb-4">
+              <FiBook className="w-6 h-6 text-text-tertiary" />
             </div>
-            <h3 className="text-2xl font-bold text-white mb-3">No lessons yet</h3>
-            <p className="text-gray-400 mb-6 max-w-md mx-auto">
-              Create your first lesson to start organizing your study materials and learning with AI assistance
+            <h3 className="text-lg font-semibold text-text-primary mb-2">No lessons yet</h3>
+            <p className="text-text-secondary mb-6 max-w-sm mx-auto">
+              Create your first lesson to start organizing your study materials
             </p>
             <button
               onClick={() => setShowNewLessonModal(true)}
-              className="btn-accent flex items-center space-x-2 mx-auto group"
+              className="btn-primary"
             >
-              <FiPlus className="w-5 h-5" />
-              <span>Create Lesson</span>
+              <FiPlus className="w-4 h-4" />
+              Create Lesson
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lessons.map((lesson, index) => (
+          <div className="space-y-2">
+            {lessons.map((lesson) => (
               <div
                 key={lesson.id}
                 onClick={() => router.push(`/lessons/${lesson.id}`)}
-                className="glass-card p-6 card-hover cursor-pointer group animate-slide-up"
-                style={{ animationDelay: `${index * 50}ms` }}
+                className="card card-hover p-4 cursor-pointer flex items-center gap-4 group"
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-accent-purple to-accent-blue rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                    <FiBook className="w-6 h-6 text-white" />
-                  </div>
-                  <FiChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white group-hover:translate-x-1 transition-all duration-300" />
+                <div className="w-10 h-10 bg-elevated rounded-md flex items-center justify-center">
+                  <FiBook className="w-5 h-5 text-text-secondary" />
                 </div>
-                
-                <h3 className="text-lg font-semibold text-white mb-3 line-clamp-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-accent-purple group-hover:to-accent-blue transition-all duration-300">
-                  {lesson.name}
-                </h3>
-                
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center space-x-1 text-gray-400">
-                    <FiFileText className="w-4 h-4" />
-                    <span>{lesson.documentCount} docs</span>
-                  </div>
-                  <div className="flex items-center space-x-1 text-gray-500">
-                    <FiCalendar className="w-4 h-4" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-text-primary truncate">
+                    {lesson.name}
+                  </h3>
+                  <div className="flex items-center gap-3 text-sm text-text-tertiary">
+                    <span className="flex items-center gap-1">
+                      <FiFileText className="w-3 h-3" />
+                      {lesson.documentCount} docs
+                    </span>
                     <span>{new Date(lesson.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
+                <FiChevronRight className="w-4 h-4 text-text-tertiary group-hover:text-text-secondary transition-colors" />
               </div>
             ))}
           </div>
@@ -245,41 +230,37 @@ export default function LessonsPage() {
 
       {/* New Lesson Modal */}
       {showNewLessonModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-card w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scale-in">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-border rounded-lg w-full max-w-lg shadow-lg animate-slide-up">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-dark-elevated/95 backdrop-blur-xl border-b border-dark-border px-6 py-4 flex items-center justify-between rounded-t-2xl">
-              <h2 className="text-2xl font-bold text-white">Create New Lesson</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-text-primary">Create Lesson</h2>
               <button
                 onClick={() => setShowNewLessonModal(false)}
-                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-dark-surface rounded-lg"
+                className="btn-ghost p-2"
               >
-                <FiX className="w-6 h-6" />
+                <FiX className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal Content */}
-            <form onSubmit={handleCreateLesson} className="p-6 space-y-6">
+            <form onSubmit={handleCreateLesson} className="p-6 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Lesson Name *
-                </label>
+                <label className="input-label">Lesson Name</label>
                 <input
                   type="text"
                   value={lessonName}
                   onChange={(e) => setLessonName(e.target.value)}
                   required
-                  className="input-field"
+                  className="input"
                   placeholder="e.g., Introduction to Biology"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Upload Documents (Optional)
-                </label>
-                <div className="border-2 border-dashed border-dark-border rounded-xl p-8 text-center hover:border-primary-500/50 transition-colors bg-dark-surface/50">
-                  <FiUpload className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                <label className="input-label">Documents (Optional)</label>
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-border-light transition-colors">
+                  <FiUpload className="w-8 h-8 text-text-tertiary mx-auto mb-3" />
                   <input
                     type="file"
                     multiple
@@ -290,22 +271,21 @@ export default function LessonsPage() {
                   />
                   <label
                     htmlFor="fileInput"
-                    className="cursor-pointer inline-block btn-secondary"
+                    className="btn-secondary cursor-pointer"
                   >
                     Choose Files
                   </label>
-                  <p className="text-sm text-gray-500 mt-2">
-                    PDF, PPTX, DOCX files supported
+                  <p className="text-xs text-text-tertiary mt-2">
+                    PDF, PPTX, DOCX supported
                   </p>
                 </div>
                 
                 {files.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-sm font-medium text-gray-300">Selected files:</p>
+                  <div className="mt-3 space-y-2">
                     {files.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between bg-dark-surface px-4 py-3 rounded-lg border border-dark-border">
-                        <span className="text-sm text-gray-300">{file.name}</span>
-                        <span className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                      <div key={index} className="flex items-center justify-between bg-elevated px-3 py-2 rounded-md">
+                        <span className="text-sm text-text-secondary truncate">{file.name}</span>
+                        <span className="text-xs text-text-tertiary">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                       </div>
                     ))}
                   </div>
@@ -313,24 +293,24 @@ export default function LessonsPage() {
               </div>
 
               {error && (
-                <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl text-sm">
+                <div className="p-3 bg-error-muted border border-error/30 text-error text-sm rounded-md">
                   {error}
                 </div>
               )}
 
-              <div className="flex space-x-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowNewLessonModal(false)}
                   disabled={creating}
-                  className="flex-1 btn-secondary disabled:opacity-50"
+                  className="btn-secondary flex-1"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="flex-1 btn-accent disabled:opacity-50"
+                  className="btn-primary flex-1"
                 >
                   {creating ? 'Creating...' : 'Create Lesson'}
                 </button>

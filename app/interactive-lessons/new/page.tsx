@@ -2,29 +2,21 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { FiUpload, FiX, FiBook, FiFileText, FiInfo, FiArrowRight } from 'react-icons/fi'
-
-interface UploadedFile {
-  file: File
-  category: 'lesson' | 'mcq'
-}
+import { FiUpload, FiX, FiBook, FiFileText, FiArrowLeft, FiArrowRight } from 'react-icons/fi'
 
 export default function NewInteractiveLessonPage() {
   const router = useRouter()
   const lessonInputRef = useRef<HTMLInputElement>(null)
   const mcqInputRef = useRef<HTMLInputElement>(null)
 
-  // Form state
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
   const [level, setLevel] = useState('')
   const [language, setLanguage] = useState('fr')
   
-  // Files state
   const [lessonFiles, setLessonFiles] = useState<File[]>([])
   const [mcqFiles, setMcqFiles] = useState<File[]>([])
   
-  // UI state
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,9 +40,7 @@ export default function NewInteractiveLessonPage() {
     setMcqFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Helper function to upload a file using signed URL (bypasses 4.5MB API limit)
   const uploadFileDirectly = async (lessonId: string, file: File, category: 'lesson' | 'mcq') => {
-    // Step 1: Get signed upload URL
     const urlResponse = await fetch(`/api/interactive-lessons/${lessonId}/upload-url`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -68,7 +58,6 @@ export default function NewInteractiveLessonPage() {
 
     const { uploadUrl, filePath, fileType } = await urlResponse.json()
 
-    // Step 2: Upload file directly to Supabase Storage
     const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
@@ -81,7 +70,6 @@ export default function NewInteractiveLessonPage() {
       throw new Error('Failed to upload file to storage')
     }
 
-    // Step 3: Confirm upload and create document record
     const confirmResponse = await fetch(`/api/interactive-lessons/${lessonId}/confirm-upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -111,14 +99,13 @@ export default function NewInteractiveLessonPage() {
     }
 
     if (lessonFiles.length === 0 && mcqFiles.length === 0) {
-      setError('Please upload at least one document (lesson or MCQ)')
+      setError('Please upload at least one document')
       return
     }
 
     setCreating(true)
 
     try {
-      // Step 1: Create the interactive lesson
       const createResponse = await fetch('/api/interactive-lessons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,7 +119,6 @@ export default function NewInteractiveLessonPage() {
 
       const { lesson } = await createResponse.json()
 
-      // Step 2: Upload lesson documents (direct to storage)
       for (const file of lessonFiles) {
         try {
           await uploadFileDirectly(lesson.id, file, 'lesson')
@@ -141,7 +127,6 @@ export default function NewInteractiveLessonPage() {
         }
       }
 
-      // Step 3: Upload MCQ documents (direct to storage)
       for (const file of mcqFiles) {
         try {
           await uploadFileDirectly(lesson.id, file, 'mcq')
@@ -150,7 +135,6 @@ export default function NewInteractiveLessonPage() {
         }
       }
 
-      // Redirect to detail page
       router.push(`/interactive-lessons/${lesson.id}`)
 
     } catch (err: any) {
@@ -159,105 +143,81 @@ export default function NewInteractiveLessonPage() {
     }
   }
 
-  const getModeDescription = () => {
+  const getModeInfo = () => {
     if (lessonFiles.length > 0 && mcqFiles.length > 0) {
-      return {
-        mode: 'Document-based + Your MCQs',
-        description: 'Your lesson PDFs will be displayed page by page. Your uploaded MCQs will be used for checkpoints between sections.',
-        icon: <FiBook className="w-5 h-5 text-violet-400" />
-      }
+      return { mode: 'Document-based + Your MCQs', description: 'PDFs displayed page by page with your uploaded MCQs for checkpoints.' }
     }
     if (lessonFiles.length > 0) {
-      return {
-        mode: 'Document-based',
-        description: 'Your lesson PDFs will be displayed page by page. The AI will generate MCQ questions for each section.',
-        icon: <FiBook className="w-5 h-5 text-violet-400" />
-      }
+      return { mode: 'Document-based', description: 'PDFs displayed page by page. AI generates MCQ questions.' }
     }
     if (mcqFiles.length > 0) {
-      return {
-        mode: 'MCQ-only',
-        description: 'The AI will generate lesson content based on your MCQ questions. A textual course will be created.',
-        icon: <FiFileText className="w-5 h-5 text-blue-400" />
-      }
+      return { mode: 'MCQ-only', description: 'AI generates lesson content based on your MCQ questions.' }
     }
     return null
   }
 
-  const modeInfo = getModeDescription()
+  const modeInfo = getModeInfo()
 
   return (
-    <div className="min-h-screen bg-neutral-950">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center gap-4">
+      <header className="h-14 border-b border-border sticky top-0 bg-background z-10">
+        <div className="max-w-2xl mx-auto px-6 h-full flex items-center gap-4">
           <button 
             onClick={() => router.push('/interactive-lessons')}
-            className="text-gray-400 hover:text-white transition"
+            className="btn-ghost p-2"
           >
-            ← Back
+            <FiArrowLeft className="w-4 h-4" />
           </button>
-          <h1 className="text-xl font-semibold text-white">Create Interactive Lesson</h1>
+          <h1 className="text-lg font-semibold text-text-primary">Create Interactive Lesson</h1>
         </div>
       </header>
 
       {/* Content */}
-      <main className="max-w-3xl mx-auto px-6 py-8">
+      <main className="max-w-2xl mx-auto px-6 py-8">
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Basic Info */}
           <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-white">Basic Information</h2>
+            <h2 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">Basic Information</h2>
             
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">
-                Lesson Name *
-              </label>
+              <label className="input-label">Lesson Name *</label>
               <input
                 type="text"
-                id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Biology Chapter 3 - Photosynthesis"
-                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                placeholder="e.g., Biology Chapter 3"
+                className="input"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label htmlFor="subject" className="block text-sm font-medium text-gray-300 mb-1">
-                  Subject
-                </label>
+                <label className="input-label">Subject</label>
                 <input
                   type="text"
-                  id="subject"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g., Biology"
-                  className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
               <div>
-                <label htmlFor="level" className="block text-sm font-medium text-gray-300 mb-1">
-                  Level
-                </label>
+                <label className="input-label">Level</label>
                 <input
                   type="text"
-                  id="level"
                   value={level}
                   onChange={(e) => setLevel(e.target.value)}
                   placeholder="e.g., University"
-                  className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
               <div>
-                <label htmlFor="language" className="block text-sm font-medium text-gray-300 mb-1">
-                  Language
-                </label>
+                <label className="input-label">Language</label>
                 <select
-                  id="language"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  className="input"
                 >
                   <option value="fr">Français</option>
                   <option value="en">English</option>
@@ -268,21 +228,19 @@ export default function NewInteractiveLessonPage() {
             </div>
           </section>
 
-          {/* Upload Zones */}
-          <section className="space-y-6">
-            <h2 className="text-lg font-semibold text-white">Documents</h2>
+          {/* Documents */}
+          <section className="space-y-4">
+            <h2 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">Documents</h2>
 
-            {/* Lesson Documents Zone */}
-            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6">
+            {/* Lesson Documents */}
+            <div className="card p-5">
               <div className="flex items-start gap-3 mb-4">
-                <div className="w-10 h-10 bg-violet-900/50 rounded-lg flex items-center justify-center">
-                  <FiBook className="w-5 h-5 text-violet-400" />
+                <div className="w-9 h-9 bg-accent-muted rounded-md flex items-center justify-center">
+                  <FiBook className="w-4 h-4 text-accent" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-white">Lesson Documents</h3>
-                  <p className="text-sm text-gray-400">
-                    Upload your course PDFs or documents. They will be displayed page by page.
-                  </p>
+                  <h3 className="font-medium text-text-primary">Lesson Documents</h3>
+                  <p className="text-sm text-text-tertiary">Upload your course PDFs or documents</p>
                 </div>
               </div>
 
@@ -295,47 +253,45 @@ export default function NewInteractiveLessonPage() {
                 className="hidden"
               />
 
-              {lessonFiles.length > 0 ? (
-                <div className="space-y-2 mb-4">
+              {lessonFiles.length > 0 && (
+                <div className="space-y-2 mb-3">
                   {lessonFiles.map((file, index) => (
                     <div 
                       key={index}
-                      className="flex items-center justify-between px-3 py-2 bg-neutral-800 rounded-lg"
+                      className="flex items-center justify-between px-3 py-2 bg-elevated rounded-md"
                     >
-                      <span className="text-sm text-gray-300 truncate">{file.name}</span>
+                      <span className="text-sm text-text-secondary truncate">{file.name}</span>
                       <button
                         type="button"
                         onClick={() => removeLessonFile(index)}
-                        className="p-1 text-gray-400 hover:text-red-400 transition"
+                        className="btn-ghost p-1 text-text-tertiary hover:text-error"
                       >
                         <FiX className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
                 </div>
-              ) : null}
+              )}
 
               <button
                 type="button"
                 onClick={() => lessonInputRef.current?.click()}
-                className="w-full py-3 border-2 border-dashed border-neutral-700 rounded-lg text-gray-400 hover:border-violet-500 hover:text-violet-400 transition flex items-center justify-center gap-2"
+                className="w-full py-2.5 border-2 border-dashed border-border rounded-md text-text-tertiary hover:border-accent hover:text-accent transition-colors flex items-center justify-center gap-2"
               >
                 <FiUpload className="w-4 h-4" />
                 Add Lesson Documents
               </button>
             </div>
 
-            {/* MCQ Documents Zone */}
-            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6">
+            {/* MCQ Documents */}
+            <div className="card p-5">
               <div className="flex items-start gap-3 mb-4">
-                <div className="w-10 h-10 bg-blue-900/50 rounded-lg flex items-center justify-center">
-                  <FiFileText className="w-5 h-5 text-blue-400" />
+                <div className="w-9 h-9 bg-elevated rounded-md flex items-center justify-center">
+                  <FiFileText className="w-4 h-4 text-text-secondary" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-white">MCQ / Test Documents (Optional)</h3>
-                  <p className="text-sm text-gray-400">
-                    Upload existing test questions. The AI will extract and use them for checkpoints.
-                  </p>
+                  <h3 className="font-medium text-text-primary">MCQ Documents <span className="text-text-tertiary font-normal">(Optional)</span></h3>
+                  <p className="text-sm text-text-tertiary">Upload existing test questions</p>
                 </div>
               </div>
 
@@ -348,30 +304,30 @@ export default function NewInteractiveLessonPage() {
                 className="hidden"
               />
 
-              {mcqFiles.length > 0 ? (
-                <div className="space-y-2 mb-4">
+              {mcqFiles.length > 0 && (
+                <div className="space-y-2 mb-3">
                   {mcqFiles.map((file, index) => (
                     <div 
                       key={index}
-                      className="flex items-center justify-between px-3 py-2 bg-neutral-800 rounded-lg"
+                      className="flex items-center justify-between px-3 py-2 bg-elevated rounded-md"
                     >
-                      <span className="text-sm text-gray-300 truncate">{file.name}</span>
+                      <span className="text-sm text-text-secondary truncate">{file.name}</span>
                       <button
                         type="button"
                         onClick={() => removeMcqFile(index)}
-                        className="p-1 text-gray-400 hover:text-red-400 transition"
+                        className="btn-ghost p-1 text-text-tertiary hover:text-error"
                       >
                         <FiX className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
                 </div>
-              ) : null}
+              )}
 
               <button
                 type="button"
                 onClick={() => mcqInputRef.current?.click()}
-                className="w-full py-3 border-2 border-dashed border-neutral-700 rounded-lg text-gray-400 hover:border-blue-500 hover:text-blue-400 transition flex items-center justify-center gap-2"
+                className="w-full py-2.5 border-2 border-dashed border-border rounded-md text-text-tertiary hover:border-border-light hover:text-text-secondary transition-colors flex items-center justify-center gap-2"
               >
                 <FiUpload className="w-4 h-4" />
                 Add MCQ Documents
@@ -380,53 +336,35 @@ export default function NewInteractiveLessonPage() {
 
             {/* Mode Info */}
             {modeInfo && (
-              <div className="bg-neutral-800/50 border border-neutral-700 rounded-xl p-4 flex items-start gap-3">
-                <div className="mt-0.5">{modeInfo.icon}</div>
-                <div>
-                  <p className="font-medium text-white">{modeInfo.mode}</p>
-                  <p className="text-sm text-gray-400">{modeInfo.description}</p>
-                </div>
+              <div className="p-4 bg-accent-muted border border-accent/20 rounded-md">
+                <p className="font-medium text-text-primary mb-1">{modeInfo.mode}</p>
+                <p className="text-sm text-text-secondary">{modeInfo.description}</p>
               </div>
             )}
-
-            {/* Help Text */}
-            <div className="bg-neutral-900/50 border border-neutral-800 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <FiInfo className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-gray-400 space-y-2">
-                  <p><strong className="text-gray-300">3 modes available:</strong></p>
-                  <ul className="list-disc ml-4 space-y-1">
-                    <li><strong className="text-violet-400">Lesson docs only</strong> → PDF displayed page by page, AI generates MCQs</li>
-                    <li><strong className="text-blue-400">MCQ docs only</strong> → AI generates a textual course from your questions</li>
-                    <li><strong className="text-emerald-400">Both</strong> → PDF as base + your MCQs for checkpoints</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
           </section>
 
           {/* Error */}
           {error && (
-            <div className="p-4 bg-red-900/20 border border-red-800 rounded-lg text-red-400">
+            <div className="p-3 bg-error-muted border border-error/30 text-error text-sm rounded-md">
               {error}
             </div>
           )}
 
           {/* Submit */}
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-4 border-t border-border">
             <button
               type="submit"
               disabled={creating}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {creating ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="spinner w-4 h-4"></div>
                   Creating...
                 </>
               ) : (
                 <>
-                  Create Interactive Lesson
+                  Create Lesson
                   <FiArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -437,4 +375,3 @@ export default function NewInteractiveLessonPage() {
     </div>
   )
 }
-

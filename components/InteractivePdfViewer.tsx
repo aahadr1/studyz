@@ -38,12 +38,10 @@ export default function InteractivePdfViewer({
 
   const currentSection = sections[currentSectionIndex]
 
-  // Calculate which pages are accessible
   const getAccessiblePageRange = useCallback(() => {
     let minPage = 1
     let maxPage = totalPages
 
-    // Find the highest unlocked section
     for (let i = sections.length - 1; i >= 0; i--) {
       const section = sections[i]
       if (unlockedSections.has(section.id) || i === 0) {
@@ -65,7 +63,6 @@ export default function InteractivePdfViewer({
     setTotalPages(total)
     onPageChange(page, total)
 
-    // Determine which section this page belongs to
     const sectionIndex = sections.findIndex(
       s => page >= s.start_page && page <= s.end_page
     )
@@ -73,7 +70,6 @@ export default function InteractivePdfViewer({
       onSectionChange(sectionIndex)
     }
 
-    // Check if we've reached the end of current section
     if (currentSection && page === currentSection.end_page) {
       onReachSectionEnd()
     }
@@ -90,24 +86,20 @@ export default function InteractivePdfViewer({
     if (nextPage <= totalPages && isPageAccessible(nextPage)) {
       setCurrentPage(nextPage)
     } else if (currentSection && currentPage === currentSection.end_page) {
-      // At section end, trigger quiz
       onReachSectionEnd()
     }
   }
 
-  // Check if next button should show lock or arrow
   const isNextLocked = () => {
     if (!currentSection) return false
     if (currentPage < currentSection.end_page) return false
     
-    // At section end, check if next section is unlocked
     const nextSection = sections[currentSectionIndex + 1]
-    if (!nextSection) return false // Last section
+    if (!nextSection) return false
     
     return !unlockedSections.has(nextSection.id)
   }
 
-  // Get section info for current page
   const getSectionForPage = (page: number) => {
     return sections.find(s => page >= s.start_page && page <= s.end_page)
   }
@@ -115,45 +107,45 @@ export default function InteractivePdfViewer({
   const pageSection = getSectionForPage(currentPage)
 
   return (
-    <div className="flex flex-col h-full bg-neutral-900">
+    <div className="flex flex-col h-full bg-surface">
       {/* Section indicator */}
       {pageSection && (
-        <div className="px-4 py-2 bg-neutral-800 border-b border-neutral-700 flex items-center justify-between">
+        <div className="px-4 py-2 bg-elevated border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-violet-400">
+            <span className="text-xs font-medium text-accent">
               Section {pageSection.section_order}
             </span>
-            <span className="text-sm text-white font-medium truncate">
+            <span className="text-sm text-text-primary font-medium truncate">
               {pageSection.title}
             </span>
           </div>
-          <div className="text-xs text-gray-400">
+          <span className="text-xs text-text-tertiary">
             Pages {pageSection.start_page} - {pageSection.end_page}
-          </div>
+          </span>
         </div>
       )}
 
       {/* Navigation controls */}
-      <div className="flex items-center justify-center gap-4 p-3 border-b border-neutral-700 bg-neutral-900">
+      <div className="flex items-center justify-center gap-4 py-3 border-b border-border">
         <button
           onClick={goToPrevPage}
           disabled={currentPage <= 1}
-          className="p-2 bg-neutral-800 rounded-lg disabled:opacity-30 text-white hover:bg-neutral-700 transition"
+          className="btn-ghost p-2 disabled:opacity-30"
         >
           <FiChevronLeft className="w-5 h-5" />
         </button>
 
-        <span className="text-white min-w-[120px] text-center">
+        <span className="text-sm text-text-primary min-w-[100px] text-center">
           Page {currentPage} / {totalPages || '...'}
         </span>
 
         <button
           onClick={goToNextPage}
           disabled={currentPage >= totalPages && !isNextLocked()}
-          className={`p-2 rounded-lg text-white transition ${
+          className={`p-2 rounded-md transition-colors ${
             isNextLocked()
-              ? 'bg-amber-600 hover:bg-amber-700'
-              : 'bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30'
+              ? 'bg-warning text-white hover:bg-warning/90'
+              : 'btn-ghost disabled:opacity-30'
           }`}
         >
           {isNextLocked() ? (
@@ -178,16 +170,16 @@ export default function InteractivePdfViewer({
 
       {/* Progress indicator */}
       {currentSection && (
-        <div className="px-4 py-2 bg-neutral-800 border-t border-neutral-700">
-          <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+        <div className="px-4 py-2 bg-elevated border-t border-border">
+          <div className="flex items-center justify-between text-xs text-text-tertiary mb-1">
             <span>Section progress</span>
             <span>
-              {currentPage - currentSection.start_page + 1} / {currentSection.end_page - currentSection.start_page + 1} pages
+              {currentPage - currentSection.start_page + 1} / {currentSection.end_page - currentSection.start_page + 1}
             </span>
           </div>
-          <div className="h-1 bg-neutral-700 rounded-full overflow-hidden">
+          <div className="h-1 bg-border rounded-full overflow-hidden">
             <div
-              className="h-full bg-violet-500 transition-all"
+              className="h-full bg-accent transition-all"
               style={{
                 width: `${((currentPage - currentSection.start_page + 1) / (currentSection.end_page - currentSection.start_page + 1)) * 100}%`
               }}
@@ -198,4 +190,3 @@ export default function InteractivePdfViewer({
     </div>
   )
 }
-

@@ -77,14 +77,12 @@ export default function InteractiveLessonPlayerPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Player state
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [showQuiz, setShowQuiz] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
 
-  // Load lesson data
   const loadData = useCallback(async () => {
     try {
       const response = await fetch(`/api/interactive-lessons/${lessonId}/data`)
@@ -99,16 +97,13 @@ export default function InteractiveLessonPlayerPage() {
       setDocumentUrls(data.documentUrls || {})
       setGeneratedContent(data.generatedContent || {})
 
-      // Initialize progress if needed
       if (!data.progress || data.progress.length === 0) {
         await fetch(`/api/interactive-lessons/${lessonId}/progress`, {
           method: 'POST'
         })
-        // Reload to get initialized progress
         const progressResponse = await fetch(`/api/interactive-lessons/${lessonId}/progress`)
         if (progressResponse.ok) {
           const progressData = await progressResponse.json()
-          // Convert to the expected format
           const progressList = progressData.sections?.map((s: any) => ({
             section_id: s.id,
             status: s.status,
@@ -118,7 +113,6 @@ export default function InteractiveLessonPlayerPage() {
         }
       }
 
-      // Find current section (first non-completed or first section)
       const currentSection = data.sections?.find((s: Section, i: number) => {
         const sProgress = data.progress?.find((p: Progress) => p.section_id === s.id)
         return !sProgress || sProgress.status !== 'completed'
@@ -130,7 +124,6 @@ export default function InteractiveLessonPlayerPage() {
         setCurrentPage(currentSection.start_page)
       }
 
-      // Check if all sections are complete
       const allComplete = data.sections?.every((s: Section) => {
         const sProgress = data.progress?.find((p: Progress) => p.section_id === s.id)
         return sProgress?.status === 'completed'
@@ -149,36 +142,29 @@ export default function InteractiveLessonPlayerPage() {
     loadData()
   }, [loadData])
 
-  // Progress map for components
   const progressMap = new Map(
     progress.map(p => [p.section_id, { status: p.status, score: p.score }])
   )
 
-  // Unlocked sections set
   const unlockedSections = new Set(
     progress
       .filter(p => p.status === 'current' || p.status === 'completed')
       .map(p => p.section_id)
   )
-  // First section is always unlocked
   if (sections.length > 0) {
     unlockedSections.add(sections[0].id)
   }
 
-  // Current section
   const currentSection = sections[currentSectionIndex]
 
-  // Get document URL for current section
   const getPdfUrl = () => {
     if (!currentSection || lesson?.mode === 'mcq_only') return null
     
-    // Find the document for this section
     const docId = currentSection.document_id
     if (docId && documentUrls[docId]) {
       return documentUrls[docId]
     }
     
-    // Fallback to first lesson document
     const lessonDocs = lesson?.interactive_lesson_documents?.filter(d => d.category === 'lesson') || []
     if (lessonDocs.length > 0 && documentUrls[lessonDocs[0].id]) {
       return documentUrls[lessonDocs[0].id]
@@ -198,7 +184,6 @@ export default function InteractiveLessonPlayerPage() {
   }
 
   const handleReachSectionEnd = () => {
-    // Show quiz when reaching section end
     setShowQuiz(true)
   }
 
@@ -215,7 +200,6 @@ export default function InteractiveLessonPlayerPage() {
 
     const result = await response.json()
 
-    // Update local progress
     if (result.passed) {
       setProgress(prev => {
         const updated = [...prev]
@@ -226,7 +210,6 @@ export default function InteractiveLessonPlayerPage() {
           updated.push({ section_id: sectionId, status: 'completed', score: result.score })
         }
         
-        // Unlock next section
         const nextSection = sections[currentSectionIndex + 1]
         if (nextSection) {
           const nextIdx = updated.findIndex(p => p.section_id === nextSection.id)
@@ -247,7 +230,6 @@ export default function InteractiveLessonPlayerPage() {
   }
 
   const handleQuizPass = () => {
-    // Move to next section or show completion
     if (currentSectionIndex < sections.length - 1) {
       const nextSection = sections[currentSectionIndex + 1]
       setCurrentSectionIndex(currentSectionIndex + 1)
@@ -267,10 +249,10 @@ export default function InteractiveLessonPlayerPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <FiLoader className="w-8 h-8 text-violet-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading lesson...</p>
+          <FiLoader className="w-6 h-6 text-accent animate-spin mx-auto mb-3" />
+          <p className="text-text-tertiary text-sm">Loading lesson...</p>
         </div>
       </div>
     )
@@ -278,12 +260,12 @@ export default function InteractiveLessonPlayerPage() {
 
   if (error || !lesson) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">{error || 'Lesson not found'}</p>
+          <p className="text-error mb-4">{error || 'Lesson not found'}</p>
           <button
             onClick={() => router.push('/interactive-lessons')}
-            className="text-violet-400 hover:text-violet-300"
+            className="text-accent hover:underline"
           >
             ← Back to lessons
           </button>
@@ -294,26 +276,26 @@ export default function InteractiveLessonPlayerPage() {
 
   if (isComplete) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
-          <div className="w-20 h-20 bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-            <FiCheckCircle className="w-10 h-10 text-emerald-400" />
+          <div className="w-16 h-16 bg-success-muted rounded-full flex items-center justify-center mx-auto mb-6">
+            <FiCheckCircle className="w-8 h-8 text-success" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-3">Congratulations!</h1>
-          <p className="text-gray-400 mb-6">
-            You've completed <span className="text-white font-medium">{lesson.name}</span>! 
+          <h1 className="text-2xl font-semibold text-text-primary mb-3">Congratulations!</h1>
+          <p className="text-text-secondary mb-8">
+            You've completed <span className="text-text-primary font-medium">{lesson.name}</span>. 
             All sections have been mastered.
           </p>
           <div className="space-y-3">
             <button
               onClick={() => router.push(`/interactive-lessons/${lessonId}`)}
-              className="w-full px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition"
+              className="btn-primary w-full"
             >
               View Results
             </button>
             <button
               onClick={() => router.push('/interactive-lessons')}
-              className="w-full px-6 py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg font-medium transition"
+              className="btn-secondary w-full"
             >
               Back to Lessons
             </button>
@@ -324,21 +306,16 @@ export default function InteractiveLessonPlayerPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-neutral-950">
+    <div className="h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="flex-shrink-0 border-b border-neutral-800 bg-neutral-900">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push(`/interactive-lessons/${lessonId}`)}
-              className="flex items-center gap-1 text-gray-400 hover:text-white transition"
-            >
-              <FiArrowLeft className="w-4 h-4" />
-              Exit
-            </button>
-            <h1 className="text-lg font-semibold text-white">{lesson.name}</h1>
-          </div>
-        </div>
+      <header className="h-12 flex-shrink-0 border-b border-border bg-surface flex items-center px-4">
+        <button
+          onClick={() => router.push(`/interactive-lessons/${lessonId}`)}
+          className="btn-ghost p-2 mr-3"
+        >
+          <FiArrowLeft className="w-4 h-4" />
+        </button>
+        <h1 className="font-medium text-text-primary truncate">{lesson.name}</h1>
       </header>
 
       {/* Progress Bar */}
@@ -351,7 +328,7 @@ export default function InteractiveLessonPlayerPage() {
 
       {/* Main Content */}
       <div className="flex-1 flex min-h-0">
-        {/* Left: PDF Viewer or Generated Content */}
+        {/* Left: PDF Viewer or Content */}
         <div className="flex-1 min-w-0">
           {lesson.mode === 'document_based' && pdfUrl ? (
             <InteractivePdfViewer
@@ -364,28 +341,28 @@ export default function InteractiveLessonPlayerPage() {
               onReachSectionEnd={handleReachSectionEnd}
             />
           ) : lesson.mode === 'mcq_only' ? (
-            <div className="h-full flex items-center justify-center bg-neutral-900 p-8">
-              <div className="max-w-2xl text-center">
-                <p className="text-gray-400 mb-4">
-                  This is a QCM-only lesson. View the content in the sidebar and complete the quiz.
+            <div className="h-full flex items-center justify-center bg-surface p-8">
+              <div className="max-w-md text-center">
+                <p className="text-text-secondary mb-6">
+                  This is a MCQ-only lesson. View the content in the sidebar and complete the quiz.
                 </p>
                 <button
                   onClick={handleStartQuiz}
-                  className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition"
+                  className="btn-primary px-6"
                 >
                   Start Quiz for Section {currentSectionIndex + 1}
                 </button>
               </div>
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center bg-neutral-900 text-gray-400">
+            <div className="h-full flex items-center justify-center bg-surface text-text-tertiary">
               <p>No document available</p>
             </div>
           )}
         </div>
 
         {/* Right: Sidebar */}
-        <div className="w-96 flex-shrink-0">
+        <div className="w-96 flex-shrink-0 border-l border-border">
           <SectionSidebar
             section={currentSection}
             sectionIndex={currentSectionIndex}
@@ -404,4 +381,3 @@ export default function InteractiveLessonPlayerPage() {
     </div>
   )
 }
-
