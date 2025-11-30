@@ -194,29 +194,51 @@ RÉPONDS EN JSON (pas de markdown):
   ]
 }`
 
+  console.log(`       📝 Prompt language: ${langName}`)
+  console.log(`       📝 Prompt length: ${prompt.length} chars`)
+  console.log(`       🖼️  Image base64 length: ${imageBase64.length} chars`)
+  console.log(`       🖼️  Image base64 preview: ${imageBase64.substring(0, 50)}...`)
+  console.log(`       🖼️  Image URL format: data:image/png;base64,[${imageBase64.length} chars]`)
+
   try {
+    const messageContent = [
+      { type: 'text' as const, text: prompt },
+      { 
+        type: 'image_url' as const,
+        image_url: { 
+          url: `data:image/png;base64,${imageBase64}`,
+          detail: 'high' as const
+        }
+      }
+    ]
+
+    console.log(`       ✓ Message content prepared: ${messageContent.length} parts`)
+    console.log(`         - Part 1: text (${prompt.length} chars)`)
+    console.log(`         - Part 2: image_url (base64 data)`)
+    console.log(`       🌐 Sending request to OpenAI API...`)
+    
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{
         role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { 
-            type: 'image_url',
-            image_url: { 
-              url: `data:image/png;base64,${imageBase64}`,
-              detail: 'high'
-            }
-          }
-        ]
+        content: messageContent
       }],
       max_tokens: 4000,
       temperature: 0.3,
     })
 
+    console.log(`       ✓ OpenAI response received`)
+    console.log(`       ✓ Model: ${response.model}`)
+    console.log(`       ✓ Tokens used: ${response.usage?.total_tokens || 'unknown'}`)
+
     const content = response.choices[0]?.message?.content || '{}'
+    console.log(`       ✓ Response content length: ${content.length} chars`)
+    
     const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
     const parsed = JSON.parse(cleaned)
+    
+    console.log(`       ✓ JSON parsed successfully`)
+    console.log(`       ✓ Text extracted: ${parsed.text ? parsed.text.substring(0, 100) + '...' : 'empty'}`)
     
     return {
       text: parsed.text || `Page ${pageNumber}`,
@@ -225,7 +247,11 @@ RÉPONDS EN JSON (pas de markdown):
       keyTerms: parsed.keyTerms || []
     }
   } catch (error) {
-    console.error(`Vision transcription error for page ${pageNumber}:`, error)
+    console.error(`       ❌ Vision transcription error for page ${pageNumber}:`, error)
+    if (error instanceof Error) {
+      console.error(`       ❌ Error message: ${error.message}`)
+      console.error(`       ❌ Error stack: ${error.stack}`)
+    }
     return {
       text: `Page ${pageNumber} (transcription failed)`,
       hasVisualContent: false,
@@ -498,22 +524,37 @@ export async function POST(
             eta
           )
 
+          console.log(`\n>>> Conversion page ${globalPageNum}/${totalPageCount}`)
+          console.log(`    Document: ${doc.name}`)
+          console.log(`    Local page: ${pageNum}`)
+
           const imageResult = await convertPdfPageToImage(buffer, pageNum)
           
           if (!imageResult) {
-            console.warn(`Image conversion failed for page ${pageNum}`)
+            console.error(`    ❌ Image conversion failed for page ${pageNum}`)
             convertedPages++
             continue
           }
 
+          console.log(`    ✓ Image converted: ${imageResult.width}x${imageResult.height}px`)
+          console.log(`    ✓ Image size: ${(imageResult.buffer.length / 1024).toFixed(2)} KB`)
+
           // Upload image to storage
           const imagePath = `${id}/page-${globalPageNum}.png`
-          await getSupabaseAdmin().storage
+          console.log(`    📤 Uploading to: ${imagePath}`)
+          
+          const { error: uploadError } = await getSupabaseAdmin().storage
             .from('interactive-lessons')
             .upload(imagePath, imageResult.buffer, {
               contentType: 'image/png',
               upsert: true
             })
+
+          if (uploadError) {
+            console.error(`    ❌ Upload failed:`, uploadError)
+          } else {
+            console.log(`    ✓ Image uploaded to Supabase Storage`)
+          }
 
           // Store image record in DB
           await getSupabaseAdmin()
@@ -526,15 +567,20 @@ export async function POST(
               height: imageResult.height
             }, { onConflict: 'document_id,page_number' })
 
+          console.log(`    ✓ Image record stored in DB`)
+
           imageMetadata.push({ docId: doc.id, pageNum, imagePath })
           convertedPages++
         }
       }
 
       console.log(`✓ All ${convertedPages} pages converted to images`)
+      console.log(`✓ Image metadata collected: ${imageMetadata.length} entries`)
+      console.log(`✓ First image path: ${imageMetadata[0]?.imagePath || 'none'}`)
 
       // ========== PHASE 2: TRANSCRIBE ALL IMAGES WITH AI (30-80%) ==========
       console.log(`\n========== PHASE 2: TRANSCRIPTION IA ==========`)
+      console.log(`📊 Total images to transcribe: ${imageMetadata.length}`)
       
       let transcribedPages = 0
       const allPageTranscriptions: string[] = []
@@ -552,23 +598,50 @@ export async function POST(
           eta
         )
 
+        console.log(`\n>>> Transcription page ${globalPageNum}/${totalPageCount}`)
+        console.log(`    Image path: ${imagePath}`)
+
         // Download image from storage
-        const { data: imageData } = await getSupabaseAdmin().storage
+        console.log(`    📥 Downloading image from Supabase Storage...`)
+        const { data: imageData, error: downloadError } = await getSupabaseAdmin().storage
           .from('interactive-lessons')
           .download(imagePath)
 
-        if (!imageData) {
-          console.warn(`Failed to download image for page ${globalPageNum}`)
+        if (!imageData || downloadError) {
+          console.error(`    ❌ Failed to download image:`, downloadError)
           allPageTranscriptions.push(`Page ${globalPageNum} (image not found)`)
           transcribedPages++
           continue
         }
 
         const imageBuffer = Buffer.from(await imageData.arrayBuffer())
+        console.log(`    ✓ Image downloaded: ${imageBuffer.length} bytes (${(imageBuffer.length / 1024).toFixed(2)} KB)`)
+
         const imageBase64 = imageBuffer.toString('base64')
+        console.log(`    ✓ Image converted to base64: ${imageBase64.length} chars`)
 
         // Transcribe with vision
+        console.log(`    🤖 Calling GPT-4o-mini vision API...`)
         const transcription = await transcribePageWithVision(imageBase64, globalPageNum, lesson.language)
+        console.log(`    ✓ Transcription received: ${transcription.text.length} chars`)
+        console.log(`    ✓ Visual elements: ${transcription.visualElements.length}`)
+        console.log(`    ✓ Key terms: ${transcription.keyTerms.length}`)
+        
+        // Show first transcription as proof
+        if (globalPageNum === 1) {
+          console.log(`\n    ═══════════════════════════════════════════════`)
+          console.log(`    📄 FIRST PAGE TRANSCRIPTION (PROOF OF CONCEPT)`)
+          console.log(`    ═══════════════════════════════════════════════`)
+          console.log(`    Text preview: ${transcription.text.substring(0, 300)}...`)
+          console.log(`    Has visual content: ${transcription.hasVisualContent}`)
+          if (transcription.visualElements.length > 0) {
+            console.log(`    Visual elements:`)
+            transcription.visualElements.forEach((ve, idx) => {
+              console.log(`      ${idx + 1}. ${ve.type}: ${ve.description.substring(0, 80)}...`)
+            })
+          }
+          console.log(`    ═══════════════════════════════════════════════\n`)
+        }
         
         // Add to full text with page marker
         allPageTranscriptions.push(`Page ${globalPageNum}:\n${transcription.text}`)
