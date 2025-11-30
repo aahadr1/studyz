@@ -5,21 +5,7 @@ import { cookies } from 'next/headers'
 import OpenAI from 'openai'
 
 export const runtime = 'nodejs'
-export const maxDuration = 300 // 5 minutes for processing
-
-// Timeout wrapper for operations that might hang
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => {
-      console.log(`Operation timed out after ${timeoutMs}ms, using fallback`)
-      resolve(fallback)
-    }, timeoutMs))
-  ])
-}
-
-// Flag to track if MuPDF works on this environment
-let mupdfWorks: boolean | null = null
+export const maxDuration = 120 // 2 minutes max - should be plenty now
 
 // Lazy initialization of admin client
 let _supabaseAdmin: any = null
@@ -31,37 +17,6 @@ function getSupabaseAdmin(): any {
     )
   }
   return _supabaseAdmin
-}
-
-// Processing steps for progress tracking
-const PROCESSING_STEPS = {
-  INITIALIZING: 'initializing',
-  CONVERTING_PAGES: 'converting_pages',
-  TRANSCRIBING: 'transcribing',
-  RECONSTRUCTING: 'reconstructing',
-  CHECKPOINTING: 'checkpointing',
-  GENERATING_MCQ: 'generating_mcq',
-  ANALYZING_ELEMENTS: 'analyzing_elements',
-  FINALIZING: 'finalizing'
-}
-
-// Update processing progress
-async function updateProgress(
-  lessonId: string, 
-  step: string, 
-  progress: number, 
-  total: number, 
-  message: string
-) {
-  await getSupabaseAdmin()
-    .from('interactive_lessons')
-    .update({
-      processing_step: step,
-      processing_progress: progress,
-      processing_total: total,
-      processing_message: message
-    })
-    .eq('id', lessonId)
 }
 
 // Lazy initialization of OpenAI client
@@ -106,591 +61,222 @@ async function createAuthClient() {
   )
 }
 
-interface PageTranscription {
-  text: string
-  elements: Array<{
-    type: 'term' | 'concept' | 'formula' | 'diagram' | 'definition'
-    description: string
-    position?: string
-  }>
-  hasVisualContent: boolean
+// Processing steps
+type ProcessingStep = 'extracting' | 'analyzing' | 'checkpointing' | 'questions' | 'complete'
+
+// Update progress in database
+async function updateProgress(
+  lessonId: string, 
+  step: ProcessingStep, 
+  message: string, 
+  percent: number,
+  etaSeconds?: number
+) {
+  console.log(`[${percent}%] ${step}: ${message}`)
+  
+  await getSupabaseAdmin()
+    .from('interactive_lessons')
+    .update({
+      processing_step: step,
+      processing_message: message,
+      processing_percent: percent,
+      processing_eta_seconds: etaSeconds || null,
+      ...(step === 'complete' ? { status: 'ready' } : {})
+    })
+    .eq('id', lessonId)
 }
 
-interface Checkpoint {
-  title: string
-  type: 'topic' | 'subtopic'
-  start_page: number
-  end_page: number
-  summary: string
-  parent_index?: number
-}
-
-interface Question {
-  question: string
-  choices: string[]
-  correct_index: number
-  explanation: string
-}
-
-interface PageElement {
-  element_text: string
-  element_type: 'term' | 'concept' | 'formula' | 'diagram' | 'definition'
-  explanation: string
-  position_hint?: string
-}
-
-// Convert Node.js Buffer to Uint8Array for MuPDF
-function bufferToUint8Array(buffer: Buffer): Uint8Array {
-  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
-  return new Uint8Array(arrayBuffer)
-}
-
-// Convert PDF page to image using MuPDF (with timeout)
-async function convertPdfPageToImage(pdfBuffer: Buffer, pageNumber: number): Promise<{ buffer: Buffer; width: number; height: number } | null> {
-  // If MuPDF already failed, don't try again
-  if (mupdfWorks === false) {
-    console.log(`Skipping MuPDF for page ${pageNumber} (previously failed)`)
-    return null
-  }
-
-  const convertWithMupdf = async (): Promise<{ buffer: Buffer; width: number; height: number } | null> => {
-    try {
-      console.log(`Converting page ${pageNumber} with MuPDF...`)
-      
-      // Dynamic import for mupdf
-      const mupdf = await import('mupdf')
-      
-      // Convert to Uint8Array for MuPDF
-      const uint8Array = bufferToUint8Array(pdfBuffer)
-      
-      // Open the PDF document
-      const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
-      
-      // Get the page (0-indexed in mupdf)
-      const page = doc.loadPage(pageNumber - 1)
-      
-      // Get page bounds
-      const bounds = page.getBounds()
-      const width = Math.round(bounds[2] - bounds[0])
-      const height = Math.round(bounds[3] - bounds[1])
-      
-      // Create a pixmap at 1.5x resolution (lower than before for speed)
-      const scale = 1.5
-      const pixmap = page.toPixmap(
-        mupdf.Matrix.scale(scale, scale),
-        mupdf.ColorSpace.DeviceRGB,
-        false, // no alpha
-        true   // annots
-      )
-      
-      // Convert to PNG buffer
-      const pngBuffer = pixmap.asPNG()
-      
-      mupdfWorks = true
-      console.log(`Page ${pageNumber} converted successfully`)
-      
-      return {
-        buffer: Buffer.from(pngBuffer),
-        width: Math.round(width * scale),
-        height: Math.round(height * scale)
-      }
-    } catch (error) {
-      console.error(`MuPDF error for page ${pageNumber}:`, error)
-      mupdfWorks = false
-      return null
-    }
-  }
-
-  // Timeout after 30 seconds per page
-  return withTimeout(convertWithMupdf(), 30000, null)
-}
-
-// Get page count from PDF - robust multi-method approach
-async function getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
-  // Method 1: Try MuPDF
-  try {
-    const mupdf = await import('mupdf')
-    const uint8Array = bufferToUint8Array(pdfBuffer)
-    const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
-    const count = doc.countPages()
-    if (count > 0) {
-      console.log(`MuPDF: ${count} pages`)
-      return count
-    }
-  } catch (error) {
-    console.error('MuPDF page count failed:', error)
-  }
-
-  // Method 2: Try pdf-parse
+// STEP 1: Fast text extraction using pdf-parse
+async function extractTextFast(buffer: Buffer): Promise<{ text: string; pageCount: number; pageTexts: string[] }> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pdfParse = require('pdf-parse')
-    const data = await pdfParse(pdfBuffer)
-    const count = data.numpages || 0
-    if (count > 0) {
-      console.log(`pdf-parse: ${count} pages`)
-      return count
-    }
-  } catch (error) {
-    console.error('pdf-parse page count failed:', error)
-  }
-
-  // Method 3: Manual PDF parsing
-  try {
-    const text = pdfBuffer.toString('binary')
-    const countMatch = text.match(/\/Count\s+(\d+)/g)
-    if (countMatch) {
-      const counts = countMatch.map(m => parseInt(m.replace('/Count', '').trim()))
-      const maxCount = Math.max(...counts)
-      if (maxCount > 0) {
-        console.log(`Manual parse: ${maxCount} pages`)
-        return maxCount
-      }
-    }
-  } catch (error) {
-    console.error('Manual parse failed:', error)
-  }
-
-  console.error('All page count methods failed')
-  return 1 // Fallback to 1 so processing can continue
-}
-
-// Transcribe a page image using GPT-4o vision
-async function transcribePageWithVision(imageBase64: string, pageNumber: number, language: string): Promise<PageTranscription> {
-  const prompt = `You are analyzing page ${pageNumber} of a lesson document. The document is in ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}.
-
-Transcribe and analyze this page completely:
-
-1. **Text Content**: Extract ALL text exactly as it appears, maintaining structure (headings, paragraphs, lists, etc.)
-
-2. **Visual Elements**: For any diagrams, figures, tables, charts, or images:
-   - Describe what they show in detail
-   - Explain the educational content they convey
-   - Note any labels, arrows, or annotations
-
-3. **Key Elements**: Identify important educational elements:
-   - Technical terms and their context
-   - Key concepts being taught
-   - Formulas or equations
-   - Definitions
-
-Output as JSON only (no markdown):
-{
-  "text": "Complete transcription of all text content...",
-  "elements": [
-    {"type": "diagram", "description": "Description of visual element", "position": "center of page"},
-    {"type": "term", "description": "Important term found", "position": "paragraph 2"},
-    {"type": "formula", "description": "Mathematical formula", "position": "bottom"}
-  ],
-  "hasVisualContent": true
-}`
-
-  try {
-    const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/png;base64,${imageBase64}`,
-                detail: 'high'
-              }
-            }
-          ]
-        }
-      ],
-      max_tokens: 4000,
-      temperature: 0.2,
-    })
-
-    const content = response.choices[0]?.message?.content || '{}'
-    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const data = await pdfParse(buffer)
     
-    try {
-      return JSON.parse(cleaned)
-    } catch {
-      // If JSON parsing fails, return basic structure
-      return {
-        text: content,
-        elements: [],
-        hasVisualContent: false
-      }
+    const fullText = data.text || ''
+    const pageCount = data.numpages || 1
+    
+    console.log(`Extracted ${fullText.length} chars from ${pageCount} pages`)
+    
+    // Split text roughly by page count for page-level storage
+    const avgCharsPerPage = Math.ceil(fullText.length / pageCount)
+    const pageTexts: string[] = []
+    
+    for (let i = 0; i < pageCount; i++) {
+      const start = i * avgCharsPerPage
+      const end = Math.min((i + 1) * avgCharsPerPage, fullText.length)
+      pageTexts.push(fullText.slice(start, end).trim() || `Page ${i + 1}`)
     }
+    
+    return { text: fullText, pageCount, pageTexts }
   } catch (error) {
-    console.error(`Error transcribing page ${pageNumber}:`, error)
-    return {
-      text: `(Page ${pageNumber} transcription failed)`,
-      elements: [],
-      hasVisualContent: false
-    }
+    console.error('pdf-parse error:', error)
+    throw new Error('Impossible d\'extraire le texte du PDF')
   }
 }
 
-// Reconstruct full lesson from page transcriptions
-async function reconstructLesson(pageTexts: string[], language: string): Promise<{ fullContent: string; structure: any }> {
-  const combinedPages = pageTexts
-    .map((text, i) => `=== PAGE ${i + 1} ===\n${text}`)
-    .join('\n\n')
+// STEP 2: Analyze document structure with ONE LLM call
+interface DocumentStructure {
+  checkpoints: Array<{
+    title: string
+    startPage: number
+    endPage: number
+    summary: string
+    keyPoints: string[]
+    importantTerms: Array<{ term: string; explanation: string }>
+  }>
+}
 
-  // Truncate if too long
+async function analyzeDocumentStructure(
+  text: string, 
+  pageCount: number, 
+  language: string
+): Promise<DocumentStructure> {
+  const langName = language === 'fr' ? 'French' : language === 'en' ? 'English' : language
+  
+  // Truncate text if too long (GPT-4o-mini has 128k context)
   const maxChars = 100000
-  const truncated = combinedPages.length > maxChars 
-    ? combinedPages.slice(0, maxChars) + '\n... [content truncated]'
-    : combinedPages
+  const truncatedText = text.length > maxChars ? text.slice(0, maxChars) + '\n...[truncated]' : text
 
-  const prompt = `You are reconstructing a complete lesson from page-by-page transcriptions.
-Language: ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}
+  const prompt = `Tu es un expert pédagogique. Analyse ce document de cours et structure-le en checkpoints pour un apprentissage progressif.
 
-Page transcriptions:
-${truncated}
+DOCUMENT (${pageCount} pages, en ${langName}):
+${truncatedText}
 
-Your task:
-1. Combine all pages into a coherent, flowing lesson
-2. Keep the ORIGINAL wording and structure as much as possible
-3. Where visual elements (diagrams, tables) were described, include those descriptions naturally
-4. Maintain educational flow and logical progression
-5. Note which pages contain which content
+INSTRUCTIONS:
+1. Divise le contenu en 3-8 checkpoints logiques (chapitres/sections/thèmes)
+2. Chaque checkpoint doit couvrir un concept cohérent que l'étudiant doit maîtriser
+3. Pour chaque checkpoint, identifie:
+   - Les pages concernées (start_page et end_page, 1-indexed)
+   - Un titre clair
+   - Un résumé de 2-3 phrases
+   - 3-5 points clés à retenir
+   - 3-5 termes importants avec leur explication
 
-Output as JSON only:
+RÉPONDS UNIQUEMENT EN JSON (pas de markdown):
 {
-  "fullContent": "The complete reconstructed lesson text...",
-  "structure": {
-    "overview": "Brief overview of the lesson",
-    "pageMapping": [
-      {"page": 1, "content": "brief description of page 1 content"},
-      {"page": 2, "content": "brief description of page 2 content"}
-    ]
-  }
+  "checkpoints": [
+    {
+      "title": "Titre du checkpoint",
+      "startPage": 1,
+      "endPage": 3,
+      "summary": "Résumé concis...",
+      "keyPoints": ["Point 1", "Point 2", "Point 3"],
+      "importantTerms": [
+        {"term": "Terme technique", "explanation": "Explication simple"}
+      ]
+    }
+  ]
 }`
 
+  const response = await getOpenAI().chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 8000,
+    temperature: 0.3,
+  })
+
+  const content = response.choices[0]?.message?.content || '{}'
+  
   try {
-    const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 8000,
-      temperature: 0.3,
-    })
-
-    const content = response.choices[0]?.message?.content || '{}'
     const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const parsed = JSON.parse(cleaned)
     
-    try {
-      return JSON.parse(cleaned)
-    } catch {
-      return {
-        fullContent: pageTexts.join('\n\n'),
-        structure: { overview: 'Lesson content', pageMapping: [] }
-      }
-    }
-  } catch (error) {
-    console.error('Error reconstructing lesson:', error)
-    return {
-      fullContent: pageTexts.join('\n\n'),
-      structure: { overview: 'Lesson content', pageMapping: [] }
-    }
-  }
-}
-
-// Create checkpoints from lesson content
-async function createCheckpoints(fullContent: string, totalPages: number, language: string): Promise<Checkpoint[]> {
-  const prompt = `You are a teacher creating study checkpoints for a lesson.
-Language: ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}
-Total pages: ${totalPages}
-
-Lesson content:
-${fullContent.slice(0, 50000)}
-
-Create checkpoints that divide this lesson into logical study units:
-
-1. **Topics**: Main subject areas (3-6 typically)
-2. **Subtopics**: Smaller concepts within topics (optional, only if topic is large)
-3. Each checkpoint should:
-   - Cover a coherent concept students should master before moving on
-   - Map to specific page ranges
-   - Be granular enough for effective quiz testing (not too broad)
-
-Output as JSON array only:
-[
-  {
-    "title": "Checkpoint title",
-    "type": "topic",
-    "start_page": 1,
-    "end_page": 3,
-    "summary": "Brief summary of what this checkpoint covers"
-  },
-  {
-    "title": "Subtopic within previous topic",
-    "type": "subtopic", 
-    "start_page": 2,
-    "end_page": 3,
-    "summary": "Brief summary...",
-    "parent_index": 0
-  }
-]`
-
-  try {
-    const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 4000,
-      temperature: 0.3,
-    })
-
-    const content = response.choices[0]?.message?.content || '[]'
-    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    
-    try {
-      const checkpoints = JSON.parse(cleaned)
-      // Validate page ranges
-      return checkpoints.map((cp: any) => ({
+    // Validate and fix page numbers
+    if (parsed.checkpoints) {
+      parsed.checkpoints = parsed.checkpoints.map((cp: any, idx: number) => ({
         ...cp,
-        start_page: Math.max(1, Math.min(cp.start_page, totalPages)),
-        end_page: Math.max(1, Math.min(cp.end_page, totalPages))
+        startPage: Math.max(1, Math.min(cp.startPage || 1, pageCount)),
+        endPage: Math.max(1, Math.min(cp.endPage || pageCount, pageCount)),
+        keyPoints: cp.keyPoints || [],
+        importantTerms: cp.importantTerms || []
       }))
-    } catch {
-      // Fallback: create a single checkpoint for entire document
-      return [{
-        title: 'Complete Lesson',
-        type: 'topic' as const,
-        start_page: 1,
-        end_page: totalPages,
-        summary: 'Full lesson content'
+    }
+    
+    return parsed
+  } catch (error) {
+    console.error('Failed to parse structure:', content)
+    // Return default structure
+    return {
+      checkpoints: [{
+        title: 'Contenu complet',
+        startPage: 1,
+        endPage: pageCount,
+        summary: 'Document de cours',
+        keyPoints: ['Étudier le contenu'],
+        importantTerms: []
       }]
     }
-  } catch (error) {
-    console.error('Error creating checkpoints:', error)
-    return [{
-      title: 'Complete Lesson',
-      type: 'topic' as const,
-      start_page: 1,
-      end_page: totalPages,
-      summary: 'Full lesson content'
-    }]
   }
 }
 
-// Generate MCQ questions for a checkpoint
-async function generateCheckpointQuestions(
-  checkpointTitle: string,
-  checkpointSummary: string,
-  relevantContent: string,
-  language: string,
-  questionCount: number = 10
-): Promise<Question[]> {
-  const prompt = `You are creating quiz questions for a study checkpoint.
-
-Checkpoint: ${checkpointTitle}
-Summary: ${checkpointSummary}
-Language: ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}
-
-Content to test:
-${relevantContent.slice(0, 15000)}
-
-Create ${questionCount} multiple-choice questions that:
-1. Test understanding, not just memorization
-2. Cover the key concepts of this checkpoint
-3. Have exactly 4 choices each
-4. Include plausible distractors (wrong but believable answers)
-5. Have clear explanations
-
-Output as JSON array only:
-[
-  {
-    "question": "Question text?",
-    "choices": ["Choice A", "Choice B", "Choice C", "Choice D"],
-    "correct_index": 0,
-    "explanation": "Why Choice A is correct..."
-  }
-]`
-
-  try {
-    const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 4000,
-      temperature: 0.5,
-    })
-
-    const content = response.choices[0]?.message?.content || '[]'
-    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    
-    try {
-      return JSON.parse(cleaned)
-    } catch {
-      return []
-    }
-  } catch (error) {
-    console.error('Error generating questions:', error)
-    return []
-  }
+// STEP 3: Generate ALL questions in ONE batch call
+interface Question {
+  question: string
+  choices: string[]
+  correctIndex: number
+  explanation: string
+  checkpointIndex: number
 }
 
-// Analyze page for highlightable elements
-async function analyzePageElements(pageText: string, pageNumber: number, language: string): Promise<PageElement[]> {
-  const prompt = `Analyze this lesson page and identify key elements a student should understand.
-Page ${pageNumber}
-Language: ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}
-
-Page content:
-${pageText.slice(0, 8000)}
-
-Identify 5-15 key elements:
-- **Terms**: Important vocabulary words
-- **Concepts**: Key ideas being taught
-- **Formulas**: Mathematical or scientific formulas
-- **Definitions**: Formal definitions
-- **Diagrams**: References to visual elements
-
-For each, provide a brief student-friendly explanation.
-
-Output as JSON array only:
-[
-  {
-    "element_text": "The exact term/phrase as it appears",
-    "element_type": "term",
-    "explanation": "Brief, clear explanation for students",
-    "position_hint": "Optional: where on page"
-  }
-]`
-
-  try {
-    const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 2000,
-      temperature: 0.3,
-    })
-
-    const content = response.choices[0]?.message?.content || '[]'
-    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    
-    try {
-      return JSON.parse(cleaned)
-    } catch {
-      return []
-    }
-  } catch (error) {
-    console.error(`Error analyzing page ${pageNumber} elements:`, error)
-    return []
-  }
-}
-
-// Parse MCQ from uploaded document
-async function parseMcqFromText(text: string): Promise<Question[]> {
-  const prompt = `Extract multiple choice questions from this text.
-
-Text:
-${text.slice(0, 20000)}
-
-For each question found, extract:
-- The question text
-- All choices (should be 4 if possible)
-- The correct answer index (0-based)
-- An explanation if provided, or generate one
-
-Respond with a JSON array only:
-[
-  {
-    "question": "Question text",
-    "choices": ["A", "B", "C", "D"],
-    "correct_index": 0,
-    "explanation": "Why this is correct"
-  }
-]
-
-If no valid MCQs are found, return an empty array [].`
-
-  try {
-    const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 4000,
-      temperature: 0.3,
-    })
-
-    const content = response.choices[0]?.message?.content || '[]'
-    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    
-    try {
-      return JSON.parse(cleaned)
-    } catch {
-      return []
-    }
-  } catch (error) {
-    console.error('Error parsing MCQ:', error)
-    return []
-  }
-}
-
-// Match uploaded questions to checkpoints
-async function matchQuestionsToCheckpoints(
-  questions: Question[],
-  checkpoints: Array<{ id: string; title: string; summary: string }>,
+async function generateAllQuestions(
+  checkpoints: DocumentStructure['checkpoints'],
+  fullText: string,
   language: string
-): Promise<Map<string, Question[]>> {
-  const result = new Map<string, Question[]>()
-  checkpoints.forEach(cp => result.set(cp.id, []))
+): Promise<Question[]> {
+  const langName = language === 'fr' ? 'French' : language === 'en' ? 'English' : language
+  
+  // Build checkpoint summaries for context
+  const checkpointSummaries = checkpoints.map((cp, idx) => 
+    `Checkpoint ${idx + 1}: "${cp.title}" - ${cp.summary} (Points: ${cp.keyPoints.join(', ')})`
+  ).join('\n')
 
-  if (questions.length === 0 || checkpoints.length === 0) {
-    return result
-  }
+  const prompt = `Tu es un expert en création de QCM pédagogiques. Génère des questions pour tester la compréhension d'un cours.
 
-  const checkpointsInfo = checkpoints.map(cp => `ID: ${cp.id}\nTitle: ${cp.title}\nSummary: ${cp.summary}`).join('\n\n')
-  const questionsInfo = questions.map((q, i) => `${i}: ${q.question}`).join('\n')
+CHECKPOINTS DU COURS:
+${checkpointSummaries}
 
-  const prompt = `Match each question to the most relevant checkpoint.
+CONTENU DU COURS (${langName}):
+${fullText.slice(0, 50000)}
 
-Checkpoints:
-${checkpointsInfo}
+INSTRUCTIONS:
+- Génère 8-10 questions par checkpoint
+- Chaque question a exactement 4 choix
+- Un seul choix est correct (index 0-3)
+- Les questions doivent tester la COMPRÉHENSION, pas la mémorisation
+- Inclus des explications claires
+- Questions en ${langName}
 
-Questions:
-${questionsInfo}
-
-Respond with a JSON object mapping question index to checkpoint ID:
-{"0": "checkpoint-id-1", "1": "checkpoint-id-2", ...}`
-
-  try {
-    const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 1000,
-      temperature: 0.2,
-    })
-
-    const content = response.choices[0]?.message?.content || '{}'
-    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    
-    try {
-      const mapping = JSON.parse(cleaned)
-      
-      Object.entries(mapping).forEach(([qIndex, checkpointId]) => {
-        const idx = parseInt(qIndex)
-        if (idx >= 0 && idx < questions.length && result.has(checkpointId as string)) {
-          result.get(checkpointId as string)!.push(questions[idx])
-        }
-      })
-    } catch {
-      // If matching fails, distribute questions evenly
-      questions.forEach((q, i) => {
-        const cpIndex = i % checkpoints.length
-        const cpId = checkpoints[cpIndex].id
-        result.get(cpId)!.push(q)
-      })
+RÉPONDS UNIQUEMENT EN JSON (pas de markdown):
+{
+  "questions": [
+    {
+      "question": "Question?",
+      "choices": ["Choix A", "Choix B", "Choix C", "Choix D"],
+      "correctIndex": 0,
+      "explanation": "Explication de la bonne réponse",
+      "checkpointIndex": 0
     }
-  } catch {
-    // Distribute evenly on error
-    questions.forEach((q, i) => {
-      const cpIndex = i % checkpoints.length
-      const cpId = checkpoints[cpIndex].id
-      result.get(cpId)!.push(q)
-    })
-  }
+  ]
+}`
 
-  return result
+  const response = await getOpenAI().chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 16000,
+    temperature: 0.5,
+  })
+
+  const content = response.choices[0]?.message?.content || '{}'
+  
+  try {
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const parsed = JSON.parse(cleaned)
+    return parsed.questions || []
+  } catch (error) {
+    console.error('Failed to parse questions:', content)
+    return []
+  }
 }
 
 // Main processing function
@@ -699,6 +285,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+  const startTime = Date.now()
   
   try {
     const supabase = await createAuthClient()
@@ -717,559 +304,288 @@ export async function POST(
       .single()
 
     if (lessonError || !lesson) {
-      return NextResponse.json({ error: 'Interactive lesson not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
     }
 
     if (lesson.status === 'processing') {
-      return NextResponse.json({ error: 'Lesson is already being processed' }, { status: 400 })
+      return NextResponse.json({ error: 'Already processing' }, { status: 400 })
     }
 
     if (lesson.status === 'ready') {
-      return NextResponse.json({ error: 'Lesson has already been processed' }, { status: 400 })
+      return NextResponse.json({ error: 'Already processed' }, { status: 400 })
     }
 
     const documents = lesson.interactive_lesson_documents || []
     const lessonDocs = documents.filter((d: any) => d.category === 'lesson')
     const mcqDocs = documents.filter((d: any) => d.category === 'mcq')
 
-    // Determine mode
     const mode = lessonDocs.length > 0 ? 'document_based' : 'mcq_only'
 
     if (mode === 'mcq_only' && mcqDocs.length === 0) {
-      return NextResponse.json(
-        { error: 'No documents uploaded. Please upload lesson documents or MCQ files.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'No documents uploaded' }, { status: 400 })
     }
 
-    // Update status to processing
+    // Start processing
     await getSupabaseAdmin()
       .from('interactive_lessons')
       .update({ 
         status: 'processing', 
         mode,
-        processing_step: PROCESSING_STEPS.INITIALIZING,
-        processing_progress: 0,
-        processing_total: 100,
-        processing_message: 'Initialisation...'
+        processing_started_at: new Date().toISOString(),
+        processing_step: 'extracting',
+        processing_percent: 0,
+        processing_message: 'Démarrage...',
+        error_message: null
       })
       .eq('id', id)
 
     try {
-      // ===== DOCUMENT-BASED MODE =====
       if (mode === 'document_based') {
-        const allPageTexts: string[] = []
-        let totalPageCount = 0
-        let processedPages = 0
-
-        // Process each lesson document - download first to get accurate page counts
-        const documentBuffers: Map<string, { buffer: Buffer; pageCount: number }> = new Map()
+        // ========== STEP 1: EXTRACT TEXT (~5s) ==========
+        await updateProgress(id, 'extracting', 'Extraction du texte...', 5, 90)
         
-        await updateProgress(id, PROCESSING_STEPS.CONVERTING_PAGES, 0, lessonDocs.length, 'Analyse des documents...')
+        let fullText = ''
+        let totalPages = 0
+        const allPageTexts: string[] = []
 
-        for (let docIdx = 0; docIdx < lessonDocs.length; docIdx++) {
-          const doc = lessonDocs[docIdx]
-          console.log(`Downloading document: ${doc.name}`)
-          
-          await updateProgress(
-            id, 
-            PROCESSING_STEPS.CONVERTING_PAGES, 
-            docIdx, 
-            lessonDocs.length, 
-            `Téléchargement de ${doc.name}...`
-          )
-          
-          // Download file
+        for (const doc of lessonDocs) {
           const { data: fileData, error: downloadError } = await getSupabaseAdmin().storage
             .from('interactive-lessons')
             .download(doc.file_path)
 
           if (downloadError || !fileData) {
-            console.error('Error downloading file:', downloadError)
+            console.error('Download error:', downloadError)
             continue
           }
 
           const buffer = Buffer.from(await fileData.arrayBuffer())
+          const { text, pageCount, pageTexts } = await extractTextFast(buffer)
           
-          // Get page count - this is the crucial step
-          const pageCount = await getPdfPageCount(buffer)
-          console.log(`Document ${doc.name} has ${pageCount} pages`)
-          
-          if (pageCount === 0) {
-            console.error(`WARNING: Could not detect pages in ${doc.name}`)
-          }
-          
-          // Store buffer and page count for later processing
-          documentBuffers.set(doc.id, { buffer, pageCount })
-          totalPageCount += pageCount
-          
-          // Update document page count in DB
+          fullText += text + '\n\n'
+          totalPages += pageCount
+          allPageTexts.push(...pageTexts)
+
+          // Update document page count
           await getSupabaseAdmin()
             .from('interactive_lesson_documents')
             .update({ page_count: pageCount })
             .eq('id', doc.id)
-        }
-
-        console.log(`Total pages across all documents: ${totalPageCount}`)
-
-        // If no pages detected at all, throw an error
-        if (totalPageCount === 0) {
-          throw new Error('Impossible de détecter les pages dans les documents PDF. Veuillez vérifier que les fichiers sont des PDFs valides.')
-        }
-
-        // Now process each page
-        for (const doc of lessonDocs) {
-          const docData = documentBuffers.get(doc.id)
-          if (!docData) continue
-
-          const { buffer, pageCount } = docData
-          console.log(`Processing document: ${doc.name} (${pageCount} pages)`)
-
-          // First try to extract text using pdf-parse as fallback
-          let pdfTextPages: string[] = []
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const pdfParse = require('pdf-parse')
-            const pdfData = await pdfParse(buffer)
-            // Split text roughly by page count
-            const fullText = pdfData.text || ''
-            const avgCharsPerPage = Math.ceil(fullText.length / pageCount)
-            for (let i = 0; i < pageCount; i++) {
-              const start = i * avgCharsPerPage
-              const end = Math.min((i + 1) * avgCharsPerPage, fullText.length)
-              pdfTextPages.push(fullText.slice(start, end).trim() || `Page ${i + 1}`)
-            }
-            console.log(`Extracted text fallback for ${pageCount} pages`)
-          } catch (err) {
-            console.error('pdf-parse fallback failed:', err)
-          }
-
-          // STEP 1: Convert each page to image and transcribe
-          for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-            console.log(`Processing page ${pageNum}/${pageCount}`)
             
-            await updateProgress(
-              id, 
-              PROCESSING_STEPS.TRANSCRIBING, 
-              processedPages + pageNum, 
-              totalPageCount, 
-              `Transcription de la page ${pageNum}/${pageCount}...`
-            )
-            
-            // Try to convert to image (with timeout)
-            const imageResult = await convertPdfPageToImage(buffer, pageNum)
-            
-            let transcription: PageTranscription
-            
-            if (imageResult) {
-              // Upload image to storage
-              const imagePath = `${user.id}/${id}/pages/${doc.id}_page_${pageNum}.png`
-              
-              try {
-                const { error: uploadError } = await getSupabaseAdmin().storage
-                  .from('interactive-lessons')
-                  .upload(imagePath, imageResult.buffer, {
-                    contentType: 'image/png',
-                    upsert: true
-                  })
-
-                if (!uploadError) {
-                  // Store image reference
-                  await getSupabaseAdmin()
-                    .from('interactive_lesson_page_images')
-                    .upsert({
-                      document_id: doc.id,
-                      page_number: pageNum,
-                      image_path: imagePath,
-                      width: imageResult.width,
-                      height: imageResult.height
-                    }, { onConflict: 'document_id,page_number' })
-                }
-              } catch (err) {
-                console.error(`Failed to upload image for page ${pageNum}:`, err)
-              }
-
-              // STEP 2: Transcribe with vision (with timeout)
-              const imageBase64 = imageResult.buffer.toString('base64')
-              transcription = await withTimeout(
-                transcribePageWithVision(imageBase64, pageNum, lesson.language),
-                60000, // 60 second timeout per page
-                { 
-                  text: pdfTextPages[pageNum - 1] || `Page ${pageNum}`, 
-                  elements: [], 
-                  hasVisualContent: false 
-                }
-              )
-            } else {
-              // Fallback: use text extraction only
-              console.log(`Using text fallback for page ${pageNum}`)
-              transcription = {
-                text: pdfTextPages[pageNum - 1] || `Page ${pageNum} (text extraction failed)`,
-                elements: [],
-                hasVisualContent: false
-              }
-            }
-              
-            // Store transcription (works for both vision and fallback)
-            const { data: pageTextData } = await getSupabaseAdmin()
+          // Store page texts
+          for (let i = 0; i < pageTexts.length; i++) {
+            await getSupabaseAdmin()
               .from('interactive_lesson_page_texts')
               .upsert({
                 document_id: doc.id,
-                page_number: pageNum,
-                text_content: transcription.text,
-                transcription_type: imageResult ? 'vision' : 'text',
-                elements_description: JSON.stringify(transcription.elements),
-                has_visual_content: transcription.hasVisualContent
+                page_number: i + 1,
+                text_content: pageTexts[i],
+                transcription_type: 'text'
               }, { onConflict: 'document_id,page_number' })
-              .select()
-              .single()
-
-            allPageTexts.push(transcription.text)
-
-            // Analyze elements for highlights (skip if text fallback to save time)
-            if (pageTextData && imageResult) {
-              try {
-                const elements = await withTimeout(
-                  analyzePageElements(transcription.text, pageNum, lesson.language),
-                  30000, // 30 second timeout
-                  []
-                )
-                
-                for (let i = 0; i < elements.length; i++) {
-                  const elem = elements[i]
-                  await getSupabaseAdmin()
-                    .from('interactive_lesson_page_elements')
-                    .insert({
-                      page_text_id: pageTextData.id,
-                      element_type: elem.element_type,
-                      element_text: elem.element_text,
-                      explanation: elem.explanation,
-                      position_hint: elem.position_hint,
-                      element_order: i
-                    })
-                }
-              } catch (err) {
-                console.error(`Element analysis failed for page ${pageNum}:`, err)
-              }
-            }
           }
-          
-          processedPages += pageCount
         }
 
-        // STEP 3: Reconstruct full lesson
-        console.log('Reconstructing lesson...')
-        await updateProgress(id, PROCESSING_STEPS.RECONSTRUCTING, 0, 1, 'Reconstruction de la leçon complète...')
-        const reconstruction = await reconstructLesson(allPageTexts, lesson.language)
+        if (!fullText.trim()) {
+          throw new Error('Aucun texte extrait des documents')
+        }
+
+        await updateProgress(id, 'extracting', `${totalPages} pages extraites`, 15, 75)
+
+        // ========== STEP 2: ANALYZE STRUCTURE (~30s) ==========
+        await updateProgress(id, 'analyzing', 'Analyse de la structure...', 20, 60)
         
-        await getSupabaseAdmin()
-          .from('interactive_lesson_reconstructions')
-          .upsert({
-            interactive_lesson_id: id,
-            full_content: reconstruction.fullContent,
-            structure_json: reconstruction.structure
-          }, { onConflict: 'interactive_lesson_id' })
-
-        // STEP 4: Create checkpoints
-        console.log('Creating checkpoints...')
-        await updateProgress(id, PROCESSING_STEPS.CHECKPOINTING, 0, 1, 'Création des checkpoints...')
-        const checkpointData = await createCheckpoints(
-          reconstruction.fullContent,
-          totalPageCount,
-          lesson.language
-        )
-
-        // Store checkpoints and get their IDs
-        const createdCheckpoints: Array<{ id: string; title: string; summary: string; start_page: number; end_page: number }> = []
-        const checkpointIdMap = new Map<number, string>() // index -> id
-
-        for (let i = 0; i < checkpointData.length; i++) {
-          const cp = checkpointData[i]
-          
-          // Resolve parent_id if it's a subtopic
-          let parentId = null
-          if (cp.parent_index !== undefined && checkpointIdMap.has(cp.parent_index)) {
-            parentId = checkpointIdMap.get(cp.parent_index)
-          }
-
-          const { data: created, error: cpError } = await getSupabaseAdmin()
-            .from('interactive_lesson_checkpoints')
-            .insert({
-              interactive_lesson_id: id,
-              parent_id: parentId,
-              checkpoint_order: i + 1,
-              title: cp.title,
-              checkpoint_type: cp.type,
-              start_page: cp.start_page,
-              end_page: cp.end_page,
-              summary: cp.summary,
-              pass_threshold: 70
-            })
-            .select()
-            .single()
-
-          if (!cpError && created) {
-            checkpointIdMap.set(i, created.id)
-            createdCheckpoints.push({
-              id: created.id,
-              title: cp.title,
-              summary: cp.summary,
-              start_page: cp.start_page,
-              end_page: cp.end_page
-            })
-          }
-        }
-
-        // STEP 5: Handle MCQ
-        await updateProgress(id, PROCESSING_STEPS.GENERATING_MCQ, 0, createdCheckpoints.length, 'Préparation des questions...')
-        let uploadedQuestions: Question[] = []
-
-        // Parse MCQ from uploaded documents if any
-        for (const mcqDoc of mcqDocs) {
-          const { data: fileData } = await getSupabaseAdmin().storage
-            .from('interactive-lessons')
-            .download(mcqDoc.file_path)
-
-          if (fileData) {
-            const buffer = Buffer.from(await fileData.arrayBuffer())
-            let text = ''
-            
-            // For PDF MCQs, we need to extract text
-            if (mcqDoc.file_type === 'pdf') {
-              const pageCount = await getPdfPageCount(buffer)
-              for (let p = 1; p <= pageCount; p++) {
-                const img = await convertPdfPageToImage(buffer, p)
-                if (img) {
-                  const trans = await transcribePageWithVision(img.buffer.toString('base64'), p, lesson.language)
-                  text += trans.text + '\n'
-                }
-              }
-            } else {
-              text = buffer.toString('utf-8')
-            }
-
-            const parsedQuestions = await parseMcqFromText(text)
-            uploadedQuestions.push(...parsedQuestions)
-          }
-        }
-
-        // Assign questions to checkpoints
-        if (uploadedQuestions.length > 0) {
-          console.log(`Using ${uploadedQuestions.length} uploaded questions`)
-          
-          const questionsByCheckpoint = await matchQuestionsToCheckpoints(
-            uploadedQuestions,
-            createdCheckpoints,
-            lesson.language
-          )
-
-          // Store matched questions
-          for (const cp of createdCheckpoints) {
-            const cpQuestions = questionsByCheckpoint.get(cp.id) || []
-            
-            for (let i = 0; i < cpQuestions.length; i++) {
-              const q = cpQuestions[i]
-              await getSupabaseAdmin()
-                .from('interactive_lesson_questions')
-                .insert({
-                  checkpoint_id: cp.id,
-                  question: q.question,
-                  choices: q.choices,
-                  correct_index: q.correct_index,
-                  explanation: q.explanation,
-                  question_order: i + 1
-                })
-            }
-          }
-        } else {
-          // Generate questions for each checkpoint
-          console.log('Generating questions for each checkpoint...')
-          
-          for (let cpIdx = 0; cpIdx < createdCheckpoints.length; cpIdx++) {
-            const cp = createdCheckpoints[cpIdx]
-            await updateProgress(
-              id, 
-              PROCESSING_STEPS.GENERATING_MCQ, 
-              cpIdx + 1, 
-              createdCheckpoints.length, 
-              `Génération des questions pour "${cp.title}"...`
-            )
-            
-            // Get relevant page content for this checkpoint
-            const relevantContent = allPageTexts
-              .slice(cp.start_page - 1, cp.end_page)
-              .join('\n\n')
-
-            const questions = await generateCheckpointQuestions(
-              cp.title,
-              cp.summary,
-              relevantContent,
-              lesson.language,
-              10
-            )
-
-            for (let i = 0; i < questions.length; i++) {
-              const q = questions[i]
-              await getSupabaseAdmin()
-                .from('interactive_lesson_questions')
-                .insert({
-                  checkpoint_id: cp.id,
-                  question: q.question,
-                  choices: q.choices,
-                  correct_index: q.correct_index,
-                  explanation: q.explanation,
-                  question_order: i + 1
-                })
-            }
-          }
-        }
-
-        // Also create legacy sections for backwards compatibility
-        for (const cp of createdCheckpoints) {
-          if (cp.title) { // Only top-level checkpoints as sections
-            await getSupabaseAdmin()
-              .from('interactive_lesson_sections')
-              .insert({
-                interactive_lesson_id: id,
-                document_id: lessonDocs[0]?.id,
-                section_order: createdCheckpoints.indexOf(cp) + 1,
-                title: cp.title,
-                start_page: cp.start_page,
-                end_page: cp.end_page,
-                summary: cp.summary,
-                key_points: [],
-                pass_threshold: 70
-              })
-          }
-        }
-      }
-      // ===== MCQ-ONLY MODE =====
-      else {
-        // Parse all MCQ documents
-        let allQuestions: Question[] = []
+        const structure = await analyzeDocumentStructure(fullText, totalPages, lesson.language)
         
-        for (const mcqDoc of mcqDocs) {
-          const { data: fileData } = await getSupabaseAdmin().storage
-            .from('interactive-lessons')
-            .download(mcqDoc.file_path)
+        console.log(`Found ${structure.checkpoints.length} checkpoints`)
+        await updateProgress(id, 'analyzing', `${structure.checkpoints.length} checkpoints identifiés`, 40, 45)
 
-          if (fileData) {
-            const buffer = Buffer.from(await fileData.arrayBuffer())
-            let text = ''
-            
-            if (mcqDoc.file_type === 'pdf') {
-              const pageCount = await getPdfPageCount(buffer)
-              for (let p = 1; p <= pageCount; p++) {
-                const img = await convertPdfPageToImage(buffer, p)
-                if (img) {
-                  const trans = await transcribePageWithVision(img.buffer.toString('base64'), p, lesson.language)
-                  text += trans.text + '\n'
-                }
-              }
-            } else {
-              text = buffer.toString('utf-8')
-            }
+        // ========== STEP 3: CREATE CHECKPOINTS (~10s) ==========
+        await updateProgress(id, 'checkpointing', 'Création des checkpoints...', 45, 40)
 
-            const parsedQuestions = await parseMcqFromText(text)
-            allQuestions.push(...parsedQuestions)
-          }
-        }
+        const createdCheckpoints: Array<{ id: string; index: number }> = []
 
-        if (allQuestions.length === 0) {
-          throw new Error('No valid MCQ questions found in uploaded documents')
-        }
-
-        // Group questions into checkpoints (5-10 questions per checkpoint)
-        const questionsPerCheckpoint = 10
-        const checkpointCount = Math.ceil(allQuestions.length / questionsPerCheckpoint)
-
-        for (let i = 0; i < checkpointCount; i++) {
-          const cpQuestions = allQuestions.slice(
-            i * questionsPerCheckpoint,
-            (i + 1) * questionsPerCheckpoint
-          )
-
-          const cpTitle = `Section ${i + 1}`
-
+        for (let i = 0; i < structure.checkpoints.length; i++) {
+          const cp = structure.checkpoints[i]
+          
           // Create checkpoint
           const { data: checkpoint } = await getSupabaseAdmin()
             .from('interactive_lesson_checkpoints')
             .insert({
               interactive_lesson_id: id,
               checkpoint_order: i + 1,
-              title: cpTitle,
+              title: cp.title,
               checkpoint_type: 'topic',
-              start_page: 1,
-              end_page: 1,
-              summary: `This section covers ${cpQuestions.length} questions.`,
+              start_page: cp.startPage,
+              end_page: cp.endPage,
+              summary: cp.summary,
               pass_threshold: 70
             })
             .select()
             .single()
 
           if (checkpoint) {
-            // Store questions
-            for (let j = 0; j < cpQuestions.length; j++) {
-              const q = cpQuestions[j]
+            createdCheckpoints.push({ id: checkpoint.id, index: i })
+            
+            // Also create legacy section for backwards compatibility
+            await getSupabaseAdmin()
+              .from('interactive_lesson_sections')
+              .insert({
+                interactive_lesson_id: id,
+                section_order: i + 1,
+                title: cp.title,
+                start_page: cp.startPage,
+                end_page: cp.endPage,
+                summary: cp.summary,
+                key_points: cp.keyPoints,
+                pass_threshold: 70
+              })
+
+            // Store important terms as page elements
+            for (const term of cp.importantTerms || []) {
+              // Find which page this term might be on
+              const pageIdx = Math.min(cp.startPage - 1, allPageTexts.length - 1)
+              
+              // Get or create page text record
+              const { data: pageText } = await getSupabaseAdmin()
+                .from('interactive_lesson_page_texts')
+                .select('id')
+                .eq('document_id', lessonDocs[0]?.id)
+                .eq('page_number', pageIdx + 1)
+                .single()
+
+              if (pageText) {
+                await getSupabaseAdmin()
+                  .from('interactive_lesson_page_elements')
+                  .insert({
+                    page_text_id: pageText.id,
+                    element_type: 'term',
+                    element_text: term.term,
+                    explanation: term.explanation,
+                    element_order: 0
+                  })
+              }
+            }
+          }
+        }
+
+        await updateProgress(id, 'checkpointing', `${createdCheckpoints.length} checkpoints créés`, 55, 30)
+
+        // ========== STEP 4: GENERATE QUESTIONS (~30s) ==========
+        await updateProgress(id, 'questions', 'Génération des questions...', 60, 25)
+
+        const questions = await generateAllQuestions(structure.checkpoints, fullText, lesson.language)
+        
+        console.log(`Generated ${questions.length} questions`)
+        await updateProgress(id, 'questions', `${questions.length} questions générées`, 85, 10)
+
+        // Store questions
+        for (const q of questions) {
+          const checkpoint = createdCheckpoints.find(c => c.index === q.checkpointIndex)
+          if (checkpoint) {
+            await getSupabaseAdmin()
+              .from('interactive_lesson_questions')
+              .insert({
+                checkpoint_id: checkpoint.id,
+                question: q.question,
+                choices: q.choices,
+                correct_index: q.correctIndex,
+                explanation: q.explanation,
+                question_order: 0
+              })
+          }
+        }
+
+        // Store reconstruction for reference
+        await getSupabaseAdmin()
+          .from('interactive_lesson_reconstructions')
+          .upsert({
+            interactive_lesson_id: id,
+            full_content: fullText.slice(0, 500000), // Limit size
+            structure_json: structure
+          }, { onConflict: 'interactive_lesson_id' })
+
+      } else {
+        // MCQ-only mode - simpler flow
+        await updateProgress(id, 'extracting', 'Extraction des questions...', 10, 60)
+        
+        let mcqText = ''
+        for (const doc of mcqDocs) {
+          const { data: fileData } = await getSupabaseAdmin().storage
+            .from('interactive-lessons')
+            .download(doc.file_path)
+
+          if (fileData) {
+            const buffer = Buffer.from(await fileData.arrayBuffer())
+            const { text } = await extractTextFast(buffer)
+            mcqText += text + '\n'
+          }
+        }
+
+        await updateProgress(id, 'analyzing', 'Analyse des questions...', 40, 30)
+        
+        // Parse MCQ from text
+        const questions = await parseMcqFromText(mcqText, lesson.language)
+        
+        await updateProgress(id, 'checkpointing', 'Organisation...', 70, 15)
+        
+        // Group into sections
+        const questionsPerSection = 10
+        const sectionCount = Math.ceil(questions.length / questionsPerSection)
+
+        for (let i = 0; i < sectionCount; i++) {
+          const sectionQuestions = questions.slice(i * questionsPerSection, (i + 1) * questionsPerSection)
+          
+          const { data: checkpoint } = await getSupabaseAdmin()
+            .from('interactive_lesson_checkpoints')
+            .insert({
+              interactive_lesson_id: id,
+              checkpoint_order: i + 1,
+              title: `Section ${i + 1}`,
+              checkpoint_type: 'topic',
+              start_page: 1,
+              end_page: 1,
+              summary: `${sectionQuestions.length} questions`,
+              pass_threshold: 70
+            })
+            .select()
+            .single()
+
+          if (checkpoint) {
+            for (let j = 0; j < sectionQuestions.length; j++) {
+              const q = sectionQuestions[j]
               await getSupabaseAdmin()
                 .from('interactive_lesson_questions')
                 .insert({
                   checkpoint_id: checkpoint.id,
                   question: q.question,
                   choices: q.choices,
-                  correct_index: q.correct_index,
+                  correct_index: q.correctIndex,
                   explanation: q.explanation,
                   question_order: j + 1
                 })
             }
           }
-
-          // Also create legacy section
-          await getSupabaseAdmin()
-            .from('interactive_lesson_sections')
-            .insert({
-              interactive_lesson_id: id,
-              section_order: i + 1,
-              title: cpTitle,
-              start_page: 1,
-              end_page: 1,
-              summary: `This section covers ${cpQuestions.length} questions.`,
-              key_points: cpQuestions.slice(0, 3).map(q => q.question.slice(0, 50) + '...'),
-              pass_threshold: 70
-            })
         }
       }
 
-      // Finalize
-      await updateProgress(id, PROCESSING_STEPS.FINALIZING, 1, 1, 'Finalisation...')
-
-      // Update status to ready
-      await getSupabaseAdmin()
-        .from('interactive_lessons')
-        .update({ 
-          status: 'ready', 
-          error_message: null,
-          processing_step: 'complete',
-          processing_progress: 100,
-          processing_total: 100,
-          processing_message: 'Terminé !'
-        })
-        .eq('id', id)
+      // ========== COMPLETE ==========
+      const totalTime = Math.round((Date.now() - startTime) / 1000)
+      await updateProgress(id, 'complete', `Terminé en ${totalTime}s !`, 100, 0)
 
       return NextResponse.json({ 
         success: true,
-        message: 'Processing completed successfully'
+        duration: totalTime
       })
 
     } catch (processingError: any) {
       console.error('Processing error:', processingError)
       
-      // Update status to error
       await getSupabaseAdmin()
         .from('interactive_lessons')
         .update({ 
           status: 'error',
-          error_message: processingError.message || 'Processing failed'
+          error_message: processingError.message || 'Erreur de traitement',
+          processing_step: 'error',
+          processing_percent: 0
         })
         .eq('id', id)
 
@@ -1285,5 +601,41 @@ export async function POST(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     )
+  }
+}
+
+// Helper: Parse MCQ from text
+async function parseMcqFromText(text: string, language: string): Promise<Array<{ question: string; choices: string[]; correctIndex: number; explanation: string }>> {
+  const prompt = `Extrais les QCM de ce texte. Pour chaque question, identifie les choix et la bonne réponse.
+
+Texte:
+${text.slice(0, 30000)}
+
+RÉPONDS EN JSON:
+{
+  "questions": [
+    {
+      "question": "Question?",
+      "choices": ["A", "B", "C", "D"],
+      "correctIndex": 0,
+      "explanation": "Pourquoi"
+    }
+  ]
+}`
+
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 8000,
+      temperature: 0.3,
+    })
+
+    const content = response.choices[0]?.message?.content || '{}'
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const parsed = JSON.parse(cleaned)
+    return parsed.questions || []
+  } catch {
+    return []
   }
 }

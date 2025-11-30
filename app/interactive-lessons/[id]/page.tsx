@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { 
   FiPlay, FiLoader, FiCheckCircle, FiAlertCircle, FiFileText, 
   FiBook, FiRefreshCw, FiTrash2, FiArrowLeft, FiList,
-  FiImage, FiCpu, FiEdit3, FiHelpCircle
+  FiZap, FiCpu, FiHelpCircle, FiClock
 } from 'react-icons/fi'
 
 interface Document {
@@ -42,28 +42,35 @@ interface InteractiveLesson {
   processing_progress: number | null
   processing_total: number | null
   processing_message: string | null
+  processing_percent: number | null
+  processing_started_at: string | null
+  processing_eta_seconds: number | null
   created_at: string
   interactive_lesson_documents: Document[]
   interactive_lesson_sections: Section[]
 }
 
-// Processing steps configuration
+// Processing steps - simplified to match new backend
 const PROCESSING_STEPS = [
-  { key: 'initializing', label: 'Initialisation', icon: FiLoader },
-  { key: 'converting_pages', label: 'Conversion des pages', icon: FiImage },
-  { key: 'transcribing', label: 'Transcription IA', icon: FiCpu },
-  { key: 'reconstructing', label: 'Reconstruction du cours', icon: FiEdit3 },
-  { key: 'checkpointing', label: 'Création des checkpoints', icon: FiList },
-  { key: 'generating_mcq', label: 'Génération des questions', icon: FiHelpCircle },
-  { key: 'analyzing_elements', label: 'Analyse des éléments', icon: FiFileText },
-  { key: 'finalizing', label: 'Finalisation', icon: FiCheckCircle },
-  { key: 'complete', label: 'Terminé', icon: FiCheckCircle },
+  { key: 'extracting', label: 'Extraction du texte', icon: FiFileText, description: 'Lecture du PDF...' },
+  { key: 'analyzing', label: 'Analyse de la structure', icon: FiCpu, description: 'Identification des chapitres...' },
+  { key: 'checkpointing', label: 'Création des checkpoints', icon: FiList, description: 'Structuration du parcours...' },
+  { key: 'questions', label: 'Génération des questions', icon: FiHelpCircle, description: 'Création des QCM...' },
+  { key: 'complete', label: 'Terminé', icon: FiCheckCircle, description: 'Prêt !' },
 ]
 
 function getStepIndex(stepKey: string | null): number {
   if (!stepKey) return 0
   const idx = PROCESSING_STEPS.findIndex(s => s.key === stepKey)
   return idx >= 0 ? idx : 0
+}
+
+function formatEta(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return ''
+  if (seconds < 60) return `~${seconds}s restantes`
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `~${mins}m ${secs}s restantes`
 }
 
 export default function InteractiveLessonDetailPage() {
@@ -110,7 +117,7 @@ export default function InteractiveLessonDetailPage() {
   // Poll for updates during processing
   useEffect(() => {
     if (lesson?.status === 'processing' || lesson?.status === 'draft') {
-      const interval = setInterval(loadLesson, 2000) // Poll every 2 seconds
+      const interval = setInterval(loadLesson, 1500) // Poll every 1.5 seconds for faster updates
       return () => clearInterval(interval)
     }
   }, [lesson?.status, loadLesson])
@@ -182,10 +189,10 @@ export default function InteractiveLessonDetailPage() {
   const totalPages = lessonDocs.reduce((sum, d) => sum + (d.page_count || 0), 0)
 
   const currentStepIndex = getStepIndex(lesson.processing_step)
-  const progressPercent = lesson.processing_step === 'complete' ? 100 
-    : lesson.processing_total && lesson.processing_total > 0 
-      ? Math.round((lesson.processing_progress || 0) / lesson.processing_total * 100)
-      : Math.round(currentStepIndex / (PROCESSING_STEPS.length - 1) * 100)
+  const progressPercent = lesson.processing_percent ?? (
+    lesson.processing_step === 'complete' ? 100 
+    : Math.round(currentStepIndex / (PROCESSING_STEPS.length - 1) * 100)
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -238,40 +245,91 @@ export default function InteractiveLessonDetailPage() {
           {/* Processing Status */}
           {(lesson.status === 'processing' || lesson.status === 'draft') && (
             <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-text-primary">
-                  {lesson.status === 'draft' ? 'Préparation...' : 'Analyse en cours'}
+              {/* Header with percentage and ETA */}
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-semibold text-text-primary flex items-center gap-2">
+                  <FiZap className="w-5 h-5 text-accent" />
+                  Traitement en cours
                 </h2>
-                <span className="text-sm text-accent">{progressPercent}%</span>
+                <span className="text-2xl font-bold text-accent">{progressPercent}%</span>
               </div>
+
+              {/* ETA */}
+              {lesson.processing_eta_seconds && lesson.processing_eta_seconds > 0 && (
+                <div className="flex items-center gap-2 text-sm text-text-tertiary mb-4">
+                  <FiClock className="w-4 h-4" />
+                  {formatEta(lesson.processing_eta_seconds)}
+                </div>
+              )}
 
               {/* Main Progress Bar */}
-              <div className="h-3 bg-elevated rounded-full overflow-hidden mb-6">
+              <div className="h-4 bg-elevated rounded-full overflow-hidden mb-6 relative">
                 <div 
-                  className="h-full bg-accent rounded-full transition-all duration-500 ease-out"
+                  className="h-full bg-gradient-to-r from-accent to-accent-light rounded-full transition-all duration-700 ease-out relative"
                   style={{ width: `${progressPercent}%` }}
-                />
+                >
+                  {/* Animated shine effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                </div>
               </div>
 
-              {/* Current Step Message */}
-              <div className="text-center mb-8">
-                <p className="text-text-secondary">
+              {/* Current Step Message - Large and centered */}
+              <div className="text-center mb-8 py-4 bg-accent-muted/30 rounded-lg border border-accent/20">
+                <p className="text-lg font-medium text-text-primary">
                   {lesson.processing_message || 'Initialisation...'}
                 </p>
                 {lesson.processing_progress !== null && lesson.processing_total !== null && lesson.processing_total > 1 && (
                   <p className="text-sm text-text-tertiary mt-1">
-                    {lesson.processing_progress} / {lesson.processing_total}
+                    Étape {lesson.processing_progress} sur {lesson.processing_total}
                   </p>
                 )}
               </div>
 
-              {/* Steps Timeline */}
-              <div className="space-y-3">
-                {PROCESSING_STEPS.filter(s => s.key !== 'complete').map((step, idx) => {
-                  const isComplete = idx < currentStepIndex || lesson.status === 'ready'
-                  const isCurrent = idx === currentStepIndex && lesson.status === 'processing'
-                  const isPending = idx > currentStepIndex
+              {/* Steps Timeline - Horizontal on desktop */}
+              <div className="hidden md:flex items-center justify-between mb-6">
+                {PROCESSING_STEPS.slice(0, -1).map((step, idx) => {
+                  const isComplete = idx < currentStepIndex
+                  const isCurrent = lesson.processing_step === step.key
+                  const Icon = step.icon
                   
+                  return (
+                    <div key={step.key} className="flex flex-col items-center flex-1">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-all ${
+                        isComplete ? 'bg-success text-white' :
+                        isCurrent ? 'bg-accent text-white ring-4 ring-accent/30' :
+                        'bg-elevated text-text-tertiary'
+                      }`}>
+                        {isComplete ? (
+                          <FiCheckCircle className="w-5 h-5" />
+                        ) : isCurrent ? (
+                          <FiLoader className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Icon className="w-5 h-5" />
+                        )}
+                      </div>
+                      <span className={`text-xs font-medium text-center ${
+                        isCurrent ? 'text-accent' :
+                        isComplete ? 'text-success' :
+                        'text-text-tertiary'
+                      }`}>
+                        {step.label}
+                      </span>
+                      {/* Connector line */}
+                      {idx < PROCESSING_STEPS.length - 2 && (
+                        <div className={`absolute w-full h-0.5 top-5 left-1/2 -z-10 ${
+                          isComplete ? 'bg-success' : 'bg-elevated'
+                        }`} />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Steps Timeline - Vertical on mobile */}
+              <div className="md:hidden space-y-3">
+                {PROCESSING_STEPS.slice(0, -1).map((step, idx) => {
+                  const isComplete = idx < currentStepIndex
+                  const isCurrent = lesson.processing_step === step.key
                   const Icon = step.icon
                   
                   return (
@@ -279,11 +337,11 @@ export default function InteractiveLessonDetailPage() {
                       key={step.key}
                       className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
                         isCurrent ? 'bg-accent-muted border border-accent/30' :
-                        isComplete ? 'bg-success-muted/50' :
-                        'bg-elevated/50'
+                        isComplete ? 'bg-success-muted/30' :
+                        'bg-elevated/30'
                       }`}
                     >
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         isComplete ? 'bg-success text-white' :
                         isCurrent ? 'bg-accent text-white' :
                         'bg-elevated text-text-tertiary'
@@ -296,13 +354,18 @@ export default function InteractiveLessonDetailPage() {
                           <Icon className="w-4 h-4" />
                         )}
                       </div>
-                      <span className={`text-sm font-medium ${
-                        isCurrent ? 'text-accent' :
-                        isComplete ? 'text-success' :
-                        'text-text-tertiary'
-                      }`}>
-                        {step.label}
-                      </span>
+                      <div>
+                        <span className={`text-sm font-medium ${
+                          isCurrent ? 'text-accent' :
+                          isComplete ? 'text-success' :
+                          'text-text-tertiary'
+                        }`}>
+                          {step.label}
+                        </span>
+                        {isCurrent && (
+                          <p className="text-xs text-text-tertiary">{step.description}</p>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -318,8 +381,8 @@ export default function InteractiveLessonDetailPage() {
           {/* Ready Status */}
           {lesson.status === 'ready' && (
             <div className="text-center">
-              <div className="w-14 h-14 bg-success-muted rounded-lg flex items-center justify-center mx-auto mb-4">
-                <FiCheckCircle className="w-7 h-7 text-success" />
+              <div className="w-16 h-16 bg-success-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                <FiCheckCircle className="w-8 h-8 text-success" />
               </div>
               <h2 className="text-xl font-semibold text-text-primary mb-2">Prêt à apprendre !</h2>
               <p className="text-text-secondary mb-6 max-w-md mx-auto">
@@ -327,9 +390,9 @@ export default function InteractiveLessonDetailPage() {
               </p>
               <button
                 onClick={handleStartLearning}
-                className="btn-primary px-6"
+                className="btn-primary px-8 py-3 text-lg"
               >
-                <FiPlay className="w-4 h-4" />
+                <FiPlay className="w-5 h-5" />
                 Commencer l'apprentissage
               </button>
             </div>
@@ -435,6 +498,17 @@ export default function InteractiveLessonDetailPage() {
           </div>
         )}
       </main>
+
+      {/* CSS for shimmer animation */}
+      <style jsx>{`
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .animate-shimmer {
+          animation: shimmer 2s infinite;
+        }
+      `}</style>
     </div>
   )
 }

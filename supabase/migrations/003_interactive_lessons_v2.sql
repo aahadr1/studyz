@@ -6,7 +6,10 @@ ALTER TABLE interactive_lessons
 ADD COLUMN IF NOT EXISTS processing_step TEXT,
 ADD COLUMN IF NOT EXISTS processing_progress INTEGER DEFAULT 0,
 ADD COLUMN IF NOT EXISTS processing_total INTEGER DEFAULT 0,
-ADD COLUMN IF NOT EXISTS processing_message TEXT;
+ADD COLUMN IF NOT EXISTS processing_message TEXT,
+ADD COLUMN IF NOT EXISTS processing_percent INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS processing_eta_seconds INTEGER;
 
 -- Page images (PDF converted to images)
 CREATE TABLE IF NOT EXISTS interactive_lesson_page_images (
@@ -103,6 +106,7 @@ ALTER TABLE interactive_lesson_checkpoints ENABLE ROW LEVEL SECURITY;
 ALTER TABLE interactive_lesson_checkpoint_progress ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for interactive_lesson_page_images
+DROP POLICY IF EXISTS "Users can view page images from their documents" ON interactive_lesson_page_images;
 CREATE POLICY "Users can view page images from their documents"
     ON interactive_lesson_page_images FOR SELECT
     USING (
@@ -114,6 +118,7 @@ CREATE POLICY "Users can view page images from their documents"
         )
     );
 
+DROP POLICY IF EXISTS "Users can create page images in their documents" ON interactive_lesson_page_images;
 CREATE POLICY "Users can create page images in their documents"
     ON interactive_lesson_page_images FOR INSERT
     WITH CHECK (
@@ -125,6 +130,7 @@ CREATE POLICY "Users can create page images in their documents"
         )
     );
 
+DROP POLICY IF EXISTS "Users can delete page images from their documents" ON interactive_lesson_page_images;
 CREATE POLICY "Users can delete page images from their documents"
     ON interactive_lesson_page_images FOR DELETE
     USING (
@@ -137,6 +143,7 @@ CREATE POLICY "Users can delete page images from their documents"
     );
 
 -- RLS Policies for interactive_lesson_page_elements
+DROP POLICY IF EXISTS "Users can view page elements from their documents" ON interactive_lesson_page_elements;
 CREATE POLICY "Users can view page elements from their documents"
     ON interactive_lesson_page_elements FOR SELECT
     USING (
@@ -149,6 +156,7 @@ CREATE POLICY "Users can view page elements from their documents"
         )
     );
 
+DROP POLICY IF EXISTS "Users can create page elements in their documents" ON interactive_lesson_page_elements;
 CREATE POLICY "Users can create page elements in their documents"
     ON interactive_lesson_page_elements FOR INSERT
     WITH CHECK (
@@ -161,6 +169,7 @@ CREATE POLICY "Users can create page elements in their documents"
         )
     );
 
+DROP POLICY IF EXISTS "Users can delete page elements from their documents" ON interactive_lesson_page_elements;
 CREATE POLICY "Users can delete page elements from their documents"
     ON interactive_lesson_page_elements FOR DELETE
     USING (
@@ -174,6 +183,7 @@ CREATE POLICY "Users can delete page elements from their documents"
     );
 
 -- RLS Policies for interactive_lesson_reconstructions
+DROP POLICY IF EXISTS "Users can view their lesson reconstructions" ON interactive_lesson_reconstructions;
 CREATE POLICY "Users can view their lesson reconstructions"
     ON interactive_lesson_reconstructions FOR SELECT
     USING (
@@ -184,6 +194,7 @@ CREATE POLICY "Users can view their lesson reconstructions"
         )
     );
 
+DROP POLICY IF EXISTS "Users can create reconstructions for their lessons" ON interactive_lesson_reconstructions;
 CREATE POLICY "Users can create reconstructions for their lessons"
     ON interactive_lesson_reconstructions FOR INSERT
     WITH CHECK (
@@ -194,6 +205,7 @@ CREATE POLICY "Users can create reconstructions for their lessons"
         )
     );
 
+DROP POLICY IF EXISTS "Users can update their lesson reconstructions" ON interactive_lesson_reconstructions;
 CREATE POLICY "Users can update their lesson reconstructions"
     ON interactive_lesson_reconstructions FOR UPDATE
     USING (
@@ -204,6 +216,7 @@ CREATE POLICY "Users can update their lesson reconstructions"
         )
     );
 
+DROP POLICY IF EXISTS "Users can delete their lesson reconstructions" ON interactive_lesson_reconstructions;
 CREATE POLICY "Users can delete their lesson reconstructions"
     ON interactive_lesson_reconstructions FOR DELETE
     USING (
@@ -215,6 +228,7 @@ CREATE POLICY "Users can delete their lesson reconstructions"
     );
 
 -- RLS Policies for interactive_lesson_checkpoints
+DROP POLICY IF EXISTS "Users can view checkpoints from their lessons" ON interactive_lesson_checkpoints;
 CREATE POLICY "Users can view checkpoints from their lessons"
     ON interactive_lesson_checkpoints FOR SELECT
     USING (
@@ -225,6 +239,7 @@ CREATE POLICY "Users can view checkpoints from their lessons"
         )
     );
 
+DROP POLICY IF EXISTS "Users can create checkpoints in their lessons" ON interactive_lesson_checkpoints;
 CREATE POLICY "Users can create checkpoints in their lessons"
     ON interactive_lesson_checkpoints FOR INSERT
     WITH CHECK (
@@ -235,6 +250,7 @@ CREATE POLICY "Users can create checkpoints in their lessons"
         )
     );
 
+DROP POLICY IF EXISTS "Users can update checkpoints in their lessons" ON interactive_lesson_checkpoints;
 CREATE POLICY "Users can update checkpoints in their lessons"
     ON interactive_lesson_checkpoints FOR UPDATE
     USING (
@@ -245,6 +261,7 @@ CREATE POLICY "Users can update checkpoints in their lessons"
         )
     );
 
+DROP POLICY IF EXISTS "Users can delete checkpoints from their lessons" ON interactive_lesson_checkpoints;
 CREATE POLICY "Users can delete checkpoints from their lessons"
     ON interactive_lesson_checkpoints FOR DELETE
     USING (
@@ -256,18 +273,22 @@ CREATE POLICY "Users can delete checkpoints from their lessons"
     );
 
 -- RLS Policies for interactive_lesson_checkpoint_progress
+DROP POLICY IF EXISTS "Users can view their own checkpoint progress" ON interactive_lesson_checkpoint_progress;
 CREATE POLICY "Users can view their own checkpoint progress"
     ON interactive_lesson_checkpoint_progress FOR SELECT
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create their own checkpoint progress" ON interactive_lesson_checkpoint_progress;
 CREATE POLICY "Users can create their own checkpoint progress"
     ON interactive_lesson_checkpoint_progress FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own checkpoint progress" ON interactive_lesson_checkpoint_progress;
 CREATE POLICY "Users can update their own checkpoint progress"
     ON interactive_lesson_checkpoint_progress FOR UPDATE
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete their own checkpoint progress" ON interactive_lesson_checkpoint_progress;
 CREATE POLICY "Users can delete their own checkpoint progress"
     ON interactive_lesson_checkpoint_progress FOR DELETE
     USING (auth.uid() = user_id);
