@@ -54,7 +54,6 @@ export async function POST(
       text: pt.text_content
     }))
 
-    const supabase = getSupabaseServerClient()
     const openai = getOpenAI()
 
     // Update progress
