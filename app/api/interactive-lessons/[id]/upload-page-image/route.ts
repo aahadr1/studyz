@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { convertPdfToImagesForInteractiveLesson } from '@/lib/ocr/convertPdfToImagesForInteractiveLesson'
 
 async function createAuthClient() {
   const cookieStore = await cookies()
@@ -32,7 +31,7 @@ async function createAuthClient() {
   )
 }
 
-// POST: Convert PDF to images for interactive lesson
+// POST: Upload a single page image (converted client-side)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -52,7 +51,7 @@ export async function POST(
     // Verify lesson ownership
     const { data: lesson, error: lessonError } = await supabase
       .from('interactive_lessons')
-      .select('id, status')
+      .select('id')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
@@ -64,60 +63,88 @@ export async function POST(
       )
     }
 
-    // Get the lesson document (PDF)
-    const { data: documents, error: docsError } = await supabase
+    // Get the lesson document
+    const { data: documents } = await supabase
       .from('interactive_lesson_documents')
-      .select('id, file_type, category')
+      .select('id')
       .eq('interactive_lesson_id', id)
       .eq('category', 'lesson')
-      .eq('file_type', 'pdf')
+      .limit(1)
 
-    if (docsError || !documents || documents.length === 0) {
+    if (!documents || documents.length === 0) {
       return NextResponse.json(
-        { error: 'No PDF document found for this lesson' },
+        { error: 'No document found' },
         { status: 404 }
       )
     }
 
     const documentId = documents[0].id
 
-    // Check if already converted
-    const { data: existingImages } = await supabase
-      .from('interactive_lesson_page_images')
-      .select('id')
-      .eq('document_id', documentId)
-      .limit(1)
+    // Get the form data
+    const formData = await request.formData()
+    const pageNumber = parseInt(formData.get('pageNumber') as string)
+    const imageBlob = formData.get('image') as Blob
 
-    if (existingImages && existingImages.length > 0) {
+    if (!pageNumber || !imageBlob) {
       return NextResponse.json(
-        { message: 'PDF already converted', documentId },
-        { status: 200 }
+        { error: 'pageNumber and image are required' },
+        { status: 400 }
       )
     }
 
-    // Convert PDF to images
-    console.log(`[CONVERT] Starting PDF conversion for document ${documentId}`)
-    const pages = await convertPdfToImagesForInteractiveLesson(documentId)
+    // Convert blob to buffer
+    const arrayBuffer = await imageBlob.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
 
-    // Update lesson status to ready
-    await supabase
-      .from('interactive_lessons')
-      .update({ status: 'ready' })
-      .eq('id', id)
+    // Upload to storage
+    const storagePath = `${documentId}/page-${pageNumber}.png`
+    
+    const { error: uploadError } = await supabase.storage
+      .from('interactive-lesson-pages')
+      .upload(storagePath, buffer, {
+        contentType: 'image/png',
+        upsert: true,
+      })
+
+    if (uploadError) {
+      console.error('Upload error:', uploadError)
+      return NextResponse.json(
+        { error: `Failed to upload image: ${uploadError.message}` },
+        { status: 500 }
+      )
+    }
+
+    // Create or update page image record
+    const { error: dbError } = await supabase
+      .from('interactive_lesson_page_images')
+      .upsert({
+        document_id: documentId,
+        page_number: pageNumber,
+        image_path: storagePath,
+      }, {
+        onConflict: 'document_id,page_number'
+      })
+
+    if (dbError) {
+      console.error('DB error:', dbError)
+      return NextResponse.json(
+        { error: `Failed to save page record: ${dbError.message}` },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
-      documentId,
-      pageCount: pages.length,
-      pages,
+      pageNumber,
+      storagePath,
     })
 
   } catch (error) {
-    console.error('[CONVERT] Error:', error)
+    console.error('[UPLOAD-PAGE] Error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     
     return NextResponse.json(
-      { error: `Failed to convert PDF: ${errorMessage}` },
+      { error: `Failed to upload page image: ${errorMessage}` },
       { status: 500 }
     )
   }
