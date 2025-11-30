@@ -84,22 +84,33 @@ export default function InteractiveLessonProcessor({
 
   const capturePage = (): Promise<string | null> => {
     return new Promise((resolve) => {
-      // Small delay to ensure canvas is rendered
-      setTimeout(() => {
+      // Longer delay and multiple attempts to find canvas
+      let attempts = 0
+      const maxAttempts = 20 // Try for up to 2 seconds
+      
+      const tryCapture = () => {
         const canvas = document.querySelector('.react-pdf__Page__canvas') as HTMLCanvasElement
         if (canvas) {
           try {
             const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+            console.log(`[PROCESSOR] ✓ Canvas captured after ${attempts * 100}ms`)
             resolve(dataUrl)
           } catch (e) {
             console.error('[PROCESSOR] Failed to capture canvas:', e)
             resolve(null)
           }
         } else {
-          console.warn('[PROCESSOR] No canvas found')
-          resolve(null)
+          attempts++
+          if (attempts < maxAttempts) {
+            setTimeout(tryCapture, 100)
+          } else {
+            console.warn(`[PROCESSOR] No canvas found after ${attempts * 100}ms`)
+            resolve(null)
+          }
         }
-      }, 200)
+      }
+      
+      tryCapture()
     })
   }
 
@@ -152,10 +163,7 @@ export default function InteractiveLessonProcessor({
     try {
       const response = await fetch(`/api/interactive-lessons/${lessonId}/analyze-lesson-structure`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transcriptions
-        })
+        headers: { 'Content-Type': 'application/json' }
       })
 
       if (!response.ok) {

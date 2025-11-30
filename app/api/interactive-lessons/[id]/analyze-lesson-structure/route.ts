@@ -12,16 +12,47 @@ export async function POST(
   const { id: lessonId } = await params
 
   try {
-    const { transcriptions } = await request.json()
-
-    if (!transcriptions || !Array.isArray(transcriptions) || transcriptions.length === 0) {
+    console.log(`[ANALYZE-STRUCTURE] Fetching transcriptions from database for lesson ${lessonId}`)
+    
+    const supabase = getSupabaseServerClient()
+    
+    // Fetch all transcriptions from the database
+    const { data: lessonDocs, error: docsError } = await (supabase as any)
+      .from('interactive_lesson_documents')
+      .select('id')
+      .eq('interactive_lesson_id', lessonId)
+      .eq('category', 'lesson')
+    
+    if (docsError || !lessonDocs || lessonDocs.length === 0) {
       return NextResponse.json(
-        { error: 'Missing or invalid transcriptions array' },
-        { status: 400 }
+        { error: 'No lesson documents found' },
+        { status: 404 }
       )
     }
 
-    console.log(`[ANALYZE-STRUCTURE] Analyzing ${transcriptions.length} pages for lesson ${lessonId}`)
+    const documentId = lessonDocs[0].id
+
+    // Fetch all page transcriptions
+    const { data: pageTexts, error: textsError } = await (supabase as any)
+      .from('interactive_lesson_page_texts')
+      .select('*')
+      .eq('document_id', documentId)
+      .order('page_number', { ascending: true })
+
+    if (textsError || !pageTexts || pageTexts.length === 0) {
+      return NextResponse.json(
+        { error: 'No transcriptions found in database' },
+        { status: 404 }
+      )
+    }
+
+    console.log(`[ANALYZE-STRUCTURE] Found ${pageTexts.length} transcriptions in database`)
+    
+    // Convert to the format expected by the rest of the code
+    const transcriptions = pageTexts.map((pt: any) => ({
+      pageNumber: pt.page_number,
+      text: pt.text_content
+    }))
 
     const supabase = getSupabaseServerClient()
     const openai = getOpenAI()
