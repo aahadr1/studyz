@@ -32,9 +32,9 @@ export async function POST(
     console.log(`[PROCESS-VISION] Found ${documents.length} documents`)
 
     // Validate that all documents are PDFs
-    const nonPdfDocs = documents.filter(doc => !doc.file_path.toLowerCase().endsWith('.pdf'))
+    const nonPdfDocs = documents.filter((doc: any) => !doc.file_path.toLowerCase().endsWith('.pdf'))
     if (nonPdfDocs.length > 0) {
-      throw new Error(`Certains fichiers ne sont pas des PDF: ${nonPdfDocs.map(d => d.name).join(', ')}`)
+      throw new Error(`Certains fichiers ne sont pas des PDF: ${nonPdfDocs.map((d: any) => d.name).join(', ')}`)
     }
 
     let totalProcessedPages = 0
