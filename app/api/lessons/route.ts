@@ -84,14 +84,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only PDF files are supported' }, { status: 400 })
     }
 
+    // Check file size (50MB limit)
+    const maxFileSize = 50 * 1024 * 1024 // 50MB in bytes
+    if (file.size > maxFileSize) {
+      return NextResponse.json({
+        error: `File size (${Math.round(file.size / 1024 / 1024)}MB) exceeds the maximum limit of 50MB`
+      }, { status: 413 })
+    }
+
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer()
     const pdfBuffer = Buffer.from(arrayBuffer)
 
     // Convert PDF to images
     console.log('Converting PDF to images...')
-    const pageImages = await convertPdfToImages(pdfBuffer, 1.5)
-    console.log(`Converted ${pageImages.length} pages`)
+    let pageImages: any[] = []
+
+    try {
+      pageImages = await convertPdfToImages(pdfBuffer, 1.5)
+      console.log(`Converted ${pageImages.length} pages`)
+
+      // Check page count limit (200 pages max)
+      const maxPages = 200
+      if (pageImages.length > maxPages) {
+        return NextResponse.json({
+          error: `PDF has ${pageImages.length} pages, which exceeds the maximum limit of ${maxPages} pages`
+        }, { status: 413 })
+      }
+
+      // Check total image size (estimate ~500KB per page at 1.5x scale)
+      const estimatedTotalSize = pageImages.length * 500 * 1024 // 500KB per page in bytes
+      const maxTotalSize = 100 * 1024 * 1024 // 100MB total for all images
+      if (estimatedTotalSize > maxTotalSize) {
+        return NextResponse.json({
+          error: `Estimated image size (${Math.round(estimatedTotalSize / 1024 / 1024)}MB) exceeds the maximum limit of 100MB`
+        }, { status: 413 })
+      }
+    } catch (error) {
+      console.error('Error processing PDF:', error)
+      return NextResponse.json({
+        error: 'Failed to process PDF file. Please ensure it\'s a valid PDF document.'
+      }, { status: 400 })
+    }
 
     // Create the lesson record first
     const { data: lesson, error: lessonError } = await supabase

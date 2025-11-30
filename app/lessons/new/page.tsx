@@ -25,6 +25,12 @@ export default function NewLessonPage() {
         setError('File size must be less than 50MB')
         return
       }
+      // Estimate page count (rough: ~50KB per page for average PDFs)
+      const estimatedPages = Math.max(1, Math.round(selectedFile.size / (50 * 1024)))
+      if (estimatedPages > 200) {
+        setError(`This file may have around ${estimatedPages} pages. Maximum allowed is 200 pages.`)
+        return
+      }
       setFile(selectedFile)
       setError('')
     }
@@ -69,7 +75,16 @@ export default function NewLessonPage() {
         body: formData,
       })
 
-      const data = await response.json()
+      let data
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        // If response isn't JSON (e.g., HTML error page), create a generic error
+        if (response.status === 413) {
+          throw new Error('File is too large. Please try a smaller PDF file (under 50MB).')
+        }
+        throw new Error(`Server error (${response.status}). Please try again.`)
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create lesson')
@@ -127,7 +142,7 @@ export default function NewLessonPage() {
                     <p className="text-sm text-text-secondary mb-1">
                       <span className="font-medium text-accent">Click to upload</span> or drag and drop
                     </p>
-                    <p className="text-xs text-text-tertiary">PDF files only (max 50MB)</p>
+                    <p className="text-xs text-text-tertiary">PDF files only (max 50MB, 200 pages)</p>
                   </div>
                   <input
                     type="file"
