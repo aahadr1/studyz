@@ -2,11 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { 
   FiPlay, FiLoader, FiCheckCircle, FiAlertCircle, FiFileText, 
   FiBook, FiTrash2, FiArrowLeft, FiList,
   FiZap, FiCpu, FiHelpCircle, FiClock, FiImage
 } from 'react-icons/fi'
+
+const InteractiveLessonProcessor = dynamic(() => import('@/components/InteractiveLessonProcessor'), { ssr: false })
 
 interface Document {
   id: string
@@ -80,6 +83,8 @@ export default function InteractiveLessonDetailPage() {
   const [lesson, setLesson] = useState<InteractiveLesson | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showProcessor, setShowProcessor] = useState(false)
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null)
 
   const loadLesson = useCallback(async () => {
     try {
@@ -102,13 +107,36 @@ export default function InteractiveLessonDetailPage() {
     loadLesson()
   }, [loadLesson])
 
-  // Poll for updates during processing
+  // Load document URL and start processing if needed
   useEffect(() => {
-    if (lesson?.status === 'processing' || lesson?.status === 'draft') {
+    const loadDocumentAndProcess = async () => {
+      if (lesson && lesson.status === 'processing' && !showProcessor) {
+        const lessonDocs = lesson.interactive_lesson_documents?.filter(d => d.category === 'lesson') || []
+        if (lessonDocs.length > 0 && lessonDocs[0].id) {
+          try {
+            const response = await fetch(`/api/documents/${lessonDocs[0].id}/signed-url`, { credentials: 'include' })
+            if (response.ok) {
+              const data = await response.json()
+              setDocumentUrl(data.signedUrl)
+              setShowProcessor(true)
+            }
+          } catch (err) {
+            console.error('Failed to load document URL:', err)
+          }
+        }
+      }
+    }
+
+    loadDocumentAndProcess()
+  }, [lesson, showProcessor])
+
+  // Poll for updates during processing (only if processor is not running client-side)
+  useEffect(() => {
+    if ((lesson?.status === 'processing' || lesson?.status === 'draft') && !showProcessor) {
       const interval = setInterval(loadLesson, 1500) // Poll every 1.5 seconds for faster updates
       return () => clearInterval(interval)
     }
-  }, [lesson?.status, loadLesson])
+  }, [lesson?.status, loadLesson, showProcessor])
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this lesson?')) return
@@ -282,8 +310,26 @@ export default function InteractiveLessonDetailPage() {
 
         {/* Status Card */}
         <div className="card p-8 mb-8">
-          {/* Processing Status */}
-          {(lesson.status === 'processing' || lesson.status === 'draft') && (
+          {/* Processing Status - Client-side processor */}
+          {(lesson.status === 'processing' || lesson.status === 'draft') && showProcessor && documentUrl && lessonDocs[0] && (
+            <InteractiveLessonProcessor
+              lessonId={lessonId}
+              documentId={lessonDocs[0].id}
+              documentUrl={documentUrl}
+              onComplete={() => {
+                setShowProcessor(false)
+                loadLesson()
+              }}
+              onError={(errorMsg) => {
+                setShowProcessor(false)
+                setError(errorMsg)
+                loadLesson()
+              }}
+            />
+          )}
+
+          {/* Fallback: Show traditional progress bar if processor not loaded yet */}
+          {(lesson.status === 'processing' || lesson.status === 'draft') && !showProcessor && (
             <div>
               {/* Header with percentage and ETA */}
               <div className="flex items-center justify-between mb-2">
