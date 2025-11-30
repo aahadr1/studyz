@@ -133,31 +133,8 @@ export default function NewInteractiveLessonPage() {
         await uploadFileDirectly(lesson.id, file, 'mcq')
       }
 
-      // 3. Démarrer le traitement automatiquement
-      if (lessonFiles.length > 0) {
-        setCreating(false)
-        setProcessing(true)
-        setProcessingMessage('Conversion PDF en cours...')
-
-        const processResponse = await fetch(`/api/interactive-lessons/${lesson.id}/process-simple`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        })
-
-        if (!processResponse.ok) {
-          const data = await processResponse.json()
-          throw new Error(data.error || 'Processing failed')
-        }
-
-        const result = await processResponse.json()
-        console.log('Processing result:', result)
-
-        // Rediriger vers la leçon
-        router.push(`/interactive-lessons/${lesson.id}`)
-      } else {
-        // Pas de fichiers leçon, rediriger directement
-        router.push(`/interactive-lessons/${lesson.id}`)
-      }
+      // 3. Rediriger vers la leçon (plus de traitement serveur nécessaire)
+      router.push(`/interactive-lessons/${lesson.id}`)
 
     } catch (err: any) {
       console.error('Error:', err)

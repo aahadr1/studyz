@@ -368,13 +368,22 @@ export default function InteractiveLessonDetailPage() {
               <p className="text-text-secondary mb-6 max-w-md mx-auto">
                 Votre leçon interactive est prête. {sections.length} checkpoints et {totalQuestions} questions vous attendent.
               </p>
-              <button
-                onClick={handleStartLearning}
-                className="btn-primary px-8 py-3 text-lg"
-              >
-                <FiPlay className="w-5 h-5" />
-                Commencer l'apprentissage
-              </button>
+              <div className="flex gap-4">
+                <button
+                  onClick={handleStartLearning}
+                  className="btn-primary px-8 py-3 text-lg"
+                >
+                  <FiPlay className="w-5 h-5" />
+                  Commencer l'apprentissage
+                </button>
+                <button
+                  onClick={() => router.push(`/interactive-lessons/${lessonId}/simple-player`)}
+                  className="btn-secondary px-8 py-3 text-lg"
+                >
+                  <FiBook className="w-5 h-5" />
+                  Lecture simple
+                </button>
+              </div>
             </div>
           )}
 
