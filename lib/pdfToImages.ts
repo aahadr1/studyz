@@ -18,9 +18,10 @@ async function getPdfJs() {
     
     if (typeof window !== 'undefined') {
       console.log('[PDF2IMG] Setting up worker...')
-      // Use local worker file instead of CDN
-      module.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
-      console.log('[PDF2IMG] Worker source set to:', module.GlobalWorkerOptions.workerSrc)
+      // Use CDN worker that matches the API version
+      const workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${module.version}/pdf.worker.min.mjs`
+      module.GlobalWorkerOptions.workerSrc = workerSrc
+      console.log('[PDF2IMG] Worker source set to:', workerSrc, 'for version:', module.version)
     }
     
     pdfjsLib = module
