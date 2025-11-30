@@ -5,11 +5,15 @@
  * This avoids Vercel serverless limitations with native dependencies.
  */
 
-import * as pdfjsLib from 'pdfjs-dist'
+// Dynamic import to avoid SSR issues - pdfjs-dist uses browser APIs
+let pdfjsLib: typeof import('pdfjs-dist') | null = null
 
-// Configure PDF.js worker
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+async function getPdfjs() {
+  if (!pdfjsLib && typeof window !== 'undefined') {
+    pdfjsLib = await import('pdfjs-dist')
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+  }
+  return pdfjsLib
 }
 
 export interface PageConversionProgress {
@@ -36,9 +40,15 @@ export async function convertPdfAndUpload(
   lessonId: string,
   onProgress?: (progress: PageConversionProgress) => void
 ): Promise<ConversionResult> {
+  // Get pdfjs dynamically
+  const pdfjs = await getPdfjs()
+  if (!pdfjs) {
+    throw new Error('PDF.js not available - this function must run in a browser')
+  }
+  
   // Load the PDF
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
   const totalPages = pdf.numPages
 
   onProgress?.({
@@ -117,8 +127,13 @@ export async function convertPdfAndUpload(
  * Get the number of pages in a PDF file
  */
 export async function getPdfPageCount(file: File): Promise<number> {
+  const pdfjs = await getPdfjs()
+  if (!pdfjs) {
+    throw new Error('PDF.js not available - this function must run in a browser')
+  }
+  
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
   return pdf.numPages
 }
 
