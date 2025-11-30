@@ -11,13 +11,25 @@ let pdfjsLib: typeof import('pdfjs-dist') | null = null
 
 async function getPdfJs() {
   if (pdfjsLib) return pdfjsLib
-  const module = await import('pdfjs-dist')
-  if (typeof window !== 'undefined') {
-    // Use local worker file instead of CDN
-    module.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+  
+  try {
+    console.log('[PDF2IMG] Loading PDF.js library...')
+    const module = await import('pdfjs-dist')
+    
+    if (typeof window !== 'undefined') {
+      console.log('[PDF2IMG] Setting up worker...')
+      // Use local worker file instead of CDN
+      module.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+      console.log('[PDF2IMG] Worker source set to:', module.GlobalWorkerOptions.workerSrc)
+    }
+    
+    pdfjsLib = module
+    console.log('[PDF2IMG] PDF.js library loaded successfully')
+    return pdfjsLib
+  } catch (error) {
+    console.error('[PDF2IMG] Failed to load PDF.js:', error)
+    throw new Error(`Failed to load PDF.js library: ${error instanceof Error ? error.message : String(error)}`)
   }
-  pdfjsLib = module
-  return pdfjsLib
 }
 
 export interface PageImage {
@@ -55,11 +67,17 @@ export async function convertPdfToImages(
     })
     
     // Read file as ArrayBuffer
+    console.log('[PDF2IMG] Reading file as ArrayBuffer...')
     const arrayBuffer = await file.arrayBuffer()
+    console.log(`[PDF2IMG] File read: ${arrayBuffer.byteLength} bytes`)
     
     // Load PDF document
+    console.log('[PDF2IMG] Loading PDF.js...')
     const pdfjs = await getPdfJs()
-    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
+    
+    console.log('[PDF2IMG] Creating PDF document...')
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer })
+    const pdf = await loadingTask.promise
     const totalPages = pdf.numPages
     
     console.log(`[PDF2IMG] PDF loaded: ${totalPages} pages`)
@@ -118,14 +136,25 @@ export async function convertPdfToImages(
     return images
     
   } catch (error) {
-    console.error('[PDF2IMG] Error:', error)
+    console.error('[PDF2IMG] Error details:', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      name: error instanceof Error ? error.name : 'Unknown',
+      toString: error?.toString ? error.toString() : String(error)
+    })
+    
+    const errorMessage = error instanceof Error ? error.message : 
+                        error?.toString ? error.toString() : 
+                        'Unknown PDF conversion error'
+    
     onProgress?.({
       currentPage: 0,
       totalPages: 0,
       status: 'error',
-      message: `Erreur: ${error instanceof Error ? error.message : 'Unknown error'}`
+      message: `Erreur PDF: ${errorMessage}`
     })
-    throw error
+    throw new Error(`PDF conversion failed: ${errorMessage}`)
   }
 }
 

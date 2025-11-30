@@ -308,20 +308,30 @@ export function useDocumentProcessor() {
       return processingResult
 
     } catch (error) {
-      console.error('[PROCESSOR] Error:', error)
+      console.error('[PROCESSOR] Error details:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        name: error instanceof Error ? error.name : 'Unknown',
+        toString: error?.toString ? error.toString() : String(error)
+      })
+      
+      const errorMessage = error instanceof Error ? error.message : 
+                          error?.toString ? error.toString() : 
+                          'Erreur de traitement inconnue';
 
       await updateLessonProgress(lessonId, {
         step: 'error',
-        message: error instanceof Error ? error.message : 'Erreur de traitement',
+        message: errorMessage,
         status: 'error'
       })
 
       updateState({
         status: 'error',
         progress: 0,
-        message: error instanceof Error ? error.message : 'Erreur de traitement'
+        message: errorMessage
       })
-      throw error
+      throw new Error(`Document processing failed: ${errorMessage}`)
     }
   }, [updateLessonProgress, updateState])
 
