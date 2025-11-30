@@ -31,10 +31,13 @@ export async function POST(
     const formData = await request.formData()
     const file = formData.get('file') as File
     const pageNumber = parseInt(formData.get('pageNumber') as string)
+    const documentId = formData.get('documentId') as string
+    const width = parseInt(formData.get('width') as string) || 0
+    const height = parseInt(formData.get('height') as string) || 0
     
-    if (!file || isNaN(pageNumber)) {
+    if (!file || isNaN(pageNumber) || !documentId) {
       return NextResponse.json(
-        { error: 'Missing file or pageNumber' },
+        { error: 'Missing file, documentId or pageNumber' },
         { status: 400 }
       )
     }
@@ -44,7 +47,7 @@ export async function POST(
     const supabaseClient = getSupabase()
     
     // Upload to storage
-    const storagePath = `${lessonId}/page-${pageNumber}.png`
+    const storagePath = `${lessonId}/${documentId}/page-${pageNumber}.png`
     const buffer = Buffer.from(await file.arrayBuffer())
     
     const { error: uploadError } = await supabaseClient.storage
@@ -62,27 +65,29 @@ export async function POST(
       )
     }
     
-    // Get the document ID for this lesson
-    const { data: docs } = await (supabaseClient as any)
+    const { data: docRecord, error: docError } = await (supabaseClient as any)
       .from('interactive_lesson_documents')
       .select('id')
+      .eq('id', documentId)
       .eq('interactive_lesson_id', lessonId)
-      .eq('category', 'lesson')
-      .limit(1)
       .single()
     
-    if (docs) {
-      // Save image record to database
-      await (supabaseClient as any)
-        .from('interactive_lesson_page_images')
-        .upsert({
-          document_id: docs.id,
-          page_number: pageNumber,
-          image_path: storagePath,
-          width: 0, // Will be updated later if needed
-          height: 0
-        }, { onConflict: 'document_id,page_number' })
+    if (docError || !docRecord) {
+      return NextResponse.json(
+        { error: 'Document not found for this lesson' },
+        { status: 404 }
+      )
     }
+    
+    await (supabaseClient as any)
+      .from('interactive_lesson_page_images')
+      .upsert({
+        document_id: documentId,
+        page_number: pageNumber,
+        image_path: storagePath,
+        width,
+        height
+      }, { onConflict: 'document_id,page_number' })
     
     console.log(`[UPLOAD-PAGE] ✓ Page ${pageNumber} uploaded`)
     

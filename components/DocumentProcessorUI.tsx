@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { FiLoader, FiCheckCircle, FiAlertCircle, FiFile, FiImage, FiCpu, FiList, FiHelpCircle } from 'react-icons/fi'
-import { useDocumentProcessor, ProcessingState } from '@/hooks/useDocumentProcessor'
+import { useDocumentProcessor, LessonFileInput } from '@/hooks/useDocumentProcessor'
 
 interface DocumentProcessorUIProps {
   lessonId: string
-  file: File
+  files: LessonFileInput[]
   language: string
   onComplete: () => void
   onError: (error: string) => void
@@ -22,7 +22,7 @@ const STEPS = [
 
 export default function DocumentProcessorUI({
   lessonId,
-  file,
+  files,
   language,
   onComplete,
   onError
@@ -31,21 +31,21 @@ export default function DocumentProcessorUI({
   const [started, setStarted] = useState(false)
   
   const startProcessing = useCallback(async () => {
-    if (started) return
+    if (started || !files.length) return
     setStarted(true)
     
     try {
-      await processDocument(file, lessonId, language)
+      await processDocument(files, lessonId, language)
       onComplete()
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Processing failed')
     }
-  }, [file, lessonId, language, processDocument, onComplete, onError, started])
+  }, [files, lessonId, language, processDocument, onComplete, onError, started])
   
-  // Auto-start when component mounts
-  useState(() => {
+  // Auto-start when component mounts or files change
+  useEffect(() => {
     startProcessing()
-  })
+  }, [startProcessing])
   
   const currentStepIndex = STEPS.findIndex(s => s.key === state.status)
   

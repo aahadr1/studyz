@@ -28,11 +28,11 @@ export async function POST(
   const { id: lessonId } = await params
   
   try {
-    const { pageNumber, transcription } = await request.json()
+    const { pageNumber, transcription, documentId } = await request.json()
     
-    if (!pageNumber || !transcription) {
+    if (!pageNumber || !transcription || !documentId) {
       return NextResponse.json(
-        { error: 'Missing pageNumber or transcription' },
+        { error: 'Missing pageNumber, documentId or transcription' },
         { status: 400 }
       )
     }
@@ -41,16 +41,14 @@ export async function POST(
     
     const supabaseClient = getSupabase()
     
-    // Get the document ID for this lesson
-    const { data: docs } = await (supabaseClient as any)
+    const { data: docRecord, error: docError } = await (supabaseClient as any)
       .from('interactive_lesson_documents')
       .select('id')
+      .eq('id', documentId)
       .eq('interactive_lesson_id', lessonId)
-      .eq('category', 'lesson')
-      .limit(1)
       .single()
     
-    if (!docs) {
+    if (docError || !docRecord) {
       return NextResponse.json(
         { error: 'Document not found for this lesson' },
         { status: 404 }
@@ -61,7 +59,7 @@ export async function POST(
     const { error } = await (supabaseClient as any)
       .from('interactive_lesson_page_texts')
       .upsert({
-        document_id: docs.id,
+        document_id: documentId,
         page_number: pageNumber,
         text_content: transcription,
         transcription_type: 'vision',

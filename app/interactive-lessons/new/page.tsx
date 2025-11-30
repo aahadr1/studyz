@@ -3,6 +3,8 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { FiUpload, FiX, FiBook, FiFileText, FiArrowLeft, FiArrowRight } from 'react-icons/fi'
+import DocumentProcessorUI from '@/components/DocumentProcessorUI'
+import { LessonFileInput } from '@/hooks/useDocumentProcessor'
 
 export default function NewInteractiveLessonPage() {
   const router = useRouter()
@@ -19,6 +21,11 @@ export default function NewInteractiveLessonPage() {
   
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [processingContext, setProcessingContext] = useState<{
+    lessonId: string
+    files: LessonFileInput[]
+  } | null>(null)
+  const [processingError, setProcessingError] = useState<string | null>(null)
 
   const handleLessonFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -119,9 +126,19 @@ export default function NewInteractiveLessonPage() {
 
       const { lesson } = await createResponse.json()
 
+      const lessonDocumentsForProcessing: LessonFileInput[] = []
+
       for (const file of lessonFiles) {
         try {
-          await uploadFileDirectly(lesson.id, file, 'lesson')
+          const result = await uploadFileDirectly(lesson.id, file, 'lesson')
+          if (result?.document) {
+            lessonDocumentsForProcessing.push({
+              file,
+              documentId: result.document.id,
+              documentName: result.document.name || file.name,
+              order: lessonDocumentsForProcessing.length
+            })
+          }
         } catch (err) {
           console.error('Failed to upload lesson file:', file.name, err)
         }
@@ -135,8 +152,16 @@ export default function NewInteractiveLessonPage() {
         }
       }
 
-      // Redirect immediately - processing will start from detail page
-      router.push(`/interactive-lessons/${lesson.id}`)
+      if (lessonDocumentsForProcessing.length > 0) {
+        setProcessingError(null)
+        setProcessingContext({
+          lessonId: lesson.id,
+          files: lessonDocumentsForProcessing
+        })
+      } else {
+        setCreating(false)
+        router.push(`/interactive-lessons/${lesson.id}`)
+      }
 
     } catch (err: any) {
       setError(err.message || 'Something went wrong')
@@ -345,9 +370,9 @@ export default function NewInteractiveLessonPage() {
           </section>
 
           {/* Error */}
-          {error && (
+          {(error || processingError) && (
             <div className="p-3 bg-error-muted border border-error/30 text-error text-sm rounded-md">
-              {error}
+              {processingError || error}
             </div>
           )}
 
@@ -373,6 +398,27 @@ export default function NewInteractiveLessonPage() {
           </div>
         </form>
       </main>
+      {processingContext && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="max-w-xl w-full">
+            <DocumentProcessorUI
+              lessonId={processingContext.lessonId}
+              files={processingContext.files}
+              language={language}
+              onComplete={() => {
+                setProcessingContext(null)
+                setCreating(false)
+                router.push(`/interactive-lessons/${processingContext.lessonId}`)
+              }}
+              onError={(message) => {
+                setProcessingError(message)
+                setProcessingContext(null)
+                setCreating(false)
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

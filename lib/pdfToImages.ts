@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * PDF to Images Conversion - Client Side
  * 
@@ -5,11 +7,16 @@
  * then converts them to PNG images.
  */
 
-import * as pdfjsLib from 'pdfjs-dist'
+let pdfjsLib: typeof import('pdfjs-dist') | null = null
 
-// Configure PDF.js worker
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+async function getPdfJs() {
+  if (pdfjsLib) return pdfjsLib
+  const module = await import('pdfjs-dist')
+  if (typeof window !== 'undefined') {
+    module.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${module.version}/pdf.worker.min.js`
+  }
+  pdfjsLib = module
+  return pdfjsLib
 }
 
 export interface PageImage {
@@ -50,7 +57,8 @@ export async function convertPdfToImages(
     const arrayBuffer = await file.arrayBuffer()
     
     // Load PDF document
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+    const pdfjs = await getPdfJs()
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
     const totalPages = pdf.numPages
     
     console.log(`[PDF2IMG] PDF loaded: ${totalPages} pages`)

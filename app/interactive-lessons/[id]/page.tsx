@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { 
   FiPlay, FiLoader, FiCheckCircle, FiAlertCircle, FiFileText, 
-  FiBook, FiRefreshCw, FiTrash2, FiArrowLeft, FiList,
+  FiBook, FiTrash2, FiArrowLeft, FiList,
   FiZap, FiCpu, FiHelpCircle, FiClock, FiImage
 } from 'react-icons/fi'
 
@@ -104,17 +104,6 @@ export default function InteractiveLessonDetailPage() {
     loadLesson()
   }, [loadLesson])
 
-  // Auto-start processing when lesson is in draft status
-  useEffect(() => {
-    if (lesson?.status === 'draft') {
-      console.log('Auto-starting processing...')
-      // Fire and forget - don't await
-      fetch(`/api/interactive-lessons/${lessonId}/process`, {
-        method: 'POST'
-      }).catch(err => console.error('Error starting process:', err))
-    }
-  }, [lesson?.status, lessonId])
-
   // Poll for updates during processing
   useEffect(() => {
     if (lesson?.status === 'processing' || lesson?.status === 'draft') {
@@ -122,16 +111,6 @@ export default function InteractiveLessonDetailPage() {
       return () => clearInterval(interval)
     }
   }, [lesson?.status, loadLesson])
-
-  const handleRetry = async () => {
-    // Fire and forget
-    fetch(`/api/interactive-lessons/${lessonId}/process`, {
-      method: 'POST'
-    }).catch(err => console.error('Error retrying:', err))
-    
-    // Reload to see status change
-    setTimeout(loadLesson, 1000)
-  }
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this lesson?')) return
@@ -373,7 +352,7 @@ export default function InteractiveLessonDetailPage() {
               </div>
 
               <p className="text-xs text-text-tertiary text-center mt-6 flex items-center justify-center gap-2">
-                <FiRefreshCw className="w-3 h-3 animate-spin" />
+                <FiLoader className="w-3 h-3 animate-spin" />
                 Mise à jour automatique...
               </p>
             </div>
@@ -407,13 +386,9 @@ export default function InteractiveLessonDetailPage() {
               </div>
               <h2 className="text-xl font-semibold text-text-primary mb-2">Erreur de traitement</h2>
               <p className="text-error mb-4">{lesson.error_message || 'Une erreur est survenue'}</p>
-              <button
-                onClick={handleRetry}
-                className="btn-secondary"
-              >
-                <FiRefreshCw className="w-4 h-4" />
-                Réessayer
-              </button>
+              <p className="text-sm text-text-tertiary max-w-md mx-auto">
+                Retournez sur la page de création pour relancer le traitement avec vos documents.
+              </p>
             </div>
           )}
         </div>
