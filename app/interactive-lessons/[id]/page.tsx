@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { 
   FiPlay, FiLoader, FiCheckCircle, FiAlertCircle, FiFileText, 
   FiBook, FiRefreshCw, FiTrash2, FiArrowLeft, FiList,
-  FiZap, FiCpu, FiHelpCircle, FiClock
+  FiZap, FiCpu, FiHelpCircle, FiClock, FiImage
 } from 'react-icons/fi'
 
 interface Document {
@@ -50,12 +50,13 @@ interface InteractiveLesson {
   interactive_lesson_sections: Section[]
 }
 
-// Processing steps - simplified to match new backend
+// Processing steps - matches backend pipeline phases
 const PROCESSING_STEPS = [
-  { key: 'extracting', label: 'Extraction du texte', icon: FiFileText, description: 'Lecture du PDF...' },
-  { key: 'analyzing', label: 'Analyse de la structure', icon: FiCpu, description: 'Identification des chapitres...' },
-  { key: 'checkpointing', label: 'Création des checkpoints', icon: FiList, description: 'Structuration du parcours...' },
-  { key: 'questions', label: 'Génération des questions', icon: FiHelpCircle, description: 'Création des QCM...' },
+  { key: 'converting', label: 'Conversion en images', icon: FiImage, description: 'Conversion des pages PDF...' },
+  { key: 'transcribing', label: 'Transcription IA', icon: FiCpu, description: 'Analyse par GPT-4o-mini...' },
+  { key: 'analyzing', label: 'Analyse de structure', icon: FiFileText, description: 'Création de la structure...' },
+  { key: 'checkpointing', label: 'Création checkpoints', icon: FiList, description: 'Organisation du cours...' },
+  { key: 'questions', label: 'Génération QCM', icon: FiHelpCircle, description: 'Création des questions...' },
   { key: 'complete', label: 'Terminé', icon: FiCheckCircle, description: 'Prêt !' },
 ]
 

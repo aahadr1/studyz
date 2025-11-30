@@ -145,9 +145,17 @@ async function convertPdfPageToImage(
 // Transcribe page with GPT-4o-mini vision
 interface PageTranscription {
   text: string
-  elements: Array<{ type: string; term: string; explanation: string }>
   hasVisualContent: boolean
-  visualElements: Array<{ type: string; description: string }>
+  visualElements: Array<{
+    type: 'diagram' | 'table' | 'formula' | 'image' | 'chart'
+    description: string
+    position?: string
+  }>
+  keyTerms: Array<{ 
+    type: string
+    term: string
+    explanation: string 
+  }>
 }
 
 async function transcribePageWithVision(
@@ -155,29 +163,36 @@ async function transcribePageWithVision(
   pageNumber: number,
   language: string
 ): Promise<PageTranscription> {
-  const langName = language === 'fr' ? 'French' : language === 'en' ? 'English' : language
+  const langName = language === 'fr' ? 'français' : language === 'en' ? 'English' : language
 
-  const prompt = `Tu es un expert en analyse de documents pédagogiques. Analyse cette page ${pageNumber} de cours.
+  const prompt = `Analyse cette page ${pageNumber} de cours.
 
-TÂCHE:
-1. **TRANSCRIS** tout le texte visible (titres, paragraphes, formules, légendes)
-2. **DÉCRIS** les éléments visuels (diagrammes, tableaux, graphiques, schémas, images)
-3. **IDENTIFIE** 3-5 termes/concepts clés avec explications
+TÂCHES:
+1. TRANSCRIS tout le texte visible (titres, paragraphes, légendes, formules) - MOT POUR MOT
+2. DÉCRIS tous les éléments visuels (diagrammes, tableaux, schémas, graphiques, images)
+3. IDENTIFIE 3-5 termes/concepts clés avec explications
+
+Réponds en ${langName}.
 
 RÉPONDS EN JSON (pas de markdown):
 {
   "text": "Transcription complète du texte de la page...",
-  "hasVisualContent": true/false,
+  "hasVisualContent": true,
   "visualElements": [
-    {"type": "diagram", "description": "Description du diagramme"},
-    {"type": "table", "description": "Description du tableau"}
+    {
+      "type": "diagram",
+      "description": "Description détaillée du diagramme...",
+      "position": "haut de page"
+    }
   ],
-  "elements": [
-    {"type": "term", "term": "Concept X", "explanation": "Explication"}
+  "keyTerms": [
+    {
+      "type": "term",
+      "term": "Nom du concept",
+      "explanation": "Explication claire"
+    }
   ]
-}
-
-Langue: ${langName}`
+}`
 
   try {
     const response = await getOpenAI().chat.completions.create({
@@ -205,17 +220,17 @@ Langue: ${langName}`
     
     return {
       text: parsed.text || `Page ${pageNumber}`,
-      elements: parsed.elements || [],
       hasVisualContent: parsed.hasVisualContent || false,
-      visualElements: parsed.visualElements || []
+      visualElements: parsed.visualElements || [],
+      keyTerms: parsed.keyTerms || []
     }
   } catch (error) {
     console.error(`Vision transcription error for page ${pageNumber}:`, error)
     return {
       text: `Page ${pageNumber} (transcription failed)`,
-      elements: [],
       hasVisualContent: false,
-      visualElements: []
+      visualElements: [],
+      keyTerms: []
     }
   }
 }
@@ -232,42 +247,36 @@ interface DocumentStructure {
 }
 
 async function analyzeDocumentStructure(
-  pageTranscriptions: Array<{ pageNum: number; text: string }>, 
+  fullText: string,
   totalPages: number, 
   language: string
 ): Promise<DocumentStructure> {
-  const langName = language === 'fr' ? 'French' : language === 'en' ? 'English' : language
+  const langName = language === 'fr' ? 'français' : language === 'en' ? 'English' : language
   
-  // Combine all transcriptions with page numbers
-  const fullText = pageTranscriptions
-    .map(pt => `=== PAGE ${pt.pageNum} ===\n${pt.text}`)
-    .join('\n\n')
-  
-  const truncatedText = fullText.length > 80000 ? fullText.slice(0, 80000) + '\n...[truncated]' : fullText
+  const truncatedText = fullText.length > 100000 ? fullText.slice(0, 100000) + '\n...[truncated]' : fullText
 
-  const prompt = `Tu es un expert pédagogique. Structure ce cours en checkpoints pour l'apprentissage.
+  const prompt = `Analyse ce cours complet de ${totalPages} pages.
 
-DOCUMENT COMPLET (${totalPages} pages, en ${langName}):
+TEXTE COMPLET DU COURS (en ${langName}):
 ${truncatedText}
 
-INSTRUCTIONS:
-1. Divise en 4-8 checkpoints logiques (chapitres/sections)
-2. Chaque checkpoint = concept cohérent à maîtriser
-3. Pour chaque checkpoint:
-   - Pages concernées (start_page, end_page) - IMPORTANT: utilise les numéros de pages indiqués dans "=== PAGE X ==="
-   - Titre clair
-   - Résumé 2-3 phrases
-   - 3-5 points clés
+TÂCHE:
+Crée 4-8 checkpoints logiques qui couvrent tout le cours.
+Pour chaque checkpoint:
+- Identifie les pages concernées (startPage, endPage)
+- Donne un titre clair
+- Écris un résumé de 2-3 phrases
+- Liste 3-5 points clés
 
 RÉPONDS EN JSON (pas de markdown):
 {
   "checkpoints": [
     {
-      "title": "Titre",
+      "title": "Introduction aux concepts fondamentaux",
       "startPage": 1,
-      "endPage": 3,
-      "summary": "Résumé...",
-      "keyPoints": ["Point 1", "Point 2"]
+      "endPage": 5,
+      "summary": "Ce chapitre couvre les bases...",
+      "keyPoints": ["Point 1", "Point 2", "Point 3"]
     }
   ]
 }`
@@ -276,7 +285,7 @@ RÉPONDS EN JSON (pas de markdown):
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 6000,
+      max_tokens: 8000,
       temperature: 0.3,
     })
 
@@ -320,19 +329,18 @@ interface Question {
 
 async function generateAllQuestions(
   checkpoints: DocumentStructure['checkpoints'],
-  pageTranscriptions: Array<{ pageNum: number; text: string }>,
+  fullText: string,
   language: string
 ): Promise<Question[]> {
-  const langName = language === 'fr' ? 'French' : language === 'en' ? 'English' : language
+  const langName = language === 'fr' ? 'français' : language === 'en' ? 'English' : language
   
   const checkpointSummaries = checkpoints.map((cp, idx) => 
     `Checkpoint ${idx + 1} (pages ${cp.startPage}-${cp.endPage}): "${cp.title}" - ${cp.summary}`
   ).join('\n')
 
-  const fullText = pageTranscriptions.map(pt => pt.text).join('\n\n')
-  const truncatedText = fullText.length > 50000 ? fullText.slice(0, 50000) : fullText
+  const truncatedText = fullText.length > 60000 ? fullText.slice(0, 60000) : fullText
 
-  const prompt = `Tu es un expert en pédagogie. Génère EXACTEMENT 10 QCM par checkpoint pour ce cours.
+  const prompt = `Génère EXACTEMENT 10 QCM par checkpoint pour ce cours.
 
 CHECKPOINTS (${checkpoints.length} total):
 ${checkpointSummaries}
@@ -343,20 +351,20 @@ ${truncatedText}
 INSTRUCTIONS CRITIQUES:
 - Génère EXACTEMENT 10 questions pour CHAQUE checkpoint (total: ${checkpoints.length * 10} questions)
 - checkpointIndex va de 0 à ${checkpoints.length - 1}
-- Chaque question a EXACTEMENT 4 choix (A, B, C, D)
-- correctIndex est entre 0 et 3
-- Questions de COMPRÉHENSION (pas juste de mémorisation)
-- Explications détaillées (2-3 phrases)
+- Chaque question a EXACTEMENT 4 choix
+- correctIndex entre 0 et 3
+- Questions de COMPRÉHENSION
+- Explications détaillées
 - Tout en ${langName}
 
-RÉPONDS EN JSON (pas de markdown, pas de commentaires):
+RÉPONDS EN JSON (pas de markdown):
 {
   "questions": [
     {
-      "question": "Question détaillée sur le checkpoint?",
-      "choices": ["Choix A", "Choix B", "Choix C", "Choix D"],
+      "question": "Question détaillée?",
+      "choices": ["A", "B", "C", "D"],
       "correctIndex": 0,
-      "explanation": "Explication détaillée de pourquoi cette réponse est correcte.",
+      "explanation": "Explication...",
       "checkpointIndex": 0
     }
   ]
@@ -366,7 +374,7 @@ RÉPONDS EN JSON (pas de markdown, pas de commentaires):
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 12000,
+      max_tokens: 16000,
       temperature: 0.5,
     })
 
@@ -438,7 +446,7 @@ export async function POST(
       let totalPageCount = 0
 
       for (const doc of lessonDocs) {
-        await updateProgress(id, 'converting', `Téléchargement de ${doc.name}...`, 2, 180)
+        await updateProgress(id, 'converting', `Téléchargement de ${doc.name}...`, 2, 300)
         
         const { data: fileData, error: downloadError } = await getSupabaseAdmin().storage
           .from('interactive-lessons')
@@ -464,13 +472,12 @@ export async function POST(
           .eq('id', doc.id)
       }
 
+      console.log(`\n========== PHASE 1: CONVERSION DES IMAGES ==========`)
       console.log(`Total pages to process: ${totalPageCount}`)
 
-      // ========== ÉTAPE 1: CONVERSION DES PAGES EN IMAGES (0-30%) ==========
-      await updateProgress(id, 'converting', 'Début de la conversion des pages en images...', 5, 150)
-      
+      // ========== PHASE 1: CONVERT ALL PAGES TO IMAGES (0-30%) ==========
       let convertedPages = 0
-      const pageImages = new Map<string, { path: string; width: number; height: number }>()
+      const imageMetadata: Array<{ docId: string; pageNum: number; imagePath: string }> = []
 
       for (const doc of lessonDocs) {
         const docData = documentBuffers.get(doc.id)
@@ -479,27 +486,28 @@ export async function POST(
         const { buffer, pageCount } = docData
 
         for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-          const percent = Math.round(5 + (convertedPages / totalPageCount) * 25) // 5-30%
-          const etaSeconds = Math.max(5, (totalPageCount - convertedPages) * 1) // ~1s per page for conversion
-          
+          const globalPageNum = convertedPages + 1
+          const percent = Math.round((convertedPages / totalPageCount) * 30)
+          const eta = Math.max(10, (totalPageCount - convertedPages) * 4)
+
           await updateProgress(
             id, 
             'converting', 
-            `Conversion page ${pageNum}/${pageCount} de ${doc.name} en image...`, 
+            `Conversion page ${globalPageNum}/${totalPageCount} en image...`, 
             percent,
-            etaSeconds
+            eta
           )
 
           const imageResult = await convertPdfPageToImage(buffer, pageNum)
           
           if (!imageResult) {
-            console.warn(`Image conversion failed for page ${pageNum}, skipping`)
+            console.warn(`Image conversion failed for page ${pageNum}`)
             convertedPages++
             continue
           }
 
           // Upload image to storage
-          const imagePath = `${id}/page-${convertedPages + 1}.png`
+          const imagePath = `${id}/page-${globalPageNum}.png`
           await getSupabaseAdmin().storage
             .from('interactive-lessons')
             .upload(imagePath, imageResult.buffer, {
@@ -507,7 +515,7 @@ export async function POST(
               upsert: true
             })
 
-          // Store image record
+          // Store image record in DB
           await getSupabaseAdmin()
             .from('interactive_lesson_page_images')
             .upsert({
@@ -518,127 +526,112 @@ export async function POST(
               height: imageResult.height
             }, { onConflict: 'document_id,page_number' })
 
-          pageImages.set(`${doc.id}-${pageNum}`, {
-            path: imagePath,
-            width: imageResult.width,
-            height: imageResult.height
-          })
-
+          imageMetadata.push({ docId: doc.id, pageNum, imagePath })
           convertedPages++
         }
       }
 
-      await updateProgress(id, 'converting', `✓ Toutes les images converties (${convertedPages} pages)`, 30, 120)
+      console.log(`✓ All ${convertedPages} pages converted to images`)
 
-      // ========== ÉTAPE 2: TRANSCRIPTION AVEC GPT-4O-MINI (30-80%) ==========
-      await updateProgress(id, 'transcribing', 'Début de la transcription IA...', 32, 100)
+      // ========== PHASE 2: TRANSCRIBE ALL IMAGES WITH AI (30-80%) ==========
+      console.log(`\n========== PHASE 2: TRANSCRIPTION IA ==========`)
       
       let transcribedPages = 0
-      const allPageTranscriptions: Array<{ pageNum: number; text: string }> = []
+      const allPageTranscriptions: string[] = []
 
-      for (const doc of lessonDocs) {
-        const docData = documentBuffers.get(doc.id)
-        if (!docData) continue
+      for (const { docId, pageNum, imagePath } of imageMetadata) {
+        const globalPageNum = transcribedPages + 1
+        const percent = 30 + Math.round((transcribedPages / totalPageCount) * 50) // 30-80%
+        const eta = Math.max(10, (totalPageCount - transcribedPages) * 3)
 
-        const { pageCount } = docData
+        await updateProgress(
+          id, 
+          'transcribing', 
+          `Transcription IA page ${globalPageNum}/${totalPageCount}...`, 
+          percent,
+          eta
+        )
 
-        for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-          const percent = Math.round(30 + (transcribedPages / totalPageCount) * 50) // 30-80%
-          const etaSeconds = Math.max(5, (totalPageCount - transcribedPages) * 3) // ~3s per page for transcription
-          
-          await updateProgress(
-            id, 
-            'transcribing', 
-            `Transcription IA page ${pageNum}/${pageCount} de ${doc.name}...`, 
-            percent,
-            etaSeconds
-          )
+        // Download image from storage
+        const { data: imageData } = await getSupabaseAdmin().storage
+          .from('interactive-lessons')
+          .download(imagePath)
 
-          const imageKey = `${doc.id}-${pageNum}`
-          const imageInfo = pageImages.get(imageKey)
-          
-          if (!imageInfo) {
-            console.warn(`No image found for page ${pageNum}, skipping transcription`)
-            allPageTranscriptions.push({ pageNum: transcribedPages + 1, text: `Page ${transcribedPages + 1} (no image)` })
-            transcribedPages++
-            continue
-          }
-
-          // Download image from storage
-          const { data: imageData, error: downloadError } = await getSupabaseAdmin().storage
-            .from('interactive-lessons')
-            .download(imageInfo.path)
-
-          if (downloadError || !imageData) {
-            console.error(`Failed to download image for page ${pageNum}`)
-            allPageTranscriptions.push({ pageNum: transcribedPages + 1, text: `Page ${transcribedPages + 1} (download failed)` })
-            transcribedPages++
-            continue
-          }
-
-          // Convert to base64
-          const imageBuffer = Buffer.from(await imageData.arrayBuffer())
-          const imageBase64 = imageBuffer.toString('base64')
-
-          // Transcribe with vision
-          const transcription = await transcribePageWithVision(imageBase64, transcribedPages + 1, lesson.language)
-          
-          allPageTranscriptions.push({ pageNum: transcribedPages + 1, text: transcription.text })
-
-          // Store transcription
-          const { data: pageText } = await getSupabaseAdmin()
-            .from('interactive_lesson_page_texts')
-            .upsert({
-              document_id: doc.id,
-              page_number: pageNum,
-              text_content: transcription.text,
-              transcription_type: 'vision',
-              has_visual_content: transcription.hasVisualContent,
-              elements_description: JSON.stringify(transcription.visualElements)
-            }, { onConflict: 'document_id,page_number' })
-            .select()
-            .single()
-
-          // Store elements
-          if (pageText && transcription.elements.length > 0) {
-            for (const element of transcription.elements) {
-              await getSupabaseAdmin()
-                .from('interactive_lesson_page_elements')
-                .insert({
-                  page_text_id: pageText.id,
-                  element_type: element.type,
-                  element_text: element.term,
-                  explanation: element.explanation,
-                  element_order: 0
-                })
-            }
-          }
-
+        if (!imageData) {
+          console.warn(`Failed to download image for page ${globalPageNum}`)
+          allPageTranscriptions.push(`Page ${globalPageNum} (image not found)`)
           transcribedPages++
+          continue
         }
+
+        const imageBuffer = Buffer.from(await imageData.arrayBuffer())
+        const imageBase64 = imageBuffer.toString('base64')
+
+        // Transcribe with vision
+        const transcription = await transcribePageWithVision(imageBase64, globalPageNum, lesson.language)
+        
+        // Add to full text with page marker
+        allPageTranscriptions.push(`Page ${globalPageNum}:\n${transcription.text}`)
+
+        // Store transcription in DB
+        const { data: pageText } = await getSupabaseAdmin()
+          .from('interactive_lesson_page_texts')
+          .upsert({
+            document_id: docId,
+            page_number: pageNum,
+            text_content: transcription.text,
+            transcription_type: 'vision',
+            has_visual_content: transcription.hasVisualContent,
+            elements_description: JSON.stringify(transcription.visualElements)
+          }, { onConflict: 'document_id,page_number' })
+          .select()
+          .single()
+
+        // Store key terms as page elements
+        if (pageText && transcription.keyTerms.length > 0) {
+          for (const term of transcription.keyTerms) {
+            await getSupabaseAdmin()
+              .from('interactive_lesson_page_elements')
+              .insert({
+                page_text_id: pageText.id,
+                element_type: term.type,
+                element_text: term.term,
+                explanation: term.explanation,
+                element_order: 0
+              })
+          }
+        }
+
+        transcribedPages++
       }
 
-      await updateProgress(id, 'transcribing', `✓ Toutes les pages transcrites (${transcribedPages} pages)`, 80, 40)
+      console.log(`✓ All ${transcribedPages} pages transcribed`)
 
-      // ========== ÉTAPE 3: ANALYSE DE STRUCTURE (80-85%) ==========
-      await updateProgress(id, 'analyzing', 'Analyse de la structure du cours...', 82, 30)
-      const structure = await analyzeDocumentStructure(allPageTranscriptions, totalPageCount, lesson.language)
+      // ========== PHASE 3: ANALYZE STRUCTURE (80-90%) ==========
+      console.log(`\n========== PHASE 3: ANALYSE DE STRUCTURE ==========`)
       
-      console.log(`Found ${structure.checkpoints.length} checkpoints`)
+      await updateProgress(id, 'analyzing', 'Analyse de la structure du cours...', 82, 40)
+      
+      // Combine all transcriptions into one text
+      const fullText = allPageTranscriptions.join('\n\n')
+      
+      const structure = await analyzeDocumentStructure(fullText, totalPageCount, lesson.language)
+      
+      console.log(`✓ Found ${structure.checkpoints.length} checkpoints`)
 
       // Store reconstruction
       await getSupabaseAdmin()
         .from('interactive_lesson_reconstructions')
         .upsert({
           interactive_lesson_id: id,
-          full_content: allPageTranscriptions.map(pt => pt.text).join('\n\n'),
+          full_content: fullText.slice(0, 500000), // Limit to 500k chars
           structure_json: structure
         }, { onConflict: 'interactive_lesson_id' })
 
-      await updateProgress(id, 'analyzing', `✓ Structure analysée (${structure.checkpoints.length} checkpoints)`, 85, 25)
-
-      // ========== ÉTAPE 4: CRÉATION CHECKPOINTS (85-90%) ==========
-      await updateProgress(id, 'checkpointing', 'Création des checkpoints...', 87, 20)
+      // ========== PHASE 4: CREATE CHECKPOINTS AND QUESTIONS (90-100%) ==========
+      console.log(`\n========== PHASE 4: CHECKPOINTS & QUESTIONS ==========`)
+      
+      await updateProgress(id, 'checkpointing', 'Création des checkpoints...', 87, 30)
 
       const createdCheckpoints: Array<{ id: string; index: number }> = []
 
@@ -663,7 +656,7 @@ export async function POST(
         if (checkpoint) {
           createdCheckpoints.push({ id: checkpoint.id, index: i })
           
-          // Legacy section
+          // Legacy section for backwards compatibility
           await getSupabaseAdmin()
             .from('interactive_lesson_sections')
             .insert({
@@ -679,21 +672,21 @@ export async function POST(
         }
       }
 
-      await updateProgress(id, 'checkpointing', `✓ ${createdCheckpoints.length} checkpoints créés`, 90, 15)
+      console.log(`✓ Created ${createdCheckpoints.length} checkpoints`)
 
-      // ========== ÉTAPE 5: GÉNÉRATION QUESTIONS (90-100%) ==========
-      await updateProgress(id, 'questions', 'Génération des questions...', 92, 12)
-      const questions = await generateAllQuestions(structure.checkpoints, allPageTranscriptions, lesson.language)
+      await updateProgress(id, 'questions', 'Génération des questions...', 93, 20)
       
-      console.log(`Generated ${questions.length} questions for ${createdCheckpoints.length} checkpoints`)
+      const questions = await generateAllQuestions(structure.checkpoints, fullText, lesson.language)
       
-      // Count questions per checkpoint for debugging
+      console.log(`✓ Generated ${questions.length} questions`)
+      
+      // Count questions per checkpoint
       const questionsPerCheckpoint = new Map<number, number>()
       questions.forEach(q => {
         questionsPerCheckpoint.set(q.checkpointIndex, (questionsPerCheckpoint.get(q.checkpointIndex) || 0) + 1)
       })
       questionsPerCheckpoint.forEach((count, idx) => {
-        console.log(`Checkpoint ${idx}: ${count} questions`)
+        console.log(`  Checkpoint ${idx}: ${count} questions`)
       })
 
       // Store questions
@@ -715,19 +708,22 @@ export async function POST(
           if (!insertError) {
             storedCount++
           } else {
-            console.error(`Failed to store question for checkpoint ${q.checkpointIndex}:`, insertError)
+            console.error(`Failed to store question:`, insertError)
           }
-        } else {
-          console.warn(`No checkpoint found for checkpointIndex ${q.checkpointIndex}`)
         }
       }
       
-      console.log(`Successfully stored ${storedCount}/${questions.length} questions`)
-      await updateProgress(id, 'questions', `✓ ${storedCount} questions générées`, 98, 2)
+      console.log(`✓ Stored ${storedCount}/${questions.length} questions`)
 
       // Complete
       const totalTime = Math.round((Date.now() - startTime) / 1000)
-      await updateProgress(id, 'complete', `✓ Terminé en ${totalTime}s !`, 100, 0)
+      await updateProgress(id, 'complete', `Terminé en ${totalTime}s !`, 100, 0)
+
+      console.log(`\n========== PROCESSING COMPLETE ==========`)
+      console.log(`Duration: ${totalTime}s`)
+      console.log(`Pages: ${totalPageCount}`)
+      console.log(`Checkpoints: ${structure.checkpoints.length}`)
+      console.log(`Questions: ${storedCount}`)
 
       return NextResponse.json({ 
         success: true,
