@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { FiLoader, FiCheckCircle, FiAlertCircle } from 'react-icons/fi'
 
-// Use CDN for PDF.js worker
+// Use local PDF.js worker (copied by postinstall script)
 if (typeof window !== 'undefined') {
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 }
 
 interface InteractiveLessonProcessorProps {
