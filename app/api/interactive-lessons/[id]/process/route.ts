@@ -86,81 +86,216 @@ async function updateProgress(
     .eq('id', lessonId)
 }
 
-// Get PDF page count using MuPDF
-async function getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
+// Cloudinary configuration (lazy loaded)
+let cloudinaryConfigured = false
+async function getCloudinary() {
+  const cloudinary = await import('cloudinary')
+  
+  if (!cloudinaryConfigured && process.env.CLOUDINARY_CLOUD_NAME) {
+    cloudinary.v2.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    })
+    cloudinaryConfigured = true
+    console.log('[Cloudinary] ✓ Configured')
+  }
+  
+  return cloudinary.v2
+}
+
+// Extract text from PDF using pdf-parse
+async function extractTextFromPdf(pdfBuffer: Buffer): Promise<{ text: string; numPages: number }> {
+  console.log(`[extractTextFromPdf] Starting text extraction...`)
   try {
-    const mupdf = await import('mupdf')
-    const arrayBuffer = pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength)
-    const uint8Array = new Uint8Array(arrayBuffer)
-    const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
-    const count = doc.countPages()
-    console.log(`MuPDF detected ${count} pages`)
-    return count
-  } catch (error) {
-    console.error('MuPDF page count error:', error)
-    // Fallback: try to parse PDF structure
-    const pdfText = pdfBuffer.toString('latin1')
-    const countMatch = pdfText.match(/\/Count\s+(\d+)/)
-    if (countMatch && countMatch[1]) {
-      const count = parseInt(countMatch[1], 10)
-      console.log(`Manual parsing detected ${count} pages`)
-      return count
+    // Import pdf-parse - handle both ESM and CommonJS
+    const pdfParseModule = await import('pdf-parse')
+    const pdfParse = typeof pdfParseModule === 'function' 
+      ? pdfParseModule 
+      : (pdfParseModule as any).default || pdfParseModule
+    
+    // Custom pagerender to avoid DOM-related issues
+    const options = {
+      pagerender: function(pageData: any) {
+        return pageData.getTextContent().then(function(textContent: any) {
+          let text = ''
+          for (const item of textContent.items) {
+            text += item.str + ' '
+          }
+          return text
+        })
+      }
     }
-    console.log('Defaulting to 1 page')
-    return 1
+    
+    const result = await pdfParse(pdfBuffer, options)
+    console.log(`[extractTextFromPdf] ✓ Extracted ${result.numpages} pages, ${result.text.length} chars`)
+    return { text: result.text, numPages: result.numpages }
+  } catch (error) {
+    console.error(`[extractTextFromPdf] ❌ Error:`, error)
+    return { text: '', numPages: 1 }
   }
 }
 
-// Convert PDF page to image using MuPDF
-async function convertPdfPageToImage(
-  pdfBuffer: Buffer, 
-  pageNumber: number
-): Promise<{ buffer: Buffer; width: number; height: number } | null> {
-  console.log(`       [MuPDF] Converting page ${pageNumber} to image...`)
+// Get PDF page count using manual parsing
+async function getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
+  console.log(`[getPdfPageCount] Starting page count...`)
+  
+  // Method 1: Try pdf-parse
   try {
-    console.log(`       [MuPDF] Importing mupdf module...`)
-    const mupdf = await import('mupdf')
-    console.log(`       [MuPDF] ✓ Module imported`)
-    
-    console.log(`       [MuPDF] Creating ArrayBuffer from PDF buffer (${pdfBuffer.length} bytes)...`)
-    const arrayBuffer = pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength)
-    const uint8Array = new Uint8Array(arrayBuffer)
-    console.log(`       [MuPDF] ✓ Uint8Array created (${uint8Array.length} bytes)`)
-    
-    console.log(`       [MuPDF] Opening PDF document...`)
-    const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
-    console.log(`       [MuPDF] ✓ Document opened`)
-    
-    console.log(`       [MuPDF] Loading page ${pageNumber - 1} (0-indexed)...`)
-    const page = doc.loadPage(pageNumber - 1)
-    console.log(`       [MuPDF] ✓ Page loaded`)
-    
-    const zoom = 2.0 // Higher quality
-    console.log(`       [MuPDF] Creating matrix with zoom=${zoom}...`)
-    const matrix = mupdf.Matrix.scale(zoom, zoom)
-    
-    console.log(`       [MuPDF] Rendering page to pixmap...`)
-    const pixmap = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false, true)
-    console.log(`       [MuPDF] ✓ Pixmap created: ${pixmap.getWidth()}x${pixmap.getHeight()}`)
-    
-    console.log(`       [MuPDF] Converting to PNG...`)
-    const imageData = pixmap.asPNG()
-    const buffer = Buffer.from(imageData)
-    console.log(`       [MuPDF] ✓ PNG created: ${buffer.length} bytes`)
-    
-    return {
-      buffer,
-      width: pixmap.getWidth(),
-      height: pixmap.getHeight()
+    const result = await extractTextFromPdf(pdfBuffer)
+    if (result.numPages > 0) {
+      console.log(`[getPdfPageCount] ✓ pdf-parse detected ${result.numPages} pages`)
+      return result.numPages
     }
   } catch (error) {
-    console.error(`       [MuPDF] ❌ ERROR converting page ${pageNumber}:`)
-    console.error(`       [MuPDF] ❌ Error type: ${error instanceof Error ? error.constructor.name : typeof error}`)
-    console.error(`       [MuPDF] ❌ Error message: ${error instanceof Error ? error.message : String(error)}`)
-    if (error instanceof Error && error.stack) {
-      console.error(`       [MuPDF] ❌ Stack trace:`, error.stack)
+    console.error(`[getPdfPageCount] pdf-parse failed:`, error)
+  }
+  
+  // Method 2: Manual PDF parsing
+  const pdfText = pdfBuffer.toString('latin1')
+  const countMatch = pdfText.match(/\/Count\s+(\d+)/)
+  if (countMatch && countMatch[1]) {
+    const count = parseInt(countMatch[1], 10)
+    console.log(`[getPdfPageCount] ✓ Detected ${count} pages`)
+    return count
+  }
+  
+  // Fallback: count /Type /Page occurrences
+  const pageMatches = pdfText.match(/\/Type\s*\/Page[^s]/g)
+  if (pageMatches) {
+    console.log(`[getPdfPageCount] ✓ Counted ${pageMatches.length} pages via /Type /Page`)
+    return pageMatches.length
+  }
+  
+  console.log(`[getPdfPageCount] Defaulting to 1 page`)
+  return 1
+}
+
+// Upload PDF to Cloudinary and get page images
+async function uploadPdfToCloudinary(
+  pdfBuffer: Buffer,
+  lessonId: string,
+  docId: string
+): Promise<{ publicId: string; pageCount: number } | null> {
+  try {
+    const cloudinary = await getCloudinary()
+    
+    if (!process.env.CLOUDINARY_CLOUD_NAME) {
+      console.log('[Cloudinary] ⚠️ Not configured - skipping cloud conversion')
+      return null
     }
+    
+    console.log(`[Cloudinary] Uploading PDF (${(pdfBuffer.length / 1024 / 1024).toFixed(2)} MB)...`)
+    
+    // Upload PDF to Cloudinary
+    const result = await new Promise<any>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          resource_type: 'image',
+          folder: `studyz/lessons/${lessonId}`,
+          public_id: `doc_${docId}`,
+          format: 'pdf',
+          pages: true, // Enable page extraction
+        },
+        (error, result) => {
+          if (error) reject(error)
+          else resolve(result)
+        }
+      )
+      uploadStream.end(pdfBuffer)
+    })
+    
+    console.log(`[Cloudinary] ✓ PDF uploaded: ${result.public_id}`)
+    console.log(`[Cloudinary] ✓ Pages detected: ${result.pages || 1}`)
+    
+    return {
+      publicId: result.public_id,
+      pageCount: result.pages || 1
+    }
+  } catch (error) {
+    console.error('[Cloudinary] ❌ Upload error:', error)
     return null
+  }
+}
+
+// Get page image from Cloudinary
+async function getCloudinaryPageImage(
+  publicId: string,
+  pageNumber: number
+): Promise<Buffer | null> {
+  try {
+    const cloudinary = await getCloudinary()
+    
+    // Generate URL for specific page
+    const url = cloudinary.url(publicId, {
+      resource_type: 'image',
+      format: 'png',
+      page: pageNumber,
+      width: 1200,
+      quality: 90,
+    })
+    
+    console.log(`[Cloudinary] Fetching page ${pageNumber}: ${url}`)
+    
+    // Download the image
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    
+    const arrayBuffer = await response.arrayBuffer()
+    console.log(`[Cloudinary] ✓ Page ${pageNumber} downloaded: ${(arrayBuffer.byteLength / 1024).toFixed(2)} KB`)
+    
+    return Buffer.from(arrayBuffer)
+  } catch (error) {
+    console.error(`[Cloudinary] ❌ Error fetching page ${pageNumber}:`, error)
+    return null
+  }
+}
+
+// Convert PDF page to image - tries Cloudinary, falls back to placeholder
+async function convertPdfPageToImage(
+  pdfBuffer: Buffer, 
+  pageNumber: number,
+  cloudinaryPublicId?: string
+): Promise<{ buffer: Buffer; width: number; height: number } | null> {
+  console.log(`       [PDF2IMG] Converting page ${pageNumber} to image...`)
+  
+  // Method 1: Use Cloudinary if available
+  if (cloudinaryPublicId) {
+    const imageBuffer = await getCloudinaryPageImage(cloudinaryPublicId, pageNumber)
+    if (imageBuffer) {
+      return {
+        buffer: imageBuffer,
+        width: 1200,
+        height: 1600 // Approximate
+      }
+    }
+  }
+  
+  // Method 2: Create a simple placeholder image with page info
+  console.log(`       [PDF2IMG] Creating placeholder image for page ${pageNumber}...`)
+  
+  // Create a simple 1x1 white pixel PNG as placeholder
+  // This allows the pipeline to continue even without proper image conversion
+  const placeholderPng = Buffer.from([
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1 pixel
+    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, // IDAT chunk
+    0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0xFF,
+    0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
+    0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, // IEND chunk
+    0x44, 0xAE, 0x42, 0x60, 0x82
+  ])
+  
+  console.log(`       [PDF2IMG] ✓ Placeholder image created for page ${pageNumber}`)
+  
+  return {
+    buffer: placeholderPng,
+    width: 1,
+    height: 1
   }
 }
 
@@ -178,6 +313,82 @@ interface PageTranscription {
     term: string
     explanation: string 
   }>
+}
+
+// Transcribe page using TEXT only (fallback when images not available)
+async function transcribePageWithText(
+  pageText: string,
+  pageNumber: number,
+  language: string
+): Promise<PageTranscription> {
+  console.log(`       [TEXT] Transcribing page ${pageNumber} using text extraction...`)
+  
+  if (!pageText || pageText.trim().length < 50) {
+    console.log(`       [TEXT] ⚠️ Page text too short (${pageText?.length || 0} chars), using minimal transcription`)
+    return {
+      text: pageText || `Page ${pageNumber}`,
+      hasVisualContent: false,
+      visualElements: [],
+      keyTerms: []
+    }
+  }
+  
+  const langName = language === 'fr' ? 'français' : language === 'en' ? 'English' : language
+  
+  const prompt = `Analyse ce texte extrait de la page ${pageNumber} d'un cours.
+
+TEXTE DE LA PAGE:
+${pageText.substring(0, 8000)}
+
+TÂCHES:
+1. Reformule le texte pour qu'il soit clair et structuré
+2. Identifie 3-5 termes/concepts clés avec explications
+
+Réponds en ${langName}.
+
+RÉPONDS EN JSON (pas de markdown):
+{
+  "text": "Texte reformulé et structuré...",
+  "hasVisualContent": false,
+  "visualElements": [],
+  "keyTerms": [
+    {
+      "type": "term",
+      "term": "Nom du concept",
+      "explanation": "Explication claire"
+    }
+  ]
+}`
+
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 4000,
+      temperature: 0.3,
+    })
+
+    const content = response.choices[0]?.message?.content || '{}'
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const parsed = JSON.parse(cleaned)
+    
+    console.log(`       [TEXT] ✓ Transcription complete: ${parsed.text?.length || 0} chars`)
+    
+    return {
+      text: parsed.text || pageText,
+      hasVisualContent: false,
+      visualElements: [],
+      keyTerms: parsed.keyTerms || []
+    }
+  } catch (error) {
+    console.error(`       [TEXT] ❌ Error:`, error)
+    return {
+      text: pageText,
+      hasVisualContent: false,
+      visualElements: [],
+      keyTerms: []
+    }
+  }
 }
 
 async function transcribePageWithVision(
@@ -549,18 +760,62 @@ export async function POST(
       console.log(`[DOWNLOAD] Total page count: ${totalPageCount}`)
       console.log(`[DOWNLOAD] Buffer map size: ${documentBuffers.size}`)
 
+      // Extract text from all PDFs as fallback
+      console.log(`\n[TEXT EXTRACTION] Extracting text from all PDFs...`)
+      const extractedTexts = new Map<string, string>()
+      
+      for (const doc of lessonDocs) {
+        const docData = documentBuffers.get(doc.id)
+        if (!docData) continue
+        
+        await updateProgress(id, 'converting', `Extraction du texte de ${doc.name}...`, 3, 300)
+        
+        const { text: fullText } = await extractTextFromPdf(docData.buffer)
+        extractedTexts.set(doc.id, fullText)
+        console.log(`[TEXT EXTRACTION] ✓ ${doc.name}: ${fullText.length} chars extracted`)
+      }
+
       console.log(`\n`)
       console.log(`╔══════════════════════════════════════════════════════════════╗`)
       console.log(`║     PHASE 1: CONVERSION DES IMAGES (0-30%)                   ║`)
       console.log(`║     Total pages: ${totalPageCount}`)
+      console.log(`║     Cloudinary configured: ${!!process.env.CLOUDINARY_CLOUD_NAME}`)
+      console.log(`║     Text fallback available: ${extractedTexts.size > 0}`)
       console.log(`╚══════════════════════════════════════════════════════════════╝`)
 
       // ========== PHASE 1: CONVERT ALL PAGES TO IMAGES (0-30%) ==========
       let convertedPages = 0
-      const imageMetadata: Array<{ docId: string; pageNum: number; imagePath: string }> = []
+      const imageMetadata: Array<{ docId: string; pageNum: number; imagePath: string; isPlaceholder: boolean }> = []
+      
+      // Map to store Cloudinary public IDs per document
+      const cloudinaryIds = new Map<string, string>()
 
       console.log(`\n[PHASE 1] Starting image conversion...`)
       console.log(`[PHASE 1] Documents to process: ${lessonDocs.length}`)
+
+      // First, upload all PDFs to Cloudinary if configured
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        console.log(`\n[PHASE 1] 📤 Uploading PDFs to Cloudinary...`)
+        
+        for (const doc of lessonDocs) {
+          const docData = documentBuffers.get(doc.id)
+          if (!docData) continue
+          
+          await updateProgress(id, 'converting', `Envoi de ${doc.name} vers le cloud...`, 2, 300)
+          
+          const cloudinaryResult = await uploadPdfToCloudinary(docData.buffer, id, doc.id)
+          if (cloudinaryResult) {
+            cloudinaryIds.set(doc.id, cloudinaryResult.publicId)
+            console.log(`[PHASE 1] ✓ ${doc.name} uploaded to Cloudinary: ${cloudinaryResult.publicId}`)
+          }
+        }
+      } else {
+        console.log(`\n[PHASE 1] ⚠️ Cloudinary not configured - using placeholder images`)
+        console.log(`[PHASE 1] ⚠️ To enable real PDF→Image conversion, set these env vars:`)
+        console.log(`[PHASE 1]    - CLOUDINARY_CLOUD_NAME`)
+        console.log(`[PHASE 1]    - CLOUDINARY_API_KEY`)
+        console.log(`[PHASE 1]    - CLOUDINARY_API_SECRET`)
+      }
 
       for (const doc of lessonDocs) {
         console.log(`\n[PHASE 1] Processing document: ${doc.name}`)
@@ -571,7 +826,10 @@ export async function POST(
         }
 
         const { buffer, pageCount } = docData
+        const cloudinaryPublicId = cloudinaryIds.get(doc.id)
+        
         console.log(`[PHASE 1] ✓ Buffer found: ${buffer.length} bytes, ${pageCount} pages`)
+        console.log(`[PHASE 1] ✓ Cloudinary ID: ${cloudinaryPublicId || 'none'}`)
         console.log(`[PHASE 1] Starting page loop from 1 to ${pageCount}...`)
 
         for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
@@ -591,7 +849,7 @@ export async function POST(
           console.log(`    Document: ${doc.name}`)
           console.log(`    Local page: ${pageNum}`)
 
-          const imageResult = await convertPdfPageToImage(buffer, pageNum)
+          const imageResult = await convertPdfPageToImage(buffer, pageNum, cloudinaryPublicId)
           
           if (!imageResult) {
             console.error(`    ❌ Image conversion failed for page ${pageNum}`)
@@ -632,7 +890,10 @@ export async function POST(
 
           console.log(`    ✓ Image record stored in DB`)
 
-          imageMetadata.push({ docId: doc.id, pageNum, imagePath })
+          // Check if this is a placeholder image (very small)
+          const isPlaceholder = imageResult.buffer.length < 500
+          
+          imageMetadata.push({ docId: doc.id, pageNum, imagePath, isPlaceholder })
           convertedPages++
         }
       }
@@ -648,25 +909,32 @@ export async function POST(
       }
 
       // ========== PHASE 2: TRANSCRIBE ALL IMAGES WITH AI (30-80%) ==========
+      const placeholderCount = imageMetadata.filter(m => m.isPlaceholder).length
+      const realImageCount = imageMetadata.length - placeholderCount
+      
       console.log(`\n`)
       console.log(`╔══════════════════════════════════════════════════════════════╗`)
       console.log(`║     PHASE 2: TRANSCRIPTION IA (30-80%)                       ║`)
-      console.log(`║     Images to transcribe: ${imageMetadata.length}`)
+      console.log(`║     Total pages: ${imageMetadata.length}`)
+      console.log(`║     Real images: ${realImageCount}`)
+      console.log(`║     Placeholders (text fallback): ${placeholderCount}`)
       console.log(`╚══════════════════════════════════════════════════════════════╝`)
       
       if (imageMetadata.length === 0) {
-        console.error(`\n❌❌❌ CRITICAL ERROR: NO IMAGES TO TRANSCRIBE! ❌❌❌`)
-        console.error(`This means Phase 1 failed to create any images.`)
-        throw new Error('No images were converted - cannot proceed with transcription')
+        console.error(`\n❌❌❌ CRITICAL ERROR: NO PAGES TO TRANSCRIBE! ❌❌❌`)
+        console.error(`This means Phase 1 failed completely.`)
+        throw new Error('No pages were processed - cannot proceed with transcription')
       }
       
       let transcribedPages = 0
       const allPageTranscriptions: string[] = []
 
       console.log(`\n[PHASE 2] Starting transcription loop...`)
-      for (const { docId, pageNum, imagePath } of imageMetadata) {
+      for (const { docId, pageNum, imagePath, isPlaceholder } of imageMetadata) {
         console.log(`\n[PHASE 2] ═══════════════════════════════════════════════`)
-        console.log(`[PHASE 2] Processing image: ${imagePath}`)
+        console.log(`[PHASE 2] Processing page ${pageNum}: ${imagePath}`)
+        console.log(`[PHASE 2] Mode: ${isPlaceholder ? 'TEXT FALLBACK' : 'VISION'}`)
+        
         const globalPageNum = transcribedPages + 1
         const percent = 30 + Math.round((transcribedPages / totalPageCount) * 50) // 30-80%
         const eta = Math.max(10, (totalPageCount - transcribedPages) * 3)
@@ -674,37 +942,60 @@ export async function POST(
         await updateProgress(
           id, 
           'transcribing', 
-          `Transcription IA page ${globalPageNum}/${totalPageCount}...`, 
+          `Transcription IA page ${globalPageNum}/${totalPageCount}${isPlaceholder ? ' (texte)' : ''}...`, 
           percent,
           eta
         )
 
         console.log(`\n>>> Transcription page ${globalPageNum}/${totalPageCount}`)
-        console.log(`    Image path: ${imagePath}`)
+        
+        let transcription: PageTranscription
+        
+        if (isPlaceholder) {
+          // Use text-based transcription for placeholders
+          console.log(`    📝 Using TEXT FALLBACK (no real image available)`)
+          
+          // Get the extracted text for this document
+          const fullDocText = extractedTexts.get(docId) || ''
+          
+          // Try to get approximate page text (divide by page count)
+          const docData = documentBuffers.get(docId)
+          const pageCount = docData?.pageCount || 1
+          const avgCharsPerPage = Math.floor(fullDocText.length / pageCount)
+          const startChar = (pageNum - 1) * avgCharsPerPage
+          const endChar = pageNum * avgCharsPerPage
+          const pageText = fullDocText.slice(startChar, endChar)
+          
+          console.log(`    📄 Extracted ~${pageText.length} chars for page ${pageNum}`)
+          
+          transcription = await transcribePageWithText(pageText, globalPageNum, lesson.language)
+          console.log(`    ✓ Text transcription complete: ${transcription.text.length} chars`)
+        } else {
+          // Use vision-based transcription for real images
+          console.log(`    📥 Downloading image from Supabase Storage...`)
+          const { data: imageData, error: downloadError } = await getSupabaseAdmin().storage
+            .from('interactive-lessons')
+            .download(imagePath)
 
-        // Download image from storage
-        console.log(`    📥 Downloading image from Supabase Storage...`)
-        const { data: imageData, error: downloadError } = await getSupabaseAdmin().storage
-          .from('interactive-lessons')
-          .download(imagePath)
+          if (!imageData || downloadError) {
+            console.error(`    ❌ Failed to download image:`, downloadError)
+            allPageTranscriptions.push(`Page ${globalPageNum} (image not found)`)
+            transcribedPages++
+            continue
+          }
 
-        if (!imageData || downloadError) {
-          console.error(`    ❌ Failed to download image:`, downloadError)
-          allPageTranscriptions.push(`Page ${globalPageNum} (image not found)`)
-          transcribedPages++
-          continue
+          const imageBuffer = Buffer.from(await imageData.arrayBuffer())
+          console.log(`    ✓ Image downloaded: ${imageBuffer.length} bytes (${(imageBuffer.length / 1024).toFixed(2)} KB)`)
+
+          const imageBase64 = imageBuffer.toString('base64')
+          console.log(`    ✓ Image converted to base64: ${imageBase64.length} chars`)
+
+          // Transcribe with vision
+          console.log(`    🤖 Calling GPT-4o-mini vision API...`)
+          transcription = await transcribePageWithVision(imageBase64, globalPageNum, lesson.language)
+          console.log(`    ✓ Vision transcription complete: ${transcription.text.length} chars`)
         }
-
-        const imageBuffer = Buffer.from(await imageData.arrayBuffer())
-        console.log(`    ✓ Image downloaded: ${imageBuffer.length} bytes (${(imageBuffer.length / 1024).toFixed(2)} KB)`)
-
-        const imageBase64 = imageBuffer.toString('base64')
-        console.log(`    ✓ Image converted to base64: ${imageBase64.length} chars`)
-
-        // Transcribe with vision
-        console.log(`    🤖 Calling GPT-4o-mini vision API...`)
-        const transcription = await transcribePageWithVision(imageBase64, globalPageNum, lesson.language)
-        console.log(`    ✓ Transcription received: ${transcription.text.length} chars`)
+        
         console.log(`    ✓ Visual elements: ${transcription.visualElements.length}`)
         console.log(`    ✓ Key terms: ${transcription.keyTerms.length}`)
         
