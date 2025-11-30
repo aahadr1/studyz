@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { 
   FiPlay, FiLoader, FiCheckCircle, FiAlertCircle, FiFileText, 
-  FiBook, FiRefreshCw, FiTrash2, FiArrowLeft, FiList
+  FiBook, FiRefreshCw, FiTrash2, FiArrowLeft, FiList,
+  FiImage, FiCpu, FiEdit3, FiHelpCircle
 } from 'react-icons/fi'
 
 interface Document {
@@ -37,9 +38,32 @@ interface InteractiveLesson {
   mode: 'document_based' | 'mcq_only'
   status: 'draft' | 'processing' | 'ready' | 'error'
   error_message: string | null
+  processing_step: string | null
+  processing_progress: number | null
+  processing_total: number | null
+  processing_message: string | null
   created_at: string
   interactive_lesson_documents: Document[]
   interactive_lesson_sections: Section[]
+}
+
+// Processing steps configuration
+const PROCESSING_STEPS = [
+  { key: 'initializing', label: 'Initialisation', icon: FiLoader },
+  { key: 'converting_pages', label: 'Conversion des pages', icon: FiImage },
+  { key: 'transcribing', label: 'Transcription IA', icon: FiCpu },
+  { key: 'reconstructing', label: 'Reconstruction du cours', icon: FiEdit3 },
+  { key: 'checkpointing', label: 'Création des checkpoints', icon: FiList },
+  { key: 'generating_mcq', label: 'Génération des questions', icon: FiHelpCircle },
+  { key: 'analyzing_elements', label: 'Analyse des éléments', icon: FiFileText },
+  { key: 'finalizing', label: 'Finalisation', icon: FiCheckCircle },
+  { key: 'complete', label: 'Terminé', icon: FiCheckCircle },
+]
+
+function getStepIndex(stepKey: string | null): number {
+  if (!stepKey) return 0
+  const idx = PROCESSING_STEPS.findIndex(s => s.key === stepKey)
+  return idx >= 0 ? idx : 0
 }
 
 export default function InteractiveLessonDetailPage() {
@@ -49,7 +73,6 @@ export default function InteractiveLessonDetailPage() {
 
   const [lesson, setLesson] = useState<InteractiveLesson | null>(null)
   const [loading, setLoading] = useState(true)
-  const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const loadLesson = useCallback(async () => {
@@ -73,32 +96,22 @@ export default function InteractiveLessonDetailPage() {
     loadLesson()
   }, [loadLesson])
 
+  // Poll for updates during processing
   useEffect(() => {
     if (lesson?.status === 'processing') {
-      const interval = setInterval(loadLesson, 5000)
+      const interval = setInterval(loadLesson, 2000) // Poll every 2 seconds
       return () => clearInterval(interval)
     }
   }, [lesson?.status, loadLesson])
 
-  const handleProcess = async () => {
-    setProcessing(true)
-    setError(null)
-
+  const handleRetry = async () => {
     try {
-      const response = await fetch(`/api/interactive-lessons/${lessonId}/process`, {
+      await fetch(`/api/interactive-lessons/${lessonId}/process`, {
         method: 'POST'
       })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Processing failed')
-      }
-
       await loadLesson()
-    } catch (err: any) {
-      setError(err.message || 'Processing failed')
-    } finally {
-      setProcessing(false)
+    } catch (err) {
+      console.error('Error retrying:', err)
     }
   }
 
@@ -130,7 +143,7 @@ export default function InteractiveLessonDetailPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="spinner mx-auto mb-3"></div>
-          <p className="text-text-tertiary text-sm">Loading lesson...</p>
+          <p className="text-text-tertiary text-sm">Chargement...</p>
         </div>
       </div>
     )
@@ -140,12 +153,12 @@ export default function InteractiveLessonDetailPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-text-tertiary mb-4">Lesson not found</p>
+          <p className="text-text-tertiary mb-4">Leçon non trouvée</p>
           <button 
             onClick={() => router.push('/interactive-lessons')}
             className="text-accent hover:underline"
           >
-            ← Back to lessons
+            ← Retour aux leçons
           </button>
         </div>
       </div>
@@ -156,6 +169,13 @@ export default function InteractiveLessonDetailPage() {
   const mcqDocs = lesson.interactive_lesson_documents?.filter(d => d.category === 'mcq') || []
   const sections = lesson.interactive_lesson_sections || []
   const totalQuestions = sections.reduce((sum, s) => sum + (s.interactive_lesson_questions?.length || 0), 0)
+  const totalPages = lessonDocs.reduce((sum, d) => sum + (d.page_count || 0), 0)
+
+  const currentStepIndex = getStepIndex(lesson.processing_step)
+  const progressPercent = lesson.processing_step === 'complete' ? 100 
+    : lesson.processing_total && lesson.processing_total > 0 
+      ? Math.round((lesson.processing_progress || 0) / lesson.processing_total * 100)
+      : Math.round(currentStepIndex / (PROCESSING_STEPS.length - 1) * 100)
 
   return (
     <div className="min-h-screen bg-background">
@@ -177,7 +197,7 @@ export default function InteractiveLessonDetailPage() {
                 className="btn-primary"
               >
                 <FiPlay className="w-4 h-4" />
-                Start Learning
+                Commencer
               </button>
             )}
             <button
@@ -198,100 +218,127 @@ export default function InteractiveLessonDetailPage() {
           <div className="flex items-center gap-3 text-sm text-text-tertiary">
             {lesson.subject && <span>{lesson.subject}</span>}
             {lesson.level && <span>• {lesson.level}</span>}
-            <span>• {lesson.mode === 'document_based' ? 'PDF-based' : 'MCQ-only'}</span>
-            <span>• {new Date(lesson.created_at).toLocaleDateString()}</span>
+            <span>• {lesson.mode === 'document_based' ? 'PDF' : 'MCQ-only'}</span>
+            {totalPages > 0 && <span>• {totalPages} pages</span>}
           </div>
         </div>
 
         {/* Status Card */}
         <div className="card p-8 mb-8">
-          {lesson.status === 'draft' && (
-            <div className="text-center">
-              <div className="w-14 h-14 bg-elevated rounded-lg flex items-center justify-center mx-auto mb-4">
-                <FiFileText className="w-7 h-7 text-text-tertiary" />
+          {/* Processing Status */}
+          {(lesson.status === 'processing' || lesson.status === 'draft') && (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-text-primary">
+                  {lesson.status === 'draft' ? 'Préparation...' : 'Analyse en cours'}
+                </h2>
+                <span className="text-sm text-accent">{progressPercent}%</span>
               </div>
-              <h2 className="text-xl font-semibold text-text-primary mb-2">Ready to Process</h2>
-              <p className="text-text-secondary mb-6 max-w-md mx-auto">
-                Your documents are uploaded. Click below to analyze and generate sections with quizzes.
-              </p>
-              <button
-                onClick={handleProcess}
-                disabled={processing}
-                className="btn-primary px-6 disabled:opacity-50"
-              >
-                {processing ? (
-                  <>
-                    <FiLoader className="w-4 h-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <FiPlay className="w-4 h-4" />
-                    Start Processing
-                  </>
+
+              {/* Main Progress Bar */}
+              <div className="h-3 bg-elevated rounded-full overflow-hidden mb-6">
+                <div 
+                  className="h-full bg-accent rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+
+              {/* Current Step Message */}
+              <div className="text-center mb-8">
+                <p className="text-text-secondary">
+                  {lesson.processing_message || 'Initialisation...'}
+                </p>
+                {lesson.processing_progress !== null && lesson.processing_total !== null && lesson.processing_total > 1 && (
+                  <p className="text-sm text-text-tertiary mt-1">
+                    {lesson.processing_progress} / {lesson.processing_total}
+                  </p>
                 )}
-              </button>
-            </div>
-          )}
-
-          {lesson.status === 'processing' && (
-            <div className="text-center">
-              <div className="w-14 h-14 bg-warning-muted rounded-lg flex items-center justify-center mx-auto mb-4">
-                <FiLoader className="w-7 h-7 text-warning animate-spin" />
               </div>
-              <h2 className="text-xl font-semibold text-text-primary mb-2">Processing</h2>
-              <p className="text-text-secondary mb-4 max-w-md mx-auto">
-                Analyzing documents and generating sections. This may take a few minutes.
-              </p>
-              <p className="text-sm text-text-tertiary flex items-center justify-center gap-2">
+
+              {/* Steps Timeline */}
+              <div className="space-y-3">
+                {PROCESSING_STEPS.filter(s => s.key !== 'complete').map((step, idx) => {
+                  const isComplete = idx < currentStepIndex || lesson.status === 'ready'
+                  const isCurrent = idx === currentStepIndex && lesson.status === 'processing'
+                  const isPending = idx > currentStepIndex
+                  
+                  const Icon = step.icon
+                  
+                  return (
+                    <div 
+                      key={step.key}
+                      className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
+                        isCurrent ? 'bg-accent-muted border border-accent/30' :
+                        isComplete ? 'bg-success-muted/50' :
+                        'bg-elevated/50'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        isComplete ? 'bg-success text-white' :
+                        isCurrent ? 'bg-accent text-white' :
+                        'bg-elevated text-text-tertiary'
+                      }`}>
+                        {isComplete ? (
+                          <FiCheckCircle className="w-4 h-4" />
+                        ) : isCurrent ? (
+                          <FiLoader className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Icon className="w-4 h-4" />
+                        )}
+                      </div>
+                      <span className={`text-sm font-medium ${
+                        isCurrent ? 'text-accent' :
+                        isComplete ? 'text-success' :
+                        'text-text-tertiary'
+                      }`}>
+                        {step.label}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <p className="text-xs text-text-tertiary text-center mt-6 flex items-center justify-center gap-2">
                 <FiRefreshCw className="w-3 h-3 animate-spin" />
-                Auto-refreshing...
+                Mise à jour automatique...
               </p>
             </div>
           )}
 
+          {/* Ready Status */}
           {lesson.status === 'ready' && (
             <div className="text-center">
               <div className="w-14 h-14 bg-success-muted rounded-lg flex items-center justify-center mx-auto mb-4">
                 <FiCheckCircle className="w-7 h-7 text-success" />
               </div>
-              <h2 className="text-xl font-semibold text-text-primary mb-2">Ready to Learn</h2>
+              <h2 className="text-xl font-semibold text-text-primary mb-2">Prêt à apprendre !</h2>
               <p className="text-text-secondary mb-6 max-w-md mx-auto">
-                Your interactive lesson is ready. Click below to start.
+                Votre leçon interactive est prête. {sections.length} checkpoints et {totalQuestions} questions vous attendent.
               </p>
               <button
                 onClick={handleStartLearning}
                 className="btn-primary px-6"
               >
                 <FiPlay className="w-4 h-4" />
-                Start Learning
+                Commencer l'apprentissage
               </button>
             </div>
           )}
 
+          {/* Error Status */}
           {lesson.status === 'error' && (
             <div className="text-center">
               <div className="w-14 h-14 bg-error-muted rounded-lg flex items-center justify-center mx-auto mb-4">
                 <FiAlertCircle className="w-7 h-7 text-error" />
               </div>
-              <h2 className="text-xl font-semibold text-text-primary mb-2">Processing Failed</h2>
-              <p className="text-error mb-4">{lesson.error_message || 'An error occurred'}</p>
+              <h2 className="text-xl font-semibold text-text-primary mb-2">Erreur de traitement</h2>
+              <p className="text-error mb-4">{lesson.error_message || 'Une erreur est survenue'}</p>
               <button
-                onClick={handleProcess}
-                disabled={processing}
+                onClick={handleRetry}
                 className="btn-secondary"
               >
-                {processing ? (
-                  <>
-                    <FiLoader className="w-4 h-4 animate-spin" />
-                    Retrying...
-                  </>
-                ) : (
-                  <>
-                    <FiRefreshCw className="w-4 h-4" />
-                    Retry
-                  </>
-                )}
+                <FiRefreshCw className="w-4 h-4" />
+                Réessayer
               </button>
             </div>
           )}
@@ -308,7 +355,7 @@ export default function InteractiveLessonDetailPage() {
           <div className="card p-5">
             <div className="flex items-center gap-2 mb-4">
               <FiBook className="w-4 h-4 text-accent" />
-              <h3 className="font-medium text-text-primary">Lesson Documents</h3>
+              <h3 className="font-medium text-text-primary">Documents</h3>
               <span className="text-sm text-text-tertiary">({lessonDocs.length})</span>
             </div>
             {lessonDocs.length > 0 ? (
@@ -321,14 +368,14 @@ export default function InteractiveLessonDetailPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-text-tertiary">No lesson documents</p>
+              <p className="text-sm text-text-tertiary">Aucun document</p>
             )}
           </div>
 
           <div className="card p-5">
             <div className="flex items-center gap-2 mb-4">
               <FiFileText className="w-4 h-4 text-text-secondary" />
-              <h3 className="font-medium text-text-primary">MCQ Documents</h3>
+              <h3 className="font-medium text-text-primary">MCQ</h3>
               <span className="text-sm text-text-tertiary">({mcqDocs.length})</span>
             </div>
             {mcqDocs.length > 0 ? (
@@ -341,7 +388,7 @@ export default function InteractiveLessonDetailPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-text-tertiary">AI will generate questions</p>
+              <p className="text-sm text-text-tertiary">Questions générées par l'IA</p>
             )}
           </div>
         </div>
@@ -351,7 +398,7 @@ export default function InteractiveLessonDetailPage() {
           <div className="card p-5">
             <div className="flex items-center gap-2 mb-4">
               <FiList className="w-4 h-4 text-success" />
-              <h3 className="font-medium text-text-primary">Sections</h3>
+              <h3 className="font-medium text-text-primary">Checkpoints</h3>
               <span className="text-sm text-text-tertiary">({sections.length} sections, {totalQuestions} questions)</span>
             </div>
             <div className="space-y-3">
@@ -359,7 +406,7 @@ export default function InteractiveLessonDetailPage() {
                 <div key={section.id} className="p-4 bg-elevated rounded-md">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <span className="text-xs font-medium text-accent">Section {index + 1}</span>
+                      <span className="text-xs font-medium text-accent">Checkpoint {index + 1}</span>
                       <span className="text-xs text-text-tertiary ml-2">
                         Pages {section.start_page} - {section.end_page}
                       </span>

@@ -1,6 +1,13 @@
 -- Interactive Lessons v2 - Vision-Based Analysis
 -- Migration: 003_interactive_lessons_v2.sql
 
+-- Add processing progress tracking to interactive_lessons
+ALTER TABLE interactive_lessons
+ADD COLUMN IF NOT EXISTS processing_step TEXT,
+ADD COLUMN IF NOT EXISTS processing_progress INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS processing_total INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS processing_message TEXT;
+
 -- Page images (PDF converted to images)
 CREATE TABLE IF NOT EXISTS interactive_lesson_page_images (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

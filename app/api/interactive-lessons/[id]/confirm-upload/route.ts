@@ -48,6 +48,18 @@ async function createAuthClient() {
   )
 }
 
+// Get PDF page count using MuPDF
+async function getPdfPageCount(buffer: Buffer): Promise<number> {
+  try {
+    const mupdf = await import('mupdf')
+    const doc = mupdf.Document.openDocument(buffer, 'application/pdf')
+    return doc.countPages()
+  } catch (error) {
+    console.error('Error getting page count:', error)
+    return 0
+  }
+}
+
 // POST: Confirm upload and create document record
 export async function POST(
   request: NextRequest,
@@ -97,15 +109,27 @@ export async function POST(
       )
     }
 
-    // Verify the file exists in storage
-    const { data: fileData, error: fileError } = await getSupabaseAdmin()
-      .storage
-      .from('interactive-lessons')
-      .list(filePath.split('/').slice(0, -1).join('/'), {
-        search: filePath.split('/').pop()
-      })
+    // Get page count for PDFs
+    let pageCount = 0
+    if (fileType === 'pdf') {
+      try {
+        // Download the file to get page count
+        const { data: fileData, error: downloadError } = await getSupabaseAdmin()
+          .storage
+          .from('interactive-lessons')
+          .download(filePath)
+        
+        if (fileData && !downloadError) {
+          const buffer = Buffer.from(await fileData.arrayBuffer())
+          pageCount = await getPdfPageCount(buffer)
+          console.log(`PDF ${fileName} has ${pageCount} pages`)
+        }
+      } catch (err) {
+        console.error('Error getting PDF page count:', err)
+      }
+    }
 
-    // Create document record
+    // Create document record with actual page count
     const { data: document, error: docError } = await getSupabaseAdmin()
       .from('interactive_lesson_documents')
       .insert({
@@ -114,7 +138,7 @@ export async function POST(
         name: fileName,
         file_path: filePath,
         file_type: fileType,
-        page_count: 0 // Will be updated during processing
+        page_count: pageCount
       })
       .select()
       .single()
@@ -127,7 +151,7 @@ export async function POST(
       )
     }
 
-    return NextResponse.json({ document }, { status: 201 })
+    return NextResponse.json({ document, pageCount }, { status: 201 })
 
   } catch (error: any) {
     console.error('Error in POST /api/interactive-lessons/[id]/confirm-upload:', error)

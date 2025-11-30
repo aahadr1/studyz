@@ -135,6 +135,15 @@ export default function NewInteractiveLessonPage() {
         }
       }
 
+      // Automatically start processing
+      try {
+        await fetch(`/api/interactive-lessons/${lesson.id}/process`, {
+          method: 'POST'
+        })
+      } catch (err) {
+        console.error('Failed to start processing:', err)
+      }
+
       router.push(`/interactive-lessons/${lesson.id}`)
 
     } catch (err: any) {

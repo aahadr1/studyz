@@ -19,6 +19,37 @@ function getSupabaseAdmin(): any {
   return _supabaseAdmin
 }
 
+// Processing steps for progress tracking
+const PROCESSING_STEPS = {
+  INITIALIZING: 'initializing',
+  CONVERTING_PAGES: 'converting_pages',
+  TRANSCRIBING: 'transcribing',
+  RECONSTRUCTING: 'reconstructing',
+  CHECKPOINTING: 'checkpointing',
+  GENERATING_MCQ: 'generating_mcq',
+  ANALYZING_ELEMENTS: 'analyzing_elements',
+  FINALIZING: 'finalizing'
+}
+
+// Update processing progress
+async function updateProgress(
+  lessonId: string, 
+  step: string, 
+  progress: number, 
+  total: number, 
+  message: string
+) {
+  await getSupabaseAdmin()
+    .from('interactive_lessons')
+    .update({
+      processing_step: step,
+      processing_progress: progress,
+      processing_total: total,
+      processing_message: message
+    })
+    .eq('id', lessonId)
+}
+
 // Lazy initialization of OpenAI client
 let _openai: OpenAI | null = null
 function getOpenAI() {
@@ -636,7 +667,14 @@ export async function POST(
     // Update status to processing
     await getSupabaseAdmin()
       .from('interactive_lessons')
-      .update({ status: 'processing', mode })
+      .update({ 
+        status: 'processing', 
+        mode,
+        processing_step: PROCESSING_STEPS.INITIALIZING,
+        processing_progress: 0,
+        processing_total: 100,
+        processing_message: 'Initialisation...'
+      })
       .eq('id', id)
 
     try {
@@ -645,9 +683,18 @@ export async function POST(
         const allPageTexts: string[] = []
         let totalPageCount = 0
 
+        // First, calculate total pages for progress tracking
+        for (const doc of lessonDocs) {
+          totalPageCount += doc.page_count || 0
+        }
+
+        let processedPages = 0
+
         // Process each lesson document
         for (const doc of lessonDocs) {
           console.log(`Processing document: ${doc.name}`)
+          
+          await updateProgress(id, PROCESSING_STEPS.CONVERTING_PAGES, 0, totalPageCount, `Téléchargement de ${doc.name}...`)
           
           // Download file
           const { data: fileData, error: downloadError } = await getSupabaseAdmin().storage
@@ -665,6 +712,11 @@ export async function POST(
           const pageCount = await getPdfPageCount(buffer)
           console.log(`Document has ${pageCount} pages`)
           
+          // Update total if we got more accurate count
+          if (doc.page_count !== pageCount) {
+            totalPageCount = totalPageCount - (doc.page_count || 0) + pageCount
+          }
+          
           // Update document page count
           await getSupabaseAdmin()
             .from('interactive_lesson_documents')
@@ -674,6 +726,14 @@ export async function POST(
           // STEP 1: Convert each page to image and transcribe
           for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
             console.log(`Processing page ${pageNum}/${pageCount}`)
+            
+            await updateProgress(
+              id, 
+              PROCESSING_STEPS.TRANSCRIBING, 
+              processedPages + pageNum, 
+              totalPageCount, 
+              `Transcription de la page ${pageNum}/${pageCount}...`
+            )
             
             // Convert to image
             const imageResult = await convertPdfPageToImage(buffer, pageNum)
@@ -755,11 +815,12 @@ export async function POST(
             }
           }
           
-          totalPageCount += pageCount
+          processedPages += pageCount
         }
 
         // STEP 3: Reconstruct full lesson
         console.log('Reconstructing lesson...')
+        await updateProgress(id, PROCESSING_STEPS.RECONSTRUCTING, 0, 1, 'Reconstruction de la leçon complète...')
         const reconstruction = await reconstructLesson(allPageTexts, lesson.language)
         
         await getSupabaseAdmin()
@@ -772,6 +833,7 @@ export async function POST(
 
         // STEP 4: Create checkpoints
         console.log('Creating checkpoints...')
+        await updateProgress(id, PROCESSING_STEPS.CHECKPOINTING, 0, 1, 'Création des checkpoints...')
         const checkpointData = await createCheckpoints(
           reconstruction.fullContent,
           totalPageCount,
@@ -820,6 +882,7 @@ export async function POST(
         }
 
         // STEP 5: Handle MCQ
+        await updateProgress(id, PROCESSING_STEPS.GENERATING_MCQ, 0, createdCheckpoints.length, 'Préparation des questions...')
         let uploadedQuestions: Question[] = []
 
         // Parse MCQ from uploaded documents if any
@@ -883,7 +946,16 @@ export async function POST(
           // Generate questions for each checkpoint
           console.log('Generating questions for each checkpoint...')
           
-          for (const cp of createdCheckpoints) {
+          for (let cpIdx = 0; cpIdx < createdCheckpoints.length; cpIdx++) {
+            const cp = createdCheckpoints[cpIdx]
+            await updateProgress(
+              id, 
+              PROCESSING_STEPS.GENERATING_MCQ, 
+              cpIdx + 1, 
+              createdCheckpoints.length, 
+              `Génération des questions pour "${cp.title}"...`
+            )
+            
             // Get relevant page content for this checkpoint
             const relevantContent = allPageTexts
               .slice(cp.start_page - 1, cp.end_page)
@@ -1029,10 +1101,20 @@ export async function POST(
         }
       }
 
+      // Finalize
+      await updateProgress(id, PROCESSING_STEPS.FINALIZING, 1, 1, 'Finalisation...')
+
       // Update status to ready
       await getSupabaseAdmin()
         .from('interactive_lessons')
-        .update({ status: 'ready', error_message: null })
+        .update({ 
+          status: 'ready', 
+          error_message: null,
+          processing_step: 'complete',
+          processing_progress: 100,
+          processing_total: 100,
+          processing_message: 'Terminé !'
+        })
         .eq('id', id)
 
       return NextResponse.json({ 
