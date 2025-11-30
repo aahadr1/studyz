@@ -13,7 +13,8 @@ async function getPdfJs() {
   if (pdfjsLib) return pdfjsLib
   const module = await import('pdfjs-dist')
   if (typeof window !== 'undefined') {
-    module.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${module.version}/pdf.worker.min.js`
+    // Use local worker file instead of CDN
+    module.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
   }
   pdfjsLib = module
   return pdfjsLib
