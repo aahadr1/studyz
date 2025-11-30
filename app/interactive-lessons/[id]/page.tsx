@@ -96,23 +96,33 @@ export default function InteractiveLessonDetailPage() {
     loadLesson()
   }, [loadLesson])
 
+  // Auto-start processing when lesson is in draft status
+  useEffect(() => {
+    if (lesson?.status === 'draft') {
+      console.log('Auto-starting processing...')
+      // Fire and forget - don't await
+      fetch(`/api/interactive-lessons/${lessonId}/process`, {
+        method: 'POST'
+      }).catch(err => console.error('Error starting process:', err))
+    }
+  }, [lesson?.status, lessonId])
+
   // Poll for updates during processing
   useEffect(() => {
-    if (lesson?.status === 'processing') {
+    if (lesson?.status === 'processing' || lesson?.status === 'draft') {
       const interval = setInterval(loadLesson, 2000) // Poll every 2 seconds
       return () => clearInterval(interval)
     }
   }, [lesson?.status, loadLesson])
 
   const handleRetry = async () => {
-    try {
-      await fetch(`/api/interactive-lessons/${lessonId}/process`, {
-        method: 'POST'
-      })
-      await loadLesson()
-    } catch (err) {
-      console.error('Error retrying:', err)
-    }
+    // Fire and forget
+    fetch(`/api/interactive-lessons/${lessonId}/process`, {
+      method: 'POST'
+    }).catch(err => console.error('Error retrying:', err))
+    
+    // Reload to see status change
+    setTimeout(loadLesson, 1000)
   }
 
   const handleDelete = async () => {

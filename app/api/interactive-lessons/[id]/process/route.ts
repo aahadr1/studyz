@@ -7,6 +7,20 @@ import OpenAI from 'openai'
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes for processing
 
+// Timeout wrapper for operations that might hang
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => {
+      console.log(`Operation timed out after ${timeoutMs}ms, using fallback`)
+      resolve(fallback)
+    }, timeoutMs))
+  ])
+}
+
+// Flag to track if MuPDF works on this environment
+let mupdfWorks: boolean | null = null
+
 // Lazy initialization of admin client
 let _supabaseAdmin: any = null
 function getSupabaseAdmin(): any {
@@ -131,47 +145,64 @@ function bufferToUint8Array(buffer: Buffer): Uint8Array {
   return new Uint8Array(arrayBuffer)
 }
 
-// Convert PDF page to image using MuPDF
+// Convert PDF page to image using MuPDF (with timeout)
 async function convertPdfPageToImage(pdfBuffer: Buffer, pageNumber: number): Promise<{ buffer: Buffer; width: number; height: number } | null> {
-  try {
-    // Dynamic import for mupdf
-    const mupdf = await import('mupdf')
-    
-    // Convert to Uint8Array for MuPDF
-    const uint8Array = bufferToUint8Array(pdfBuffer)
-    
-    // Open the PDF document
-    const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
-    
-    // Get the page (0-indexed in mupdf)
-    const page = doc.loadPage(pageNumber - 1)
-    
-    // Get page bounds
-    const bounds = page.getBounds()
-    const width = Math.round(bounds[2] - bounds[0])
-    const height = Math.round(bounds[3] - bounds[1])
-    
-    // Create a pixmap at 2x resolution for better quality
-    const scale = 2
-    const pixmap = page.toPixmap(
-      mupdf.Matrix.scale(scale, scale),
-      mupdf.ColorSpace.DeviceRGB,
-      false, // no alpha
-      true   // annots
-    )
-    
-    // Convert to PNG buffer
-    const pngBuffer = pixmap.asPNG()
-    
-    return {
-      buffer: Buffer.from(pngBuffer),
-      width: width * scale,
-      height: height * scale
-    }
-  } catch (error) {
-    console.error(`Error converting page ${pageNumber} to image:`, error)
+  // If MuPDF already failed, don't try again
+  if (mupdfWorks === false) {
+    console.log(`Skipping MuPDF for page ${pageNumber} (previously failed)`)
     return null
   }
+
+  const convertWithMupdf = async (): Promise<{ buffer: Buffer; width: number; height: number } | null> => {
+    try {
+      console.log(`Converting page ${pageNumber} with MuPDF...`)
+      
+      // Dynamic import for mupdf
+      const mupdf = await import('mupdf')
+      
+      // Convert to Uint8Array for MuPDF
+      const uint8Array = bufferToUint8Array(pdfBuffer)
+      
+      // Open the PDF document
+      const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
+      
+      // Get the page (0-indexed in mupdf)
+      const page = doc.loadPage(pageNumber - 1)
+      
+      // Get page bounds
+      const bounds = page.getBounds()
+      const width = Math.round(bounds[2] - bounds[0])
+      const height = Math.round(bounds[3] - bounds[1])
+      
+      // Create a pixmap at 1.5x resolution (lower than before for speed)
+      const scale = 1.5
+      const pixmap = page.toPixmap(
+        mupdf.Matrix.scale(scale, scale),
+        mupdf.ColorSpace.DeviceRGB,
+        false, // no alpha
+        true   // annots
+      )
+      
+      // Convert to PNG buffer
+      const pngBuffer = pixmap.asPNG()
+      
+      mupdfWorks = true
+      console.log(`Page ${pageNumber} converted successfully`)
+      
+      return {
+        buffer: Buffer.from(pngBuffer),
+        width: Math.round(width * scale),
+        height: Math.round(height * scale)
+      }
+    } catch (error) {
+      console.error(`MuPDF error for page ${pageNumber}:`, error)
+      mupdfWorks = false
+      return null
+    }
+  }
+
+  // Timeout after 30 seconds per page
+  return withTimeout(convertWithMupdf(), 30000, null)
 }
 
 // Get page count from PDF - robust multi-method approach
@@ -794,6 +825,25 @@ export async function POST(
           const { buffer, pageCount } = docData
           console.log(`Processing document: ${doc.name} (${pageCount} pages)`)
 
+          // First try to extract text using pdf-parse as fallback
+          let pdfTextPages: string[] = []
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const pdfParse = require('pdf-parse')
+            const pdfData = await pdfParse(buffer)
+            // Split text roughly by page count
+            const fullText = pdfData.text || ''
+            const avgCharsPerPage = Math.ceil(fullText.length / pageCount)
+            for (let i = 0; i < pageCount; i++) {
+              const start = i * avgCharsPerPage
+              const end = Math.min((i + 1) * avgCharsPerPage, fullText.length)
+              pdfTextPages.push(fullText.slice(start, end).trim() || `Page ${i + 1}`)
+            }
+            console.log(`Extracted text fallback for ${pageCount} pages`)
+          } catch (err) {
+            console.error('pdf-parse fallback failed:', err)
+          }
+
           // STEP 1: Convert each page to image and transcribe
           for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
             console.log(`Processing page ${pageNum}/${pageCount}`)
@@ -806,56 +856,84 @@ export async function POST(
               `Transcription de la page ${pageNum}/${pageCount}...`
             )
             
-            // Convert to image
+            // Try to convert to image (with timeout)
             const imageResult = await convertPdfPageToImage(buffer, pageNum)
+            
+            let transcription: PageTranscription
             
             if (imageResult) {
               // Upload image to storage
               const imagePath = `${user.id}/${id}/pages/${doc.id}_page_${pageNum}.png`
               
-              const { error: uploadError } = await getSupabaseAdmin().storage
-                .from('interactive-lessons')
-                .upload(imagePath, imageResult.buffer, {
-                  contentType: 'image/png',
-                  upsert: true
-                })
+              try {
+                const { error: uploadError } = await getSupabaseAdmin().storage
+                  .from('interactive-lessons')
+                  .upload(imagePath, imageResult.buffer, {
+                    contentType: 'image/png',
+                    upsert: true
+                  })
 
-              if (!uploadError) {
-                // Store image reference
-                await getSupabaseAdmin()
-                  .from('interactive_lesson_page_images')
-                  .upsert({
-                    document_id: doc.id,
-                    page_number: pageNum,
-                    image_path: imagePath,
-                    width: imageResult.width,
-                    height: imageResult.height
-                  }, { onConflict: 'document_id,page_number' })
+                if (!uploadError) {
+                  // Store image reference
+                  await getSupabaseAdmin()
+                    .from('interactive_lesson_page_images')
+                    .upsert({
+                      document_id: doc.id,
+                      page_number: pageNum,
+                      image_path: imagePath,
+                      width: imageResult.width,
+                      height: imageResult.height
+                    }, { onConflict: 'document_id,page_number' })
+                }
+              } catch (err) {
+                console.error(`Failed to upload image for page ${pageNum}:`, err)
               }
 
-              // STEP 2: Transcribe with vision
+              // STEP 2: Transcribe with vision (with timeout)
               const imageBase64 = imageResult.buffer.toString('base64')
-              const transcription = await transcribePageWithVision(imageBase64, pageNum, lesson.language)
+              transcription = await withTimeout(
+                transcribePageWithVision(imageBase64, pageNum, lesson.language),
+                60000, // 60 second timeout per page
+                { 
+                  text: pdfTextPages[pageNum - 1] || `Page ${pageNum}`, 
+                  elements: [], 
+                  hasVisualContent: false 
+                }
+              )
+            } else {
+              // Fallback: use text extraction only
+              console.log(`Using text fallback for page ${pageNum}`)
+              transcription = {
+                text: pdfTextPages[pageNum - 1] || `Page ${pageNum} (text extraction failed)`,
+                elements: [],
+                hasVisualContent: false
+              }
+            }
               
-              // Store transcription
-              const { data: pageTextData } = await getSupabaseAdmin()
-                .from('interactive_lesson_page_texts')
-                .upsert({
-                  document_id: doc.id,
-                  page_number: pageNum,
-                  text_content: transcription.text,
-                  transcription_type: 'vision',
-                  elements_description: JSON.stringify(transcription.elements),
-                  has_visual_content: transcription.hasVisualContent
-                }, { onConflict: 'document_id,page_number' })
-                .select()
-                .single()
+            // Store transcription (works for both vision and fallback)
+            const { data: pageTextData } = await getSupabaseAdmin()
+              .from('interactive_lesson_page_texts')
+              .upsert({
+                document_id: doc.id,
+                page_number: pageNum,
+                text_content: transcription.text,
+                transcription_type: imageResult ? 'vision' : 'text',
+                elements_description: JSON.stringify(transcription.elements),
+                has_visual_content: transcription.hasVisualContent
+              }, { onConflict: 'document_id,page_number' })
+              .select()
+              .single()
 
-              allPageTexts.push(transcription.text)
+            allPageTexts.push(transcription.text)
 
-              // STEP 6: Analyze elements for highlights (do this in parallel later for each page)
-              if (pageTextData) {
-                const elements = await analyzePageElements(transcription.text, pageNum, lesson.language)
+            // Analyze elements for highlights (skip if text fallback to save time)
+            if (pageTextData && imageResult) {
+              try {
+                const elements = await withTimeout(
+                  analyzePageElements(transcription.text, pageNum, lesson.language),
+                  30000, // 30 second timeout
+                  []
+                )
                 
                 for (let i = 0; i < elements.length; i++) {
                   const elem = elements[i]
@@ -870,19 +948,9 @@ export async function POST(
                       element_order: i
                     })
                 }
+              } catch (err) {
+                console.error(`Element analysis failed for page ${pageNum}:`, err)
               }
-            } else {
-              // Fallback: store empty page
-              allPageTexts.push(`(Page ${pageNum})`)
-              
-              await getSupabaseAdmin()
-                .from('interactive_lesson_page_texts')
-                .upsert({
-                  document_id: doc.id,
-                  page_number: pageNum,
-                  text_content: `(Page ${pageNum} - image conversion failed)`,
-                  transcription_type: 'text'
-                }, { onConflict: 'document_id,page_number' })
             }
           }
           
