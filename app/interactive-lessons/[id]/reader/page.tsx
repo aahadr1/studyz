@@ -3,7 +3,20 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { FiArrowLeft } from 'react-icons/fi'
-import InteractiveLessonReader from '@/components/InteractiveLessonReader'
+import dynamic from 'next/dynamic'
+
+// Dynamically import the reader component to avoid SSR issues with react-pdf
+const InteractiveLessonReader = dynamic(
+  () => import('@/components/InteractiveLessonReader'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="spinner"></div>
+      </div>
+    )
+  }
+)
 
 interface InteractiveLesson {
   id: string
@@ -17,7 +30,7 @@ export default function InteractiveLessonReaderPage() {
   const lessonId = params.id as string
 
   const [lesson, setLesson] = useState<InteractiveLesson | null>(null)
-  const [totalPages, setTotalPages] = useState(0)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,18 +59,20 @@ export default function InteractiveLessonReaderPage() {
       }
 
       const documentId = documents[0].id
-      const pageCount = documents[0].page_count || 0
 
-      if (pageCount === 0) {
-        throw new Error('Document has no pages')
+      // Get signed URL for the PDF
+      const urlResponse = await fetch(`/api/interactive-lessons/${lessonId}/documents/${documentId}/signed-url`)
+      if (!urlResponse.ok) {
+        throw new Error('Failed to get PDF URL')
       }
 
-      setTotalPages(pageCount)
-      setLoading(false)
+      const urlData = await urlResponse.json()
+      setPdfUrl(urlData.signedUrl)
 
     } catch (err: any) {
       console.error('Error loading lesson:', err)
       setError(err.message || 'Failed to load lesson')
+    } finally {
       setLoading(false)
     }
   }
@@ -73,7 +88,7 @@ export default function InteractiveLessonReaderPage() {
     )
   }
 
-  if (error || !lesson) {
+  if (error || !lesson || !pdfUrl) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -92,7 +107,7 @@ export default function InteractiveLessonReaderPage() {
   return (
     <div className="h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="h-14 border-b border-border flex items-center px-6">
+      <header className="h-14 border-b border-border flex items-center px-6 flex-shrink-0">
         <button 
           onClick={() => router.push('/interactive-lessons')}
           className="btn-ghost p-2 mr-4"
@@ -109,10 +124,9 @@ export default function InteractiveLessonReaderPage() {
         <InteractiveLessonReader
           lessonId={lessonId}
           lessonName={lesson.name}
-          totalPages={totalPages}
+          pdfUrl={pdfUrl}
         />
       </div>
     </div>
   )
 }
-

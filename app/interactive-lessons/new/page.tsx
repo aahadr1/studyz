@@ -3,7 +3,6 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { FiUpload, FiX, FiBook, FiFileText, FiArrowLeft, FiArrowRight, FiLoader } from 'react-icons/fi'
-import { convertPdfAndUpload } from '@/lib/clientPdfConverter'
 
 export default function NewInteractiveLessonPage() {
   const router = useRouter()
@@ -134,19 +133,7 @@ export default function NewInteractiveLessonPage() {
         await uploadFileDirectly(lesson.id, file, 'mcq')
       }
 
-      // 3. Convert PDF to images if lesson files exist (client-side)
-      if (lessonFiles.length > 0) {
-        setProcessing(true)
-        for (const file of lessonFiles) {
-          if (file.type === 'application/pdf') {
-            await convertPdfAndUpload(file, lesson.id, (progress) => {
-              setProcessingMessage(progress.message)
-            })
-          }
-        }
-      }
-
-      // 4. Set status to 'ready'
+      // 3. Set status to 'ready'
       await fetch(`/api/interactive-lessons/${lesson.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
