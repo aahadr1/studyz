@@ -321,30 +321,31 @@ async function generateAllQuestions(
   const fullText = pageTranscriptions.join('\n\n')
   const truncatedText = fullText.length > 50000 ? fullText.slice(0, 50000) : fullText
 
-  const prompt = `Génère des QCM pour tester la compréhension de ce cours.
+  const prompt = `Tu es un expert en pédagogie. Génère EXACTEMENT 10 QCM par checkpoint pour ce cours.
 
-CHECKPOINTS:
+CHECKPOINTS (${checkpoints.length} total):
 ${checkpointSummaries}
 
-CONTENU (${langName}):
+CONTENU DU COURS (${langName}):
 ${truncatedText}
 
-INSTRUCTIONS:
-- 8-10 questions par checkpoint
-- 4 choix par question
-- 1 seul choix correct (index 0-3)
-- Questions de COMPRÉHENSION
-- Explications claires
-- En ${langName}
+INSTRUCTIONS CRITIQUES:
+- Génère EXACTEMENT 10 questions pour CHAQUE checkpoint (total: ${checkpoints.length * 10} questions)
+- checkpointIndex va de 0 à ${checkpoints.length - 1}
+- Chaque question a EXACTEMENT 4 choix (A, B, C, D)
+- correctIndex est entre 0 et 3
+- Questions de COMPRÉHENSION (pas juste de mémorisation)
+- Explications détaillées (2-3 phrases)
+- Tout en ${langName}
 
-RÉPONDS EN JSON (pas de markdown):
+RÉPONDS EN JSON (pas de markdown, pas de commentaires):
 {
   "questions": [
     {
-      "question": "Question?",
-      "choices": ["A", "B", "C", "D"],
+      "question": "Question détaillée sur le checkpoint?",
+      "choices": ["Choix A", "Choix B", "Choix C", "Choix D"],
       "correctIndex": 0,
-      "explanation": "Explication",
+      "explanation": "Explication détaillée de pourquoi cette réponse est correcte.",
       "checkpointIndex": 0
     }
   ]
@@ -613,13 +614,23 @@ export async function POST(
       await updateProgress(id, 'questions', 'Génération des questions...', 92, 15)
       const questions = await generateAllQuestions(structure.checkpoints, allPageTranscriptions, lesson.language)
       
-      console.log(`Generated ${questions.length} questions`)
+      console.log(`Generated ${questions.length} questions for ${createdCheckpoints.length} checkpoints`)
+      
+      // Count questions per checkpoint for debugging
+      const questionsPerCheckpoint = new Map<number, number>()
+      questions.forEach(q => {
+        questionsPerCheckpoint.set(q.checkpointIndex, (questionsPerCheckpoint.get(q.checkpointIndex) || 0) + 1)
+      })
+      questionsPerCheckpoint.forEach((count, idx) => {
+        console.log(`Checkpoint ${idx}: ${count} questions`)
+      })
 
       // Store questions
+      let storedCount = 0
       for (const q of questions) {
         const checkpoint = createdCheckpoints.find(c => c.index === q.checkpointIndex)
         if (checkpoint) {
-          await getSupabaseAdmin()
+          const { error: insertError } = await getSupabaseAdmin()
             .from('interactive_lesson_questions')
             .insert({
               checkpoint_id: checkpoint.id,
@@ -629,8 +640,18 @@ export async function POST(
               explanation: q.explanation,
               question_order: 0
             })
+          
+          if (!insertError) {
+            storedCount++
+          } else {
+            console.error(`Failed to store question for checkpoint ${q.checkpointIndex}:`, insertError)
+          }
+        } else {
+          console.warn(`No checkpoint found for checkpointIndex ${q.checkpointIndex}`)
         }
       }
+      
+      console.log(`Successfully stored ${storedCount}/${questions.length} questions`)
 
       // Complete
       const totalTime = Math.round((Date.now() - startTime) / 1000)

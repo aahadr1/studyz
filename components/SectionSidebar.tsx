@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { FiFileText, FiHelpCircle, FiMessageCircle, FiChevronRight, FiLoader } from 'react-icons/fi'
 import QuizForm from './QuizForm'
 import PageExplanation from './PageExplanation'
+import PagePedagogicalExplanation from './PagePedagogicalExplanation'
 
 interface Question {
   id: string
@@ -222,19 +223,12 @@ export default function SectionSidebar({
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
-        {/* Page Tab - Shows page explanation with highlights */}
+        {/* Page Tab - Shows pedagogical explanation using vision AI */}
         {activeTab === 'page' && (
           <div className="h-full">
-            {pageLoading ? (
-              <div className="h-full flex items-center justify-center">
-                <FiLoader className="w-5 h-5 animate-spin text-accent" />
-              </div>
-            ) : pageData?.transcription ? (
-              <PageExplanation
-                transcription={pageData.transcription.text}
-                elements={pageData.elements}
-                hasVisualContent={pageData.transcription.hasVisualContent}
-                visualElements={pageData.transcription.visualElements}
+            {mode === 'document_based' && currentPage > 0 ? (
+              <PagePedagogicalExplanation
+                lessonId={lessonId}
                 pageNumber={currentPage}
               />
             ) : mode === 'mcq_only' && generatedContent ? (
@@ -243,48 +237,6 @@ export default function SectionSidebar({
                   className="prose prose-invert prose-sm max-w-none"
                   dangerouslySetInnerHTML={{ __html: generatedContent }}
                 />
-              </div>
-            ) : section ? (
-              <div className="h-full overflow-auto p-5">
-                {/* Fallback: Show section summary if no page data */}
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 text-xs text-accent mb-1">
-                    <span>Section {sectionIndex + 1} of {totalSections}</span>
-                    {mode === 'document_based' && (
-                      <span className="text-text-tertiary">
-                        • Pages {section.start_page} - {section.end_page}
-                      </span>
-                    )}
-                  </div>
-                  <h2 className="text-lg font-semibold text-text-primary">{section.title}</h2>
-                </div>
-
-                {section.summary && (
-                  <div className="mb-6">
-                    <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
-                      Summary
-                    </h3>
-                    <p className="text-text-secondary text-sm leading-relaxed">{section.summary}</p>
-                  </div>
-                )}
-
-                {section.key_points && section.key_points.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3">
-                      Key Points
-                    </h3>
-                    <ul className="space-y-2">
-                      {section.key_points.map((point, index) => (
-                        <li key={index} className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-muted flex items-center justify-center mt-0.5">
-                            <span className="text-xs text-accent font-medium">{index + 1}</span>
-                          </div>
-                          <span className="text-sm text-text-secondary">{point}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="h-full flex items-center justify-center text-text-tertiary p-4">
