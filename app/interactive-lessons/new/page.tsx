@@ -133,15 +133,28 @@ export default function NewInteractiveLessonPage() {
         await uploadFileDirectly(lesson.id, file, 'mcq')
       }
 
-      // 3. Set status to 'ready' - no processing needed!
+      // 3. Convert PDF to images if lesson files exist
+      if (lessonFiles.length > 0) {
+        setProcessingMessage('Conversion du PDF en images...')
+        const convertResponse = await fetch(`/api/interactive-lessons/${lesson.id}/convert-pdf`, {
+          method: 'POST',
+        })
+
+        if (!convertResponse.ok) {
+          const data = await convertResponse.json()
+          throw new Error(data.error || 'Failed to convert PDF')
+        }
+      }
+
+      // 4. Set status to 'ready'
       await fetch(`/api/interactive-lessons/${lesson.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ready' })
       })
 
-      // Redirect to player page immediately
-      router.push(`/interactive-lessons/${lesson.id}/player`)
+      // Redirect to reader page
+      router.push(`/interactive-lessons/${lesson.id}/reader`)
 
     } catch (err: any) {
       console.error('Error:', err)

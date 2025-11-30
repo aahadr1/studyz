@@ -161,7 +161,7 @@ export default function InteractiveLessonDetailPage() {
                 Navigate through the lesson page by page with AI-powered explanations
               </p>
               <button
-                onClick={() => router.push(`/interactive-lessons/${lessonId}/player`)}
+                onClick={() => router.push(`/interactive-lessons/${lessonId}/reader`)}
                 className="btn-primary px-8"
               >
                 <FiPlay className="w-4 h-4" />
