@@ -112,7 +112,7 @@ export default function InteractiveLessonDetailPage() {
     const loadDocumentAndProcess = async () => {
       if (lesson && lesson.status === 'processing' && !showProcessor) {
         const lessonDocs = lesson.interactive_lesson_documents?.filter(d => d.category === 'lesson') || []
-        if (lessonDocs.length > 0 && lessonDocs[0].file_path) {
+        if (lessonDocs.length > 0 && lessonDocs[0].id) {
           try {
             // Create signed URL API for interactive lesson documents
             const response = await fetch(`/api/interactive-lessons/${lessonId}/documents/${lessonDocs[0].id}/signed-url`)
