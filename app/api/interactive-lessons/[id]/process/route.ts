@@ -125,14 +125,23 @@ interface PageElement {
   position_hint?: string
 }
 
+// Convert Node.js Buffer to Uint8Array for MuPDF
+function bufferToUint8Array(buffer: Buffer): Uint8Array {
+  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+  return new Uint8Array(arrayBuffer)
+}
+
 // Convert PDF page to image using MuPDF
 async function convertPdfPageToImage(pdfBuffer: Buffer, pageNumber: number): Promise<{ buffer: Buffer; width: number; height: number } | null> {
   try {
     // Dynamic import for mupdf
     const mupdf = await import('mupdf')
     
+    // Convert to Uint8Array for MuPDF
+    const uint8Array = bufferToUint8Array(pdfBuffer)
+    
     // Open the PDF document
-    const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf')
+    const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
     
     // Get the page (0-indexed in mupdf)
     const page = doc.loadPage(pageNumber - 1)
@@ -165,16 +174,54 @@ async function convertPdfPageToImage(pdfBuffer: Buffer, pageNumber: number): Pro
   }
 }
 
-// Get page count from PDF
+// Get page count from PDF - robust multi-method approach
 async function getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
+  // Method 1: Try MuPDF
   try {
     const mupdf = await import('mupdf')
-    const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf')
-    return doc.countPages()
+    const uint8Array = bufferToUint8Array(pdfBuffer)
+    const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
+    const count = doc.countPages()
+    if (count > 0) {
+      console.log(`MuPDF: ${count} pages`)
+      return count
+    }
   } catch (error) {
-    console.error('Error getting page count:', error)
-    return 0
+    console.error('MuPDF page count failed:', error)
   }
+
+  // Method 2: Try pdf-parse
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require('pdf-parse')
+    const data = await pdfParse(pdfBuffer)
+    const count = data.numpages || 0
+    if (count > 0) {
+      console.log(`pdf-parse: ${count} pages`)
+      return count
+    }
+  } catch (error) {
+    console.error('pdf-parse page count failed:', error)
+  }
+
+  // Method 3: Manual PDF parsing
+  try {
+    const text = pdfBuffer.toString('binary')
+    const countMatch = text.match(/\/Count\s+(\d+)/g)
+    if (countMatch) {
+      const counts = countMatch.map(m => parseInt(m.replace('/Count', '').trim()))
+      const maxCount = Math.max(...counts)
+      if (maxCount > 0) {
+        console.log(`Manual parse: ${maxCount} pages`)
+        return maxCount
+      }
+    }
+  } catch (error) {
+    console.error('Manual parse failed:', error)
+  }
+
+  console.error('All page count methods failed')
+  return 1 // Fallback to 1 so processing can continue
 }
 
 // Transcribe a page image using GPT-4o vision
@@ -682,19 +729,24 @@ export async function POST(
       if (mode === 'document_based') {
         const allPageTexts: string[] = []
         let totalPageCount = 0
-
-        // First, calculate total pages for progress tracking
-        for (const doc of lessonDocs) {
-          totalPageCount += doc.page_count || 0
-        }
-
         let processedPages = 0
 
-        // Process each lesson document
-        for (const doc of lessonDocs) {
-          console.log(`Processing document: ${doc.name}`)
+        // Process each lesson document - download first to get accurate page counts
+        const documentBuffers: Map<string, { buffer: Buffer; pageCount: number }> = new Map()
+        
+        await updateProgress(id, PROCESSING_STEPS.CONVERTING_PAGES, 0, lessonDocs.length, 'Analyse des documents...')
+
+        for (let docIdx = 0; docIdx < lessonDocs.length; docIdx++) {
+          const doc = lessonDocs[docIdx]
+          console.log(`Downloading document: ${doc.name}`)
           
-          await updateProgress(id, PROCESSING_STEPS.CONVERTING_PAGES, 0, totalPageCount, `Téléchargement de ${doc.name}...`)
+          await updateProgress(
+            id, 
+            PROCESSING_STEPS.CONVERTING_PAGES, 
+            docIdx, 
+            lessonDocs.length, 
+            `Téléchargement de ${doc.name}...`
+          )
           
           // Download file
           const { data: fileData, error: downloadError } = await getSupabaseAdmin().storage
@@ -708,20 +760,39 @@ export async function POST(
 
           const buffer = Buffer.from(await fileData.arrayBuffer())
           
-          // Get page count
+          // Get page count - this is the crucial step
           const pageCount = await getPdfPageCount(buffer)
-          console.log(`Document has ${pageCount} pages`)
+          console.log(`Document ${doc.name} has ${pageCount} pages`)
           
-          // Update total if we got more accurate count
-          if (doc.page_count !== pageCount) {
-            totalPageCount = totalPageCount - (doc.page_count || 0) + pageCount
+          if (pageCount === 0) {
+            console.error(`WARNING: Could not detect pages in ${doc.name}`)
           }
           
-          // Update document page count
+          // Store buffer and page count for later processing
+          documentBuffers.set(doc.id, { buffer, pageCount })
+          totalPageCount += pageCount
+          
+          // Update document page count in DB
           await getSupabaseAdmin()
             .from('interactive_lesson_documents')
             .update({ page_count: pageCount })
             .eq('id', doc.id)
+        }
+
+        console.log(`Total pages across all documents: ${totalPageCount}`)
+
+        // If no pages detected at all, throw an error
+        if (totalPageCount === 0) {
+          throw new Error('Impossible de détecter les pages dans les documents PDF. Veuillez vérifier que les fichiers sont des PDFs valides.')
+        }
+
+        // Now process each page
+        for (const doc of lessonDocs) {
+          const docData = documentBuffers.get(doc.id)
+          if (!docData) continue
+
+          const { buffer, pageCount } = docData
+          console.log(`Processing document: ${doc.name} (${pageCount} pages)`)
 
           // STEP 1: Convert each page to image and transcribe
           for (let pageNum = 1; pageNum <= pageCount; pageNum++) {

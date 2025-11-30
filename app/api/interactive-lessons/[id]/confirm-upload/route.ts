@@ -48,16 +48,58 @@ async function createAuthClient() {
   )
 }
 
-// Get PDF page count using MuPDF
+// Get PDF page count - try multiple methods for robustness
 async function getPdfPageCount(buffer: Buffer): Promise<number> {
+  // Method 1: Try MuPDF (WASM-based)
   try {
     const mupdf = await import('mupdf')
-    const doc = mupdf.Document.openDocument(buffer, 'application/pdf')
-    return doc.countPages()
+    // MuPDF expects ArrayBuffer or Uint8Array, not Node.js Buffer
+    const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+    const doc = mupdf.Document.openDocument(new Uint8Array(arrayBuffer), 'application/pdf')
+    const count = doc.countPages()
+    console.log(`MuPDF detected ${count} pages`)
+    if (count > 0) return count
   } catch (error) {
-    console.error('Error getting page count:', error)
-    return 0
+    console.error('MuPDF failed:', error)
   }
+
+  // Method 2: Try pdf-parse as fallback
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require('pdf-parse')
+    const data = await pdfParse(buffer)
+    const count = data.numpages || 0
+    console.log(`pdf-parse detected ${count} pages`)
+    if (count > 0) return count
+  } catch (error) {
+    console.error('pdf-parse failed:', error)
+  }
+
+  // Method 3: Parse PDF header manually to find page count
+  try {
+    const text = buffer.toString('binary')
+    // Look for /Count N in PDF (indicates page count in page tree)
+    const countMatch = text.match(/\/Count\s+(\d+)/g)
+    if (countMatch) {
+      // Get the largest count (root page tree)
+      const counts = countMatch.map(m => parseInt(m.replace('/Count', '').trim()))
+      const maxCount = Math.max(...counts)
+      console.log(`Manual parse detected ${maxCount} pages`)
+      if (maxCount > 0) return maxCount
+    }
+    
+    // Alternative: count /Type /Page occurrences
+    const pageMatches = text.match(/\/Type\s*\/Page[^s]/g)
+    if (pageMatches) {
+      console.log(`Page type count: ${pageMatches.length} pages`)
+      return pageMatches.length
+    }
+  } catch (error) {
+    console.error('Manual parse failed:', error)
+  }
+
+  console.error('All page count methods failed, returning 1 as fallback')
+  return 1 // Return 1 as fallback so processing can continue
 }
 
 // POST: Confirm upload and create document record
