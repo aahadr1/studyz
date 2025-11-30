@@ -133,7 +133,19 @@ export default function NewInteractiveLessonPage() {
         await uploadFileDirectly(lesson.id, file, 'mcq')
       }
 
-      // 3. Rediriger vers la leçon (plus de traitement serveur nécessaire)
+      // 3. Démarrer le traitement en arrière-plan si on a des fichiers leçon
+      if (lessonFiles.length > 0) {
+        setProcessingMessage('Démarrage du traitement IA...')
+        
+        // Déclencher le traitement (fire-and-forget)
+        fetch(`/api/interactive-lessons/${lesson.id}/process-vision`, {
+          method: 'POST'
+        }).catch(error => {
+          console.error('Processing error:', error)
+        })
+      }
+
+      // Rediriger vers la page de détail où l'utilisateur verra la progress bar
       router.push(`/interactive-lessons/${lesson.id}`)
 
     } catch (err: any) {

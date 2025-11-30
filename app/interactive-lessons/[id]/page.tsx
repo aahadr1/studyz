@@ -52,11 +52,9 @@ interface InteractiveLesson {
 
 // Processing steps - matches backend pipeline phases
 const PROCESSING_STEPS = [
-  { key: 'converting', label: 'Conversion en images', icon: FiImage, description: 'Conversion des pages PDF...' },
   { key: 'transcribing', label: 'Transcription IA', icon: FiCpu, description: 'Analyse par GPT-4o-mini...' },
   { key: 'analyzing', label: 'Analyse de structure', icon: FiFileText, description: 'Création de la structure...' },
   { key: 'checkpointing', label: 'Création checkpoints', icon: FiList, description: 'Organisation du cours...' },
-  { key: 'questions', label: 'Génération QCM', icon: FiHelpCircle, description: 'Création des questions...' },
   { key: 'complete', label: 'Terminé', icon: FiCheckCircle, description: 'Prêt !' },
 ]
 
