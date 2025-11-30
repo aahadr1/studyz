@@ -2,9 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { FiUpload, FiX, FiBook, FiFileText, FiArrowLeft, FiArrowRight } from 'react-icons/fi'
-import DocumentProcessorUI from '@/components/DocumentProcessorUI'
-import { LessonFileInput } from '@/hooks/useDocumentProcessor'
+import { FiUpload, FiX, FiBook, FiFileText, FiArrowLeft, FiArrowRight, FiLoader } from 'react-icons/fi'
 
 export default function NewInteractiveLessonPage() {
   const router = useRouter()
@@ -20,12 +18,9 @@ export default function NewInteractiveLessonPage() {
   const [mcqFiles, setMcqFiles] = useState<File[]>([])
   
   const [creating, setCreating] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [processingContext, setProcessingContext] = useState<{
-    lessonId: string
-    files: LessonFileInput[]
-  } | null>(null)
-  const [processingError, setProcessingError] = useState<string | null>(null)
+  const [processingMessage, setProcessingMessage] = useState('')
 
   const handleLessonFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -111,8 +106,10 @@ export default function NewInteractiveLessonPage() {
     }
 
     setCreating(true)
+    setProcessingMessage('Création de la leçon...')
 
     try {
+      // 1. Créer la leçon
       const createResponse = await fetch('/api/interactive-lessons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,47 +122,48 @@ export default function NewInteractiveLessonPage() {
       }
 
       const { lesson } = await createResponse.json()
+      setProcessingMessage('Upload des fichiers...')
 
-      const lessonDocumentsForProcessing: LessonFileInput[] = []
-
+      // 2. Upload des fichiers
       for (const file of lessonFiles) {
-        try {
-          const result = await uploadFileDirectly(lesson.id, file, 'lesson')
-          if (result?.document) {
-            lessonDocumentsForProcessing.push({
-              file,
-              documentId: result.document.id,
-              documentName: result.document.name || file.name,
-              order: lessonDocumentsForProcessing.length
-            })
-          }
-        } catch (err) {
-          console.error('Failed to upload lesson file:', file.name, err)
-        }
+        await uploadFileDirectly(lesson.id, file, 'lesson')
       }
 
       for (const file of mcqFiles) {
-        try {
-          await uploadFileDirectly(lesson.id, file, 'mcq')
-        } catch (err) {
-          console.error('Failed to upload MCQ file:', file.name, err)
-        }
+        await uploadFileDirectly(lesson.id, file, 'mcq')
       }
 
-      if (lessonDocumentsForProcessing.length > 0) {
-        setProcessingError(null)
-        setProcessingContext({
-          lessonId: lesson.id,
-          files: lessonDocumentsForProcessing
-        })
-      } else {
+      // 3. Démarrer le traitement automatiquement
+      if (lessonFiles.length > 0) {
         setCreating(false)
+        setProcessing(true)
+        setProcessingMessage('Conversion PDF en cours...')
+
+        const processResponse = await fetch(`/api/interactive-lessons/${lesson.id}/process-simple`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+
+        if (!processResponse.ok) {
+          const data = await processResponse.json()
+          throw new Error(data.error || 'Processing failed')
+        }
+
+        const result = await processResponse.json()
+        console.log('Processing result:', result)
+
+        // Rediriger vers la leçon
+        router.push(`/interactive-lessons/${lesson.id}`)
+      } else {
+        // Pas de fichiers leçon, rediriger directement
         router.push(`/interactive-lessons/${lesson.id}`)
       }
 
     } catch (err: any) {
+      console.error('Error:', err)
       setError(err.message || 'Something went wrong')
       setCreating(false)
+      setProcessing(false)
     }
   }
 
@@ -183,6 +181,7 @@ export default function NewInteractiveLessonPage() {
   }
 
   const modeInfo = getModeInfo()
+  const isSubmitting = creating || processing
 
   return (
     <div className="min-h-screen bg-background">
@@ -192,6 +191,7 @@ export default function NewInteractiveLessonPage() {
           <button 
             onClick={() => router.push('/interactive-lessons')}
             className="btn-ghost p-2"
+            disabled={isSubmitting}
           >
             <FiArrowLeft className="w-4 h-4" />
           </button>
@@ -214,6 +214,7 @@ export default function NewInteractiveLessonPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Biology Chapter 3"
                 className="input"
+                disabled={isSubmitting}
               />
             </div>
 
@@ -226,6 +227,7 @@ export default function NewInteractiveLessonPage() {
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g., Biology"
                   className="input"
+                  disabled={isSubmitting}
                 />
               </div>
               <div>
@@ -236,6 +238,7 @@ export default function NewInteractiveLessonPage() {
                   onChange={(e) => setLevel(e.target.value)}
                   placeholder="e.g., University"
                   className="input"
+                  disabled={isSubmitting}
                 />
               </div>
               <div>
@@ -244,6 +247,7 @@ export default function NewInteractiveLessonPage() {
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
                   className="input"
+                  disabled={isSubmitting}
                 >
                   <option value="fr">Français</option>
                   <option value="en">English</option>
@@ -273,10 +277,11 @@ export default function NewInteractiveLessonPage() {
               <input
                 ref={lessonInputRef}
                 type="file"
-                accept=".pdf,.docx,.doc,.txt"
+                accept=".pdf"
                 multiple
                 onChange={handleLessonFilesChange}
                 className="hidden"
+                disabled={isSubmitting}
               />
 
               {lessonFiles.length > 0 && (
@@ -291,6 +296,7 @@ export default function NewInteractiveLessonPage() {
                         type="button"
                         onClick={() => removeLessonFile(index)}
                         className="btn-ghost p-1 text-text-tertiary hover:text-error"
+                        disabled={isSubmitting}
                       >
                         <FiX className="w-4 h-4" />
                       </button>
@@ -302,10 +308,11 @@ export default function NewInteractiveLessonPage() {
               <button
                 type="button"
                 onClick={() => lessonInputRef.current?.click()}
-                className="w-full py-2.5 border-2 border-dashed border-border rounded-md text-text-tertiary hover:border-accent hover:text-accent transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 border-2 border-dashed border-border rounded-md text-text-tertiary hover:border-accent hover:text-accent transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={isSubmitting}
               >
                 <FiUpload className="w-4 h-4" />
-                Add Lesson Documents
+                Add PDF Documents
               </button>
             </div>
 
@@ -328,6 +335,7 @@ export default function NewInteractiveLessonPage() {
                 multiple
                 onChange={handleMcqFilesChange}
                 className="hidden"
+                disabled={isSubmitting}
               />
 
               {mcqFiles.length > 0 && (
@@ -342,6 +350,7 @@ export default function NewInteractiveLessonPage() {
                         type="button"
                         onClick={() => removeMcqFile(index)}
                         className="btn-ghost p-1 text-text-tertiary hover:text-error"
+                        disabled={isSubmitting}
                       >
                         <FiX className="w-4 h-4" />
                       </button>
@@ -353,7 +362,8 @@ export default function NewInteractiveLessonPage() {
               <button
                 type="button"
                 onClick={() => mcqInputRef.current?.click()}
-                className="w-full py-2.5 border-2 border-dashed border-border rounded-md text-text-tertiary hover:border-border-light hover:text-text-secondary transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 border-2 border-dashed border-border rounded-md text-text-tertiary hover:border-border-light hover:text-text-secondary transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={isSubmitting}
               >
                 <FiUpload className="w-4 h-4" />
                 Add MCQ Documents
@@ -369,10 +379,20 @@ export default function NewInteractiveLessonPage() {
             )}
           </section>
 
+          {/* Processing Status */}
+          {processingMessage && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <div className="flex items-center gap-2">
+                <FiLoader className="w-4 h-4 animate-spin text-blue-600" />
+                <span className="text-sm text-blue-800">{processingMessage}</span>
+              </div>
+            </div>
+          )}
+
           {/* Error */}
-          {(error || processingError) && (
+          {error && (
             <div className="p-3 bg-error-muted border border-error/30 text-error text-sm rounded-md">
-              {processingError || error}
+              {error}
             </div>
           )}
 
@@ -380,13 +400,13 @@ export default function NewInteractiveLessonPage() {
           <div className="flex justify-end pt-4 border-t border-border">
             <button
               type="submit"
-              disabled={creating}
+              disabled={isSubmitting}
               className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {creating ? (
+              {isSubmitting ? (
                 <>
-                  <div className="spinner w-4 h-4"></div>
-                  Creating...
+                  <FiLoader className="w-4 h-4 animate-spin" />
+                  {processing ? 'Processing...' : 'Creating...'}
                 </>
               ) : (
                 <>
@@ -398,27 +418,6 @@ export default function NewInteractiveLessonPage() {
           </div>
         </form>
       </main>
-      {processingContext && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="max-w-xl w-full">
-            <DocumentProcessorUI
-              lessonId={processingContext.lessonId}
-              files={processingContext.files}
-              language={language}
-              onComplete={() => {
-                setProcessingContext(null)
-                setCreating(false)
-                router.push(`/interactive-lessons/${processingContext.lessonId}`)
-              }}
-              onError={(message) => {
-                setProcessingError(message)
-                setProcessingContext(null)
-                setCreating(false)
-              }}
-            />
-          </div>
-        </div>
-      )}
     </div>
   )
 }
