@@ -364,6 +364,7 @@ export default function InteractiveLessonPlayerPage() {
         {/* Right: Sidebar */}
         <div className="w-96 flex-shrink-0 border-l border-border">
           <SectionSidebar
+            lessonId={lessonId}
             section={currentSection}
             sectionIndex={currentSectionIndex}
             totalSections={sections.length}

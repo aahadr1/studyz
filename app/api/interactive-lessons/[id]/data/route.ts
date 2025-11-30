@@ -92,7 +92,7 @@ export async function GET(
       )
     }
 
-    // Get sections with questions
+    // Get sections with questions (legacy support)
     const { data: sections, error: sectionsError } = await supabase
       .from('interactive_lesson_sections')
       .select(`
@@ -115,7 +115,34 @@ export async function GET(
         .sort((a: any, b: any) => a.question_order - b.question_order)
     }))
 
-    // Get user progress
+    // Get checkpoints with questions (new v2 structure)
+    const { data: checkpoints } = await getSupabaseAdmin()
+      .from('interactive_lesson_checkpoints')
+      .select(`
+        id, checkpoint_order, title, checkpoint_type, start_page, end_page, 
+        summary, content_excerpt, pass_threshold, parent_id,
+        interactive_lesson_questions(
+          id, question, choices, correct_index, explanation, question_order
+        )
+      `)
+      .eq('interactive_lesson_id', id)
+      .order('checkpoint_order', { ascending: true })
+
+    // Sort questions within each checkpoint
+    const sortedCheckpoints = (checkpoints || []).map((cp: any) => ({
+      ...cp,
+      interactive_lesson_questions: (cp.interactive_lesson_questions || [])
+        .sort((a: any, b: any) => a.question_order - b.question_order)
+    }))
+
+    // Get lesson reconstruction
+    const { data: reconstruction } = await getSupabaseAdmin()
+      .from('interactive_lesson_reconstructions')
+      .select('full_content, structure_json')
+      .eq('interactive_lesson_id', id)
+      .single()
+
+    // Get user progress (legacy)
     const { data: progress, error: progressError } = await supabase
       .from('interactive_lesson_progress')
       .select('*')
@@ -125,6 +152,13 @@ export async function GET(
     if (progressError) {
       console.error('Error fetching progress:', progressError)
     }
+
+    // Get checkpoint progress (new v2)
+    const { data: checkpointProgress } = await getSupabaseAdmin()
+      .from('interactive_lesson_checkpoint_progress')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('interactive_lesson_id', id)
 
     // Get generated content for mcq_only mode
     let generatedContent: Record<string, string> = {}
@@ -160,12 +194,19 @@ export async function GET(
       }
     }
 
+    // Calculate total page count
+    const totalPages = lessonDocs.reduce((sum: number, doc: any) => sum + (doc.page_count || 0), 0)
+
     return NextResponse.json({
       lesson,
       sections: sortedSections,
+      checkpoints: sortedCheckpoints,
+      reconstruction: reconstruction || null,
       progress: progress || [],
+      checkpointProgress: checkpointProgress || [],
       documentUrls,
-      generatedContent
+      generatedContent,
+      totalPages
     })
   } catch (error: any) {
     console.error('Error in GET /api/interactive-lessons/[id]/data:', error)

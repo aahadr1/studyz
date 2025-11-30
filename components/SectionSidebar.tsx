@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { FiFileText, FiHelpCircle, FiMessageCircle, FiChevronRight } from 'react-icons/fi'
+import { useState, useEffect } from 'react'
+import { FiFileText, FiHelpCircle, FiMessageCircle, FiChevronRight, FiLoader } from 'react-icons/fi'
 import QuizForm from './QuizForm'
+import PageExplanation from './PageExplanation'
 
 interface Question {
   id: string
@@ -24,6 +25,58 @@ interface Section {
   interactive_lesson_questions: Question[]
 }
 
+interface Checkpoint {
+  id: string
+  checkpoint_order: number
+  title: string
+  checkpoint_type: 'topic' | 'subtopic'
+  start_page: number
+  end_page: number
+  summary: string
+  pass_threshold: number
+  threshold?: number
+  interactive_lesson_questions: Question[]
+}
+
+interface PageData {
+  page: {
+    number: number
+    localNumber: number
+    documentId: string
+    documentName: string
+  }
+  transcription: {
+    text: string
+    type: string
+    hasVisualContent: boolean
+    visualElements: Array<{
+      type: string
+      description: string
+      position?: string
+    }>
+  } | null
+  elements: Array<{
+    id: string
+    element_type: 'term' | 'concept' | 'formula' | 'diagram' | 'definition'
+    element_text: string
+    explanation: string
+    color?: string
+    position_hint?: string
+  }>
+  checkpoint: {
+    id: string
+    title: string
+    type: 'topic' | 'subtopic'
+    startPage: number
+    endPage: number
+    summary: string
+    order: number
+    threshold: number
+    isAtEnd: boolean
+    progress: { status: string; score?: number } | null
+  } | null
+}
+
 interface QuizResult {
   score: number
   passed: boolean
@@ -35,7 +88,9 @@ interface QuizResult {
 }
 
 interface SectionSidebarProps {
+  lessonId: string
   section: Section | null
+  checkpoint?: Checkpoint | null
   sectionIndex: number
   totalSections: number
   currentPage: number
@@ -48,10 +103,12 @@ interface SectionSidebarProps {
   onStartQuiz: () => void
 }
 
-type Tab = 'summary' | 'quiz' | 'chat'
+type Tab = 'page' | 'checkpoint' | 'chat'
 
 export default function SectionSidebar({
+  lessonId,
   section,
+  checkpoint,
   sectionIndex,
   totalSections,
   currentPage,
@@ -63,13 +120,55 @@ export default function SectionSidebar({
   onQuizPass,
   onStartQuiz
 }: SectionSidebarProps) {
-  const [activeTab, setActiveTab] = useState<Tab>(showQuiz ? 'quiz' : 'summary')
+  const [activeTab, setActiveTab] = useState<Tab>(showQuiz ? 'checkpoint' : 'page')
+  const [pageData, setPageData] = useState<PageData | null>(null)
+  const [pageLoading, setPageLoading] = useState(false)
 
-  if (showQuiz && activeTab !== 'quiz') {
-    setActiveTab('quiz')
+  // Fetch page-specific data when page changes
+  useEffect(() => {
+    if (mode === 'document_based' && currentPage > 0) {
+      fetchPageData(currentPage)
+    }
+  }, [currentPage, lessonId, mode])
+
+  // Switch to checkpoint tab when quiz should be shown
+  useEffect(() => {
+    if (showQuiz && activeTab !== 'checkpoint') {
+      setActiveTab('checkpoint')
+    }
+  }, [showQuiz])
+
+  const fetchPageData = async (pageNum: number) => {
+    setPageLoading(true)
+    try {
+      const response = await fetch(`/api/interactive-lessons/${lessonId}/page/${pageNum}`)
+      if (response.ok) {
+        const data = await response.json()
+        setPageData(data)
+      }
+    } catch (error) {
+      console.error('Error fetching page data:', error)
+    } finally {
+      setPageLoading(false)
+    }
   }
 
-  if (!section) {
+  // Get questions from checkpoint or section
+  const questions = checkpoint?.interactive_lesson_questions || section?.interactive_lesson_questions || []
+  const currentCheckpoint = pageData?.checkpoint || checkpoint
+  // Use any to handle different property names (threshold vs pass_threshold)
+  const cp = currentCheckpoint as any
+  const passThreshold = cp?.threshold || cp?.pass_threshold || section?.pass_threshold || 70
+
+  const handleQuizSubmit = async (answers: Record<string, number>) => {
+    const targetId = currentCheckpoint?.id || section?.id
+    if (targetId) {
+      return onQuizSubmit(targetId, answers)
+    }
+    throw new Error('No section or checkpoint to submit quiz for')
+  }
+
+  if (!section && !checkpoint && mode === 'document_based') {
     return (
       <div className="h-full flex items-center justify-center bg-surface text-text-tertiary">
         <p>No section selected</p>
@@ -77,37 +176,31 @@ export default function SectionSidebar({
     )
   }
 
-  const questions = section.interactive_lesson_questions || []
-
-  const handleQuizSubmit = async (answers: Record<string, number>) => {
-    return onQuizSubmit(section.id, answers)
-  }
-
   return (
     <div className="h-full flex flex-col bg-surface">
       {/* Tabs */}
       <div className="flex border-b border-border">
         <button
-          onClick={() => setActiveTab('summary')}
+          onClick={() => setActiveTab('page')}
           className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm transition-colors ${
-            activeTab === 'summary'
+            activeTab === 'page'
               ? 'text-accent border-b-2 border-accent bg-accent-muted'
               : 'text-text-tertiary hover:text-text-primary'
           }`}
         >
           <FiFileText className="w-4 h-4" />
-          Summary
+          Page
         </button>
         <button
-          onClick={() => setActiveTab('quiz')}
+          onClick={() => setActiveTab('checkpoint')}
           className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm transition-colors ${
-            activeTab === 'quiz'
+            activeTab === 'checkpoint'
               ? 'text-accent border-b-2 border-accent bg-accent-muted'
               : 'text-text-tertiary hover:text-text-primary'
           }`}
         >
           <FiHelpCircle className="w-4 h-4" />
-          Quiz
+          {showQuiz ? 'Quiz' : 'Checkpoint'}
           {questions.length > 0 && (
             <span className="text-xs bg-elevated px-1.5 py-0.5 rounded">
               {questions.length}
@@ -129,98 +222,161 @@ export default function SectionSidebar({
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'summary' && (
-          <div className="h-full overflow-auto p-5">
-            {/* Section header */}
-            <div className="mb-6">
-              <div className="flex items-center gap-2 text-xs text-accent mb-1">
-                <span>Section {sectionIndex + 1} of {totalSections}</span>
-                {mode === 'document_based' && (
-                  <span className="text-text-tertiary">
-                    • Pages {section.start_page} - {section.end_page}
-                  </span>
+        {/* Page Tab - Shows page explanation with highlights */}
+        {activeTab === 'page' && (
+          <div className="h-full">
+            {pageLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <FiLoader className="w-5 h-5 animate-spin text-accent" />
+              </div>
+            ) : pageData?.transcription ? (
+              <PageExplanation
+                transcription={pageData.transcription.text}
+                elements={pageData.elements}
+                hasVisualContent={pageData.transcription.hasVisualContent}
+                visualElements={pageData.transcription.visualElements}
+                pageNumber={currentPage}
+              />
+            ) : mode === 'mcq_only' && generatedContent ? (
+              <div className="h-full overflow-auto p-5">
+                <div 
+                  className="prose prose-invert prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: generatedContent }}
+                />
+              </div>
+            ) : section ? (
+              <div className="h-full overflow-auto p-5">
+                {/* Fallback: Show section summary if no page data */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 text-xs text-accent mb-1">
+                    <span>Section {sectionIndex + 1} of {totalSections}</span>
+                    {mode === 'document_based' && (
+                      <span className="text-text-tertiary">
+                        • Pages {section.start_page} - {section.end_page}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-lg font-semibold text-text-primary">{section.title}</h2>
+                </div>
+
+                {section.summary && (
+                  <div className="mb-6">
+                    <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
+                      Summary
+                    </h3>
+                    <p className="text-text-secondary text-sm leading-relaxed">{section.summary}</p>
+                  </div>
+                )}
+
+                {section.key_points && section.key_points.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3">
+                      Key Points
+                    </h3>
+                    <ul className="space-y-2">
+                      {section.key_points.map((point, index) => (
+                        <li key={index} className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-muted flex items-center justify-center mt-0.5">
+                            <span className="text-xs text-accent font-medium">{index + 1}</span>
+                          </div>
+                          <span className="text-sm text-text-secondary">{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
-              <h2 className="text-lg font-semibold text-text-primary">{section.title}</h2>
-            </div>
-
-            {/* MCQ-only: Generated content */}
-            {mode === 'mcq_only' && generatedContent && (
-              <div 
-                className="prose prose-invert prose-sm max-w-none mb-6"
-                dangerouslySetInnerHTML={{ __html: generatedContent }}
-              />
-            )}
-
-            {/* Summary */}
-            {section.summary && (
-              <div className="mb-6">
-                <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
-                  Summary
-                </h3>
-                <p className="text-text-secondary text-sm leading-relaxed">{section.summary}</p>
-              </div>
-            )}
-
-            {/* Key Points */}
-            {section.key_points && section.key_points.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3">
-                  Key Points
-                </h3>
-                <ul className="space-y-2">
-                  {section.key_points.map((point, index) => (
-                    <li key={index} className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-accent-muted flex items-center justify-center mt-0.5">
-                        <span className="text-xs text-accent font-medium">{index + 1}</span>
-                      </div>
-                      <span className="text-sm text-text-secondary">{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Ready for quiz prompt */}
-            {isAtSectionEnd && !showQuiz && questions.length > 0 && (
-              <div className="mt-8 p-4 bg-accent-muted border border-accent/20 rounded-lg">
-                <h3 className="font-medium text-text-primary mb-2">Ready for the quiz?</h3>
-                <p className="text-sm text-text-secondary mb-4">
-                  You've reached the end of this section. Complete the quiz to unlock the next section.
-                </p>
-                <button
-                  onClick={onStartQuiz}
-                  className="btn-primary w-full"
-                >
-                  Start Quiz
-                  <FiChevronRight className="w-4 h-4" />
-                </button>
+            ) : (
+              <div className="h-full flex items-center justify-center text-text-tertiary p-4">
+                <p className="text-sm">Navigate to a page to see its explanation</p>
               </div>
             )}
           </div>
         )}
 
-        {activeTab === 'quiz' && (
-          <div className="h-full">
-            {questions.length > 0 ? (
+        {/* Checkpoint Tab - Shows checkpoint info and quiz */}
+        {activeTab === 'checkpoint' && (
+          <div className="h-full overflow-auto">
+            {showQuiz && questions.length > 0 ? (
               <QuizForm
                 questions={questions}
-                sectionTitle={section.title}
-                threshold={section.pass_threshold || 70}
+                sectionTitle={currentCheckpoint?.title || section?.title || 'Quiz'}
+                threshold={passThreshold}
                 onSubmit={handleQuizSubmit}
                 onPass={onQuizPass}
               />
             ) : (
-              <div className="h-full flex items-center justify-center text-text-tertiary p-4 text-center">
-                <div>
-                  <FiHelpCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">No quiz questions for this section</p>
+              <div className="p-5">
+                {/* Checkpoint/Section Header */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 text-xs text-accent mb-1">
+                    <span>
+                      {cp ? (
+                        `Checkpoint ${cp.order || cp.checkpoint_order}`
+                      ) : (
+                        `Section ${sectionIndex + 1} of ${totalSections}`
+                      )}
+                    </span>
+                    {(cp?.type === 'subtopic' || cp?.checkpoint_type === 'subtopic') && (
+                      <span className="text-text-tertiary">• Subtopic</span>
+                    )}
+                  </div>
+                  <h2 className="text-lg font-semibold text-text-primary">
+                    {cp?.title || section?.title}
+                  </h2>
                 </div>
+
+                {/* Summary */}
+                {(cp?.summary || section?.summary) && (
+                  <div className="mb-6">
+                    <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
+                      Summary
+                    </h3>
+                    <p className="text-text-secondary text-sm leading-relaxed">
+                      {cp?.summary || section?.summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Progress Info */}
+                {cp?.isAtEnd && (
+                  <div className="mb-6 p-3 bg-accent-muted border border-accent/20 rounded-lg">
+                    <p className="text-sm text-text-secondary">
+                      You've reached the end of this checkpoint. Complete the quiz to continue.
+                    </p>
+                  </div>
+                )}
+
+                {/* Quiz prompt */}
+                {isAtSectionEnd && !showQuiz && questions.length > 0 && (
+                  <div className="mt-8 p-4 bg-accent-muted border border-accent/20 rounded-lg">
+                    <h3 className="font-medium text-text-primary mb-2">Ready for the quiz?</h3>
+                    <p className="text-sm text-text-secondary mb-4">
+                      Complete the quiz to unlock the next section. You need {passThreshold}% to pass.
+                    </p>
+                    <button
+                      onClick={onStartQuiz}
+                      className="btn-primary w-full flex items-center justify-center gap-2"
+                    >
+                      Start Quiz ({questions.length} questions)
+                      <FiChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* No questions fallback */}
+                {questions.length === 0 && (
+                  <div className="text-center text-text-tertiary py-8">
+                    <FiHelpCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No quiz questions for this checkpoint</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
 
+        {/* Chat Tab */}
         {activeTab === 'chat' && (
           <div className="h-full flex items-center justify-center text-text-tertiary p-4 text-center">
             <div>

@@ -61,18 +61,23 @@ async function createAuthClient() {
   )
 }
 
-interface PageText {
-  document_id: string
-  page_number: number
-  text_content: string
+interface PageTranscription {
+  text: string
+  elements: Array<{
+    type: 'term' | 'concept' | 'formula' | 'diagram' | 'definition'
+    description: string
+    position?: string
+  }>
+  hasVisualContent: boolean
 }
 
-interface Section {
+interface Checkpoint {
   title: string
+  type: 'topic' | 'subtopic'
   start_page: number
   end_page: number
   summary: string
-  key_points: string[]
+  parent_index?: number
 }
 
 interface Question {
@@ -82,233 +87,390 @@ interface Question {
   explanation: string
 }
 
-// Setup minimal browser globals required by pdfjs-dist (used by pdf-parse)
-function setupPdfParseGlobals() {
-  if (typeof global !== 'undefined') {
-    // @ts-ignore
-    if (!global.DOMMatrix) {
-      // @ts-ignore
-      global.DOMMatrix = class DOMMatrix {
-        constructor() { return [1, 0, 0, 1, 0, 0] }
+interface PageElement {
+  element_text: string
+  element_type: 'term' | 'concept' | 'formula' | 'diagram' | 'definition'
+  explanation: string
+  position_hint?: string
+}
+
+// Convert PDF page to image using MuPDF
+async function convertPdfPageToImage(pdfBuffer: Buffer, pageNumber: number): Promise<{ buffer: Buffer; width: number; height: number } | null> {
+  try {
+    // Dynamic import for mupdf
+    const mupdf = await import('mupdf')
+    
+    // Open the PDF document
+    const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf')
+    
+    // Get the page (0-indexed in mupdf)
+    const page = doc.loadPage(pageNumber - 1)
+    
+    // Get page bounds
+    const bounds = page.getBounds()
+    const width = Math.round(bounds[2] - bounds[0])
+    const height = Math.round(bounds[3] - bounds[1])
+    
+    // Create a pixmap at 2x resolution for better quality
+    const scale = 2
+    const pixmap = page.toPixmap(
+      mupdf.Matrix.scale(scale, scale),
+      mupdf.ColorSpace.DeviceRGB,
+      false, // no alpha
+      true   // annots
+    )
+    
+    // Convert to PNG buffer
+    const pngBuffer = pixmap.asPNG()
+    
+    return {
+      buffer: Buffer.from(pngBuffer),
+      width: width * scale,
+      height: height * scale
+    }
+  } catch (error) {
+    console.error(`Error converting page ${pageNumber} to image:`, error)
+    return null
+  }
+}
+
+// Get page count from PDF
+async function getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
+  try {
+    const mupdf = await import('mupdf')
+    const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf')
+    return doc.countPages()
+  } catch (error) {
+    console.error('Error getting page count:', error)
+    return 0
+  }
+}
+
+// Transcribe a page image using GPT-4o vision
+async function transcribePageWithVision(imageBase64: string, pageNumber: number, language: string): Promise<PageTranscription> {
+  const prompt = `You are analyzing page ${pageNumber} of a lesson document. The document is in ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}.
+
+Transcribe and analyze this page completely:
+
+1. **Text Content**: Extract ALL text exactly as it appears, maintaining structure (headings, paragraphs, lists, etc.)
+
+2. **Visual Elements**: For any diagrams, figures, tables, charts, or images:
+   - Describe what they show in detail
+   - Explain the educational content they convey
+   - Note any labels, arrows, or annotations
+
+3. **Key Elements**: Identify important educational elements:
+   - Technical terms and their context
+   - Key concepts being taught
+   - Formulas or equations
+   - Definitions
+
+Output as JSON only (no markdown):
+{
+  "text": "Complete transcription of all text content...",
+  "elements": [
+    {"type": "diagram", "description": "Description of visual element", "position": "center of page"},
+    {"type": "term", "description": "Important term found", "position": "paragraph 2"},
+    {"type": "formula", "description": "Mathematical formula", "position": "bottom"}
+  ],
+  "hasVisualContent": true
+}`
+
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${imageBase64}`,
+                detail: 'high'
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 4000,
+      temperature: 0.2,
+    })
+
+    const content = response.choices[0]?.message?.content || '{}'
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    
+    try {
+      return JSON.parse(cleaned)
+    } catch {
+      // If JSON parsing fails, return basic structure
+      return {
+        text: content,
+        elements: [],
+        hasVisualContent: false
       }
     }
-    // @ts-ignore
-    if (!global.Path2D) {
-      // @ts-ignore
-      global.Path2D = class Path2D { constructor() {} }
-    }
-    // @ts-ignore
-    if (!global.CanvasRenderingContext2D) {
-      // @ts-ignore
-      global.CanvasRenderingContext2D = class CanvasRenderingContext2D {}
-    }
-    // @ts-ignore
-    if (!global.ImageData) {
-      // @ts-ignore
-      global.ImageData = class ImageData { constructor() {} }
+  } catch (error) {
+    console.error(`Error transcribing page ${pageNumber}:`, error)
+    return {
+      text: `(Page ${pageNumber} transcription failed)`,
+      elements: [],
+      hasVisualContent: false
     }
   }
 }
 
-// Extract text from PDF - with proper global setup
-async function extractPdfText(buffer: Buffer): Promise<string[]> {
-  try {
-    // Setup globals before requiring pdf-parse
-    setupPdfParseGlobals()
-    
-    // Use require for CommonJS module
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse')
-    
-    // Parse PDF
-    const data = await pdfParse(buffer)
-    
-    const fullText = data.text || ''
-    const totalPages = data.numpages || 1
-    
-    console.log(`PDF parsed: ${totalPages} pages, ${fullText.length} chars`)
-    
-    if (!fullText) {
-      console.log('No text extracted from PDF')
-      return Array(totalPages).fill('(No text content)')
-    }
-    
-    // Simple heuristic: split text roughly by page count
-    const avgCharsPerPage = Math.ceil(fullText.length / Math.max(totalPages, 1))
-    const pages: string[] = []
-    
-    for (let i = 0; i < totalPages; i++) {
-      const start = i * avgCharsPerPage
-      const end = Math.min((i + 1) * avgCharsPerPage, fullText.length)
-      const pageText = fullText.slice(start, end).trim()
-      pages.push(pageText || `(Page ${i + 1})`)
-    }
-    
-    return pages
-  } catch (error: any) {
-    console.error('Error parsing PDF:', error?.message || error)
-    // Return placeholder text instead of throwing
-    return ['(PDF text extraction failed - will use AI vision if available)']
-  }
-}
-
-// Generate sections using LLM
-async function generateSections(pageTexts: PageText[], language: string): Promise<Section[]> {
-  // Combine page texts with page markers
-  const combinedText = pageTexts
-    .sort((a, b) => a.page_number - b.page_number)
-    .map(p => `--- PAGE ${p.page_number} ---\n${p.text_content}`)
+// Reconstruct full lesson from page transcriptions
+async function reconstructLesson(pageTexts: string[], language: string): Promise<{ fullContent: string; structure: any }> {
+  const combinedPages = pageTexts
+    .map((text, i) => `=== PAGE ${i + 1} ===\n${text}`)
     .join('\n\n')
 
-  // Truncate if too long (GPT-4 context limit)
+  // Truncate if too long
   const maxChars = 100000
-  const truncatedText = combinedText.length > maxChars 
-    ? combinedText.slice(0, maxChars) + '\n... [truncated]'
-    : combinedText
+  const truncated = combinedPages.length > maxChars 
+    ? combinedPages.slice(0, maxChars) + '\n... [content truncated]'
+    : combinedPages
 
-  const prompt = `You are analyzing a lesson document to create a structured learning path.
+  const prompt = `You are reconstructing a complete lesson from page-by-page transcriptions.
+Language: ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}
 
-Given the following document content with page markers, identify logical sections for study.
-The document is in ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}.
+Page transcriptions:
+${truncated}
 
-For each section:
-1. Give it a clear, descriptive title (in the document's language)
-2. Specify the start_page and end_page (1-indexed)
-3. Write a concise summary (2-3 sentences)
-4. List 3-5 key points students should understand
+Your task:
+1. Combine all pages into a coherent, flowing lesson
+2. Keep the ORIGINAL wording and structure as much as possible
+3. Where visual elements (diagrams, tables) were described, include those descriptions naturally
+4. Maintain educational flow and logical progression
+5. Note which pages contain which content
 
-IMPORTANT: 
-- Sections should be logical units (chapters, topics, concepts)
-- Each section should cover 2-5 pages typically
-- Don't create too many sections (aim for 3-8 sections total)
-- Page numbers must be valid (within the document range)
+Output as JSON only:
+{
+  "fullContent": "The complete reconstructed lesson text...",
+  "structure": {
+    "overview": "Brief overview of the lesson",
+    "pageMapping": [
+      {"page": 1, "content": "brief description of page 1 content"},
+      {"page": 2, "content": "brief description of page 2 content"}
+    ]
+  }
+}`
 
-Document content:
-${truncatedText}
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 8000,
+      temperature: 0.3,
+    })
 
-Respond with a JSON array only, no markdown, no explanation:
+    const content = response.choices[0]?.message?.content || '{}'
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    
+    try {
+      return JSON.parse(cleaned)
+    } catch {
+      return {
+        fullContent: pageTexts.join('\n\n'),
+        structure: { overview: 'Lesson content', pageMapping: [] }
+      }
+    }
+  } catch (error) {
+    console.error('Error reconstructing lesson:', error)
+    return {
+      fullContent: pageTexts.join('\n\n'),
+      structure: { overview: 'Lesson content', pageMapping: [] }
+    }
+  }
+}
+
+// Create checkpoints from lesson content
+async function createCheckpoints(fullContent: string, totalPages: number, language: string): Promise<Checkpoint[]> {
+  const prompt = `You are a teacher creating study checkpoints for a lesson.
+Language: ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}
+Total pages: ${totalPages}
+
+Lesson content:
+${fullContent.slice(0, 50000)}
+
+Create checkpoints that divide this lesson into logical study units:
+
+1. **Topics**: Main subject areas (3-6 typically)
+2. **Subtopics**: Smaller concepts within topics (optional, only if topic is large)
+3. Each checkpoint should:
+   - Cover a coherent concept students should master before moving on
+   - Map to specific page ranges
+   - Be granular enough for effective quiz testing (not too broad)
+
+Output as JSON array only:
 [
   {
-    "title": "Section Title",
+    "title": "Checkpoint title",
+    "type": "topic",
     "start_page": 1,
     "end_page": 3,
-    "summary": "Brief summary of this section...",
-    "key_points": ["Point 1", "Point 2", "Point 3"]
+    "summary": "Brief summary of what this checkpoint covers"
+  },
+  {
+    "title": "Subtopic within previous topic",
+    "type": "subtopic", 
+    "start_page": 2,
+    "end_page": 3,
+    "summary": "Brief summary...",
+    "parent_index": 0
   }
 ]`
 
-  const response = await getOpenAI().chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 4000,
-    temperature: 0.3,
-  })
-
-  const content = response.choices[0]?.message?.content || '[]'
-  
   try {
-    // Clean the response (remove markdown code blocks if present)
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 4000,
+      temperature: 0.3,
+    })
+
+    const content = response.choices[0]?.message?.content || '[]'
     const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    return JSON.parse(cleaned)
+    
+    try {
+      const checkpoints = JSON.parse(cleaned)
+      // Validate page ranges
+      return checkpoints.map((cp: any) => ({
+        ...cp,
+        start_page: Math.max(1, Math.min(cp.start_page, totalPages)),
+        end_page: Math.max(1, Math.min(cp.end_page, totalPages))
+      }))
+    } catch {
+      // Fallback: create a single checkpoint for entire document
+      return [{
+        title: 'Complete Lesson',
+        type: 'topic' as const,
+        start_page: 1,
+        end_page: totalPages,
+        summary: 'Full lesson content'
+      }]
+    }
   } catch (error) {
-    console.error('Error parsing sections JSON:', content)
-    throw new Error('Failed to parse LLM response for sections')
+    console.error('Error creating checkpoints:', error)
+    return [{
+      title: 'Complete Lesson',
+      type: 'topic' as const,
+      start_page: 1,
+      end_page: totalPages,
+      summary: 'Full lesson content'
+    }]
   }
 }
 
-// Generate QCM questions for a section
-async function generateQuestions(
-  sectionTitle: string,
-  sectionSummary: string,
-  pageTexts: string[],
+// Generate MCQ questions for a checkpoint
+async function generateCheckpointQuestions(
+  checkpointTitle: string,
+  checkpointSummary: string,
+  relevantContent: string,
   language: string,
-  questionCount: number = 5
+  questionCount: number = 10
 ): Promise<Question[]> {
-  const combinedText = pageTexts.join('\n\n').slice(0, 15000) // Limit context
+  const prompt = `You are creating quiz questions for a study checkpoint.
 
-  const prompt = `You are creating quiz questions to test student understanding.
-
-Section: ${sectionTitle}
-Summary: ${sectionSummary}
+Checkpoint: ${checkpointTitle}
+Summary: ${checkpointSummary}
 Language: ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}
 
 Content to test:
-${combinedText}
+${relevantContent.slice(0, 15000)}
 
-Create ${questionCount} multiple-choice questions (MCQ) in the document's language.
-
-Requirements:
-1. Questions should test understanding, not just memorization
-2. Each question has exactly 4 choices
-3. Only ONE choice is correct
+Create ${questionCount} multiple-choice questions that:
+1. Test understanding, not just memorization
+2. Cover the key concepts of this checkpoint
+3. Have exactly 4 choices each
 4. Include plausible distractors (wrong but believable answers)
-5. Provide a brief explanation for why the correct answer is right
+5. Have clear explanations
 
-Respond with a JSON array only:
+Output as JSON array only:
 [
   {
-    "question": "Question text here?",
+    "question": "Question text?",
     "choices": ["Choice A", "Choice B", "Choice C", "Choice D"],
     "correct_index": 0,
-    "explanation": "Explanation why Choice A is correct..."
+    "explanation": "Why Choice A is correct..."
   }
 ]`
 
-  const response = await getOpenAI().chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 3000,
-    temperature: 0.5,
-  })
-
-  const content = response.choices[0]?.message?.content || '[]'
-  
   try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 4000,
+      temperature: 0.5,
+    })
+
+    const content = response.choices[0]?.message?.content || '[]'
     const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    return JSON.parse(cleaned)
+    
+    try {
+      return JSON.parse(cleaned)
+    } catch {
+      return []
+    }
   } catch (error) {
-    console.error('Error parsing questions JSON:', content)
+    console.error('Error generating questions:', error)
     return []
   }
 }
 
-// Generate course content for MCQ-only mode
-async function generateCourseContent(
-  questions: Question[],
-  sectionTitle: string,
-  language: string
-): Promise<string> {
-  const questionsText = questions
-    .map((q, i) => `Q${i+1}: ${q.question}\nAnswer: ${q.choices[q.correct_index]}\nExplanation: ${q.explanation}`)
-    .join('\n\n')
-
-  const prompt = `Based on these quiz questions and their answers, create educational content for a section titled "${sectionTitle}".
-
+// Analyze page for highlightable elements
+async function analyzePageElements(pageText: string, pageNumber: number, language: string): Promise<PageElement[]> {
+  const prompt = `Analyze this lesson page and identify key elements a student should understand.
+Page ${pageNumber}
 Language: ${language === 'fr' ? 'French' : language === 'en' ? 'English' : language}
 
-Questions and answers:
-${questionsText}
+Page content:
+${pageText.slice(0, 8000)}
 
-Create comprehensive lesson content that:
-1. Explains the concepts being tested
-2. Uses clear, educational language
-3. Includes examples where helpful
-4. Is structured with headings and paragraphs
+Identify 5-15 key elements:
+- **Terms**: Important vocabulary words
+- **Concepts**: Key ideas being taught
+- **Formulas**: Mathematical or scientific formulas
+- **Definitions**: Formal definitions
+- **Diagrams**: References to visual elements
 
-Output as clean HTML (use <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em> tags).
-Do not include <html>, <head>, or <body> tags.`
+For each, provide a brief student-friendly explanation.
 
-  const response = await getOpenAI().chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 3000,
-    temperature: 0.7,
-  })
+Output as JSON array only:
+[
+  {
+    "element_text": "The exact term/phrase as it appears",
+    "element_type": "term",
+    "explanation": "Brief, clear explanation for students",
+    "position_hint": "Optional: where on page"
+  }
+]`
 
-  return response.choices[0]?.message?.content || '<p>Content generation failed.</p>'
+  try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 2000,
+      temperature: 0.3,
+    })
+
+    const content = response.choices[0]?.message?.content || '[]'
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    
+    try {
+      return JSON.parse(cleaned)
+    } catch {
+      return []
+    }
+  } catch (error) {
+    console.error(`Error analyzing page ${pageNumber} elements:`, error)
+    return []
+  }
 }
 
-// Parse MCQ from uploaded document (simplified - looks for Q/A patterns)
+// Parse MCQ from uploaded document
 async function parseMcqFromText(text: string): Promise<Question[]> {
   const prompt = `Extract multiple choice questions from this text.
 
@@ -333,82 +495,96 @@ Respond with a JSON array only:
 
 If no valid MCQs are found, return an empty array [].`
 
-  const response = await getOpenAI().chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 4000,
-    temperature: 0.3,
-  })
-
-  const content = response.choices[0]?.message?.content || '[]'
-  
   try {
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 4000,
+      temperature: 0.3,
+    })
+
+    const content = response.choices[0]?.message?.content || '[]'
     const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    return JSON.parse(cleaned)
-  } catch {
+    
+    try {
+      return JSON.parse(cleaned)
+    } catch {
+      return []
+    }
+  } catch (error) {
+    console.error('Error parsing MCQ:', error)
     return []
   }
 }
 
-// Match questions to sections based on content similarity
-async function matchQuestionsToSections(
+// Match uploaded questions to checkpoints
+async function matchQuestionsToCheckpoints(
   questions: Question[],
-  sections: Array<{ id: string; title: string; summary: string }>,
+  checkpoints: Array<{ id: string; title: string; summary: string }>,
   language: string
 ): Promise<Map<string, Question[]>> {
   const result = new Map<string, Question[]>()
-  sections.forEach(s => result.set(s.id, []))
+  checkpoints.forEach(cp => result.set(cp.id, []))
 
-  if (questions.length === 0 || sections.length === 0) {
+  if (questions.length === 0 || checkpoints.length === 0) {
     return result
   }
 
-  const sectionsInfo = sections.map(s => `ID: ${s.id}\nTitle: ${s.title}\nSummary: ${s.summary}`).join('\n\n')
+  const checkpointsInfo = checkpoints.map(cp => `ID: ${cp.id}\nTitle: ${cp.title}\nSummary: ${cp.summary}`).join('\n\n')
   const questionsInfo = questions.map((q, i) => `${i}: ${q.question}`).join('\n')
 
-  const prompt = `Match each question to the most relevant section.
+  const prompt = `Match each question to the most relevant checkpoint.
 
-Sections:
-${sectionsInfo}
+Checkpoints:
+${checkpointsInfo}
 
 Questions:
 ${questionsInfo}
 
-Respond with a JSON object mapping question index to section ID:
-{"0": "section-id-1", "1": "section-id-2", ...}`
+Respond with a JSON object mapping question index to checkpoint ID:
+{"0": "checkpoint-id-1", "1": "checkpoint-id-2", ...}`
 
-  const response = await getOpenAI().chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 1000,
-    temperature: 0.2,
-  })
-
-  const content = response.choices[0]?.message?.content || '{}'
-  
   try {
-    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    const mapping = JSON.parse(cleaned)
-    
-    Object.entries(mapping).forEach(([qIndex, sectionId]) => {
-      const idx = parseInt(qIndex)
-      if (idx >= 0 && idx < questions.length && result.has(sectionId as string)) {
-        result.get(sectionId as string)!.push(questions[idx])
-      }
+    const response = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1000,
+      temperature: 0.2,
     })
+
+    const content = response.choices[0]?.message?.content || '{}'
+    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    
+    try {
+      const mapping = JSON.parse(cleaned)
+      
+      Object.entries(mapping).forEach(([qIndex, checkpointId]) => {
+        const idx = parseInt(qIndex)
+        if (idx >= 0 && idx < questions.length && result.has(checkpointId as string)) {
+          result.get(checkpointId as string)!.push(questions[idx])
+        }
+      })
+    } catch {
+      // If matching fails, distribute questions evenly
+      questions.forEach((q, i) => {
+        const cpIndex = i % checkpoints.length
+        const cpId = checkpoints[cpIndex].id
+        result.get(cpId)!.push(q)
+      })
+    }
   } catch {
-    // If matching fails, distribute questions evenly
+    // Distribute evenly on error
     questions.forEach((q, i) => {
-      const sectionIndex = i % sections.length
-      const sectionId = sections[sectionIndex].id
-      result.get(sectionId)!.push(q)
+      const cpIndex = i % checkpoints.length
+      const cpId = checkpoints[cpIndex].id
+      result.get(cpId)!.push(q)
     })
   }
 
   return result
 }
 
-// POST: Start processing an interactive lesson
+// Main processing function
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -420,10 +596,7 @@ export async function POST(
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get lesson and verify ownership
@@ -435,31 +608,22 @@ export async function POST(
       .single()
 
     if (lessonError || !lesson) {
-      return NextResponse.json(
-        { error: 'Interactive lesson not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Interactive lesson not found' }, { status: 404 })
     }
 
     if (lesson.status === 'processing') {
-      return NextResponse.json(
-        { error: 'Lesson is already being processed' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Lesson is already being processed' }, { status: 400 })
     }
 
     if (lesson.status === 'ready') {
-      return NextResponse.json(
-        { error: 'Lesson has already been processed' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Lesson has already been processed' }, { status: 400 })
     }
 
     const documents = lesson.interactive_lesson_documents || []
     const lessonDocs = documents.filter((d: any) => d.category === 'lesson')
     const mcqDocs = documents.filter((d: any) => d.category === 'mcq')
 
-    // Determine mode based on documents
+    // Determine mode
     const mode = lessonDocs.length > 0 ? 'document_based' : 'mcq_only'
 
     if (mode === 'mcq_only' && mcqDocs.length === 0) {
@@ -478,9 +642,10 @@ export async function POST(
     try {
       // ===== DOCUMENT-BASED MODE =====
       if (mode === 'document_based') {
-        const allPageTexts: PageText[] = []
+        const allPageTexts: string[] = []
+        let totalPageCount = 0
 
-        // Step 1: Extract text from each lesson document
+        // Process each lesson document
         for (const doc of lessonDocs) {
           console.log(`Processing document: ${doc.name}`)
           
@@ -496,81 +661,167 @@ export async function POST(
 
           const buffer = Buffer.from(await fileData.arrayBuffer())
           
-          // Extract text
-          let pages: string[] = []
-          if (doc.file_type === 'pdf') {
-            pages = await extractPdfText(buffer)
-          } else {
-            // For other formats, treat as single page
-            pages = [buffer.toString('utf-8')]
-          }
-
-          // Update page count
+          // Get page count
+          const pageCount = await getPdfPageCount(buffer)
+          console.log(`Document has ${pageCount} pages`)
+          
+          // Update document page count
           await getSupabaseAdmin()
             .from('interactive_lesson_documents')
-            .update({ page_count: pages.length })
+            .update({ page_count: pageCount })
             .eq('id', doc.id)
 
-          // Store page texts
-          for (let i = 0; i < pages.length; i++) {
-            const pageText: PageText = {
-              document_id: doc.id,
-              page_number: i + 1,
-              text_content: pages[i]
-            }
-            allPageTexts.push(pageText)
+          // STEP 1: Convert each page to image and transcribe
+          for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+            console.log(`Processing page ${pageNum}/${pageCount}`)
+            
+            // Convert to image
+            const imageResult = await convertPdfPageToImage(buffer, pageNum)
+            
+            if (imageResult) {
+              // Upload image to storage
+              const imagePath = `${user.id}/${id}/pages/${doc.id}_page_${pageNum}.png`
+              
+              const { error: uploadError } = await getSupabaseAdmin().storage
+                .from('interactive-lessons')
+                .upload(imagePath, imageResult.buffer, {
+                  contentType: 'image/png',
+                  upsert: true
+                })
 
-            await getSupabaseAdmin()
-              .from('interactive_lesson_page_texts')
-              .upsert({
-                document_id: doc.id,
-                page_number: i + 1,
-                text_content: pages[i]
-              }, {
-                onConflict: 'document_id,page_number'
-              })
+              if (!uploadError) {
+                // Store image reference
+                await getSupabaseAdmin()
+                  .from('interactive_lesson_page_images')
+                  .upsert({
+                    document_id: doc.id,
+                    page_number: pageNum,
+                    image_path: imagePath,
+                    width: imageResult.width,
+                    height: imageResult.height
+                  }, { onConflict: 'document_id,page_number' })
+              }
+
+              // STEP 2: Transcribe with vision
+              const imageBase64 = imageResult.buffer.toString('base64')
+              const transcription = await transcribePageWithVision(imageBase64, pageNum, lesson.language)
+              
+              // Store transcription
+              const { data: pageTextData } = await getSupabaseAdmin()
+                .from('interactive_lesson_page_texts')
+                .upsert({
+                  document_id: doc.id,
+                  page_number: pageNum,
+                  text_content: transcription.text,
+                  transcription_type: 'vision',
+                  elements_description: JSON.stringify(transcription.elements),
+                  has_visual_content: transcription.hasVisualContent
+                }, { onConflict: 'document_id,page_number' })
+                .select()
+                .single()
+
+              allPageTexts.push(transcription.text)
+
+              // STEP 6: Analyze elements for highlights (do this in parallel later for each page)
+              if (pageTextData) {
+                const elements = await analyzePageElements(transcription.text, pageNum, lesson.language)
+                
+                for (let i = 0; i < elements.length; i++) {
+                  const elem = elements[i]
+                  await getSupabaseAdmin()
+                    .from('interactive_lesson_page_elements')
+                    .insert({
+                      page_text_id: pageTextData.id,
+                      element_type: elem.element_type,
+                      element_text: elem.element_text,
+                      explanation: elem.explanation,
+                      position_hint: elem.position_hint,
+                      element_order: i
+                    })
+                }
+              }
+            } else {
+              // Fallback: store empty page
+              allPageTexts.push(`(Page ${pageNum})`)
+              
+              await getSupabaseAdmin()
+                .from('interactive_lesson_page_texts')
+                .upsert({
+                  document_id: doc.id,
+                  page_number: pageNum,
+                  text_content: `(Page ${pageNum} - image conversion failed)`,
+                  transcription_type: 'text'
+                }, { onConflict: 'document_id,page_number' })
+            }
           }
+          
+          totalPageCount += pageCount
         }
 
-        // Step 2: Generate sections using LLM
-        console.log('Generating sections...')
-        const sections = await generateSections(allPageTexts, lesson.language)
-
-        // Step 3: Store sections
-        const createdSections: Array<{ id: string; title: string; summary: string; start_page: number; end_page: number }> = []
+        // STEP 3: Reconstruct full lesson
+        console.log('Reconstructing lesson...')
+        const reconstruction = await reconstructLesson(allPageTexts, lesson.language)
         
-        for (let i = 0; i < sections.length; i++) {
-          const section = sections[i]
-          const { data: createdSection, error: sectionError } = await getSupabaseAdmin()
-            .from('interactive_lesson_sections')
+        await getSupabaseAdmin()
+          .from('interactive_lesson_reconstructions')
+          .upsert({
+            interactive_lesson_id: id,
+            full_content: reconstruction.fullContent,
+            structure_json: reconstruction.structure
+          }, { onConflict: 'interactive_lesson_id' })
+
+        // STEP 4: Create checkpoints
+        console.log('Creating checkpoints...')
+        const checkpointData = await createCheckpoints(
+          reconstruction.fullContent,
+          totalPageCount,
+          lesson.language
+        )
+
+        // Store checkpoints and get their IDs
+        const createdCheckpoints: Array<{ id: string; title: string; summary: string; start_page: number; end_page: number }> = []
+        const checkpointIdMap = new Map<number, string>() // index -> id
+
+        for (let i = 0; i < checkpointData.length; i++) {
+          const cp = checkpointData[i]
+          
+          // Resolve parent_id if it's a subtopic
+          let parentId = null
+          if (cp.parent_index !== undefined && checkpointIdMap.has(cp.parent_index)) {
+            parentId = checkpointIdMap.get(cp.parent_index)
+          }
+
+          const { data: created, error: cpError } = await getSupabaseAdmin()
+            .from('interactive_lesson_checkpoints')
             .insert({
               interactive_lesson_id: id,
-              document_id: lessonDocs[0]?.id, // Associate with first lesson doc
-              section_order: i + 1,
-              title: section.title,
-              start_page: section.start_page,
-              end_page: section.end_page,
-              summary: section.summary,
-              key_points: section.key_points,
+              parent_id: parentId,
+              checkpoint_order: i + 1,
+              title: cp.title,
+              checkpoint_type: cp.type,
+              start_page: cp.start_page,
+              end_page: cp.end_page,
+              summary: cp.summary,
               pass_threshold: 70
             })
             .select()
             .single()
 
-          if (!sectionError && createdSection) {
-            createdSections.push({
-              id: createdSection.id,
-              title: section.title,
-              summary: section.summary,
-              start_page: section.start_page,
-              end_page: section.end_page
+          if (!cpError && created) {
+            checkpointIdMap.set(i, created.id)
+            createdCheckpoints.push({
+              id: created.id,
+              title: cp.title,
+              summary: cp.summary,
+              start_page: cp.start_page,
+              end_page: cp.end_page
             })
           }
         }
 
-        // Step 4: Handle MCQ
+        // STEP 5: Handle MCQ
         let uploadedQuestions: Question[] = []
-        
+
         // Parse MCQ from uploaded documents if any
         for (const mcqDoc of mcqDocs) {
           const { data: fileData } = await getSupabaseAdmin().storage
@@ -581,9 +832,16 @@ export async function POST(
             const buffer = Buffer.from(await fileData.arrayBuffer())
             let text = ''
             
+            // For PDF MCQs, we need to extract text
             if (mcqDoc.file_type === 'pdf') {
-              const pages = await extractPdfText(buffer)
-              text = pages.join('\n')
+              const pageCount = await getPdfPageCount(buffer)
+              for (let p = 1; p <= pageCount; p++) {
+                const img = await convertPdfPageToImage(buffer, p)
+                if (img) {
+                  const trans = await transcribePageWithVision(img.buffer.toString('base64'), p, lesson.language)
+                  text += trans.text + '\n'
+                }
+              }
             } else {
               text = buffer.toString('utf-8')
             }
@@ -593,42 +851,26 @@ export async function POST(
           }
         }
 
-        // Match uploaded questions to sections or generate new ones
+        // Assign questions to checkpoints
         if (uploadedQuestions.length > 0) {
-          console.log(`Matching ${uploadedQuestions.length} uploaded questions to sections...`)
-          const questionsBySection = await matchQuestionsToSections(
+          console.log(`Using ${uploadedQuestions.length} uploaded questions`)
+          
+          const questionsByCheckpoint = await matchQuestionsToCheckpoints(
             uploadedQuestions,
-            createdSections,
+            createdCheckpoints,
             lesson.language
           )
 
-          // Store matched questions and generate more if needed
-          for (const section of createdSections) {
-            const sectionQuestions = questionsBySection.get(section.id) || []
+          // Store matched questions
+          for (const cp of createdCheckpoints) {
+            const cpQuestions = questionsByCheckpoint.get(cp.id) || []
             
-            // If section has fewer than 3 questions, generate more
-            if (sectionQuestions.length < 3) {
-              const pageTexts = allPageTexts
-                .filter(p => p.page_number >= section.start_page && p.page_number <= section.end_page)
-                .map(p => p.text_content)
-              
-              const additionalQuestions = await generateQuestions(
-                section.title,
-                section.summary,
-                pageTexts,
-                lesson.language,
-                5 - sectionQuestions.length
-              )
-              sectionQuestions.push(...additionalQuestions)
-            }
-
-            // Store questions
-            for (let i = 0; i < sectionQuestions.length; i++) {
-              const q = sectionQuestions[i]
+            for (let i = 0; i < cpQuestions.length; i++) {
+              const q = cpQuestions[i]
               await getSupabaseAdmin()
                 .from('interactive_lesson_questions')
                 .insert({
-                  section_id: section.id,
+                  checkpoint_id: cp.id,
                   question: q.question,
                   choices: q.choices,
                   correct_index: q.correct_index,
@@ -638,19 +880,21 @@ export async function POST(
             }
           }
         } else {
-          // Generate questions for each section
-          console.log('Generating questions for each section...')
-          for (const section of createdSections) {
-            const pageTexts = allPageTexts
-              .filter(p => p.page_number >= section.start_page && p.page_number <= section.end_page)
-              .map(p => p.text_content)
+          // Generate questions for each checkpoint
+          console.log('Generating questions for each checkpoint...')
+          
+          for (const cp of createdCheckpoints) {
+            // Get relevant page content for this checkpoint
+            const relevantContent = allPageTexts
+              .slice(cp.start_page - 1, cp.end_page)
+              .join('\n\n')
 
-            const questions = await generateQuestions(
-              section.title,
-              section.summary,
-              pageTexts,
+            const questions = await generateCheckpointQuestions(
+              cp.title,
+              cp.summary,
+              relevantContent,
               lesson.language,
-              5
+              10
             )
 
             for (let i = 0; i < questions.length; i++) {
@@ -658,7 +902,7 @@ export async function POST(
               await getSupabaseAdmin()
                 .from('interactive_lesson_questions')
                 .insert({
-                  section_id: section.id,
+                  checkpoint_id: cp.id,
                   question: q.question,
                   choices: q.choices,
                   correct_index: q.correct_index,
@@ -666,6 +910,25 @@ export async function POST(
                   question_order: i + 1
                 })
             }
+          }
+        }
+
+        // Also create legacy sections for backwards compatibility
+        for (const cp of createdCheckpoints) {
+          if (cp.title) { // Only top-level checkpoints as sections
+            await getSupabaseAdmin()
+              .from('interactive_lesson_sections')
+              .insert({
+                interactive_lesson_id: id,
+                document_id: lessonDocs[0]?.id,
+                section_order: createdCheckpoints.indexOf(cp) + 1,
+                title: cp.title,
+                start_page: cp.start_page,
+                end_page: cp.end_page,
+                summary: cp.summary,
+                key_points: [],
+                pass_threshold: 70
+              })
           }
         }
       }
@@ -684,8 +947,14 @@ export async function POST(
             let text = ''
             
             if (mcqDoc.file_type === 'pdf') {
-              const pages = await extractPdfText(buffer)
-              text = pages.join('\n')
+              const pageCount = await getPdfPageCount(buffer)
+              for (let p = 1; p <= pageCount; p++) {
+                const img = await convertPdfPageToImage(buffer, p)
+                if (img) {
+                  const trans = await transcribePageWithVision(img.buffer.toString('base64'), p, lesson.language)
+                  text += trans.text + '\n'
+                }
+              }
             } else {
               text = buffer.toString('utf-8')
             }
@@ -699,52 +968,42 @@ export async function POST(
           throw new Error('No valid MCQ questions found in uploaded documents')
         }
 
-        // Group questions into sections (5-10 questions per section)
-        const questionsPerSection = 5
-        const sectionCount = Math.ceil(allQuestions.length / questionsPerSection)
+        // Group questions into checkpoints (5-10 questions per checkpoint)
+        const questionsPerCheckpoint = 10
+        const checkpointCount = Math.ceil(allQuestions.length / questionsPerCheckpoint)
 
-        for (let i = 0; i < sectionCount; i++) {
-          const sectionQuestions = allQuestions.slice(
-            i * questionsPerSection,
-            (i + 1) * questionsPerSection
+        for (let i = 0; i < checkpointCount; i++) {
+          const cpQuestions = allQuestions.slice(
+            i * questionsPerCheckpoint,
+            (i + 1) * questionsPerCheckpoint
           )
 
-          // Generate section title and content from questions
-          const sectionTitle = `Section ${i + 1}`
-          const content = await generateCourseContent(sectionQuestions, sectionTitle, lesson.language)
+          const cpTitle = `Section ${i + 1}`
 
-          // Create section
-          const { data: section, error: sectionError } = await getSupabaseAdmin()
-            .from('interactive_lesson_sections')
+          // Create checkpoint
+          const { data: checkpoint } = await getSupabaseAdmin()
+            .from('interactive_lesson_checkpoints')
             .insert({
               interactive_lesson_id: id,
-              section_order: i + 1,
-              title: sectionTitle,
-              start_page: 1, // Not applicable for mcq_only
+              checkpoint_order: i + 1,
+              title: cpTitle,
+              checkpoint_type: 'topic',
+              start_page: 1,
               end_page: 1,
-              summary: `This section covers ${sectionQuestions.length} questions.`,
-              key_points: sectionQuestions.slice(0, 3).map(q => q.question.slice(0, 50) + '...'),
+              summary: `This section covers ${cpQuestions.length} questions.`,
               pass_threshold: 70
             })
             .select()
             .single()
 
-          if (!sectionError && section) {
-            // Store generated content
-            await getSupabaseAdmin()
-              .from('interactive_lesson_generated_content')
-              .insert({
-                section_id: section.id,
-                content_html: content
-              })
-
+          if (checkpoint) {
             // Store questions
-            for (let j = 0; j < sectionQuestions.length; j++) {
-              const q = sectionQuestions[j]
+            for (let j = 0; j < cpQuestions.length; j++) {
+              const q = cpQuestions[j]
               await getSupabaseAdmin()
                 .from('interactive_lesson_questions')
                 .insert({
-                  section_id: section.id,
+                  checkpoint_id: checkpoint.id,
                   question: q.question,
                   choices: q.choices,
                   correct_index: q.correct_index,
@@ -753,6 +1012,20 @@ export async function POST(
                 })
             }
           }
+
+          // Also create legacy section
+          await getSupabaseAdmin()
+            .from('interactive_lesson_sections')
+            .insert({
+              interactive_lesson_id: id,
+              section_order: i + 1,
+              title: cpTitle,
+              start_page: 1,
+              end_page: 1,
+              summary: `This section covers ${cpQuestions.length} questions.`,
+              key_points: cpQuestions.slice(0, 3).map(q => q.question.slice(0, 50) + '...'),
+              pass_threshold: 70
+            })
         }
       }
 
@@ -793,4 +1066,3 @@ export async function POST(
     )
   }
 }
-
