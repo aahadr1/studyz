@@ -133,25 +133,15 @@ export default function NewInteractiveLessonPage() {
         await uploadFileDirectly(lesson.id, file, 'mcq')
       }
 
-      // 3. Set status to 'processing' and redirect
-      // Client-side processing will start automatically on the detail page
-      if (lessonFiles.length > 0) {
-        setProcessingMessage('Préparation du traitement...')
-        
-        await fetch(`/api/interactive-lessons/${lesson.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: 'processing',
-            processing_step: 'transcribing',
-            processing_message: 'Chargement du PDF...',
-            processing_percent: 0
-          })
-        })
-      }
+      // 3. Set status to 'ready' - no processing needed!
+      await fetch(`/api/interactive-lessons/${lesson.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ready' })
+      })
 
-      // Redirect to detail page where client-side processing will start
-      router.push(`/interactive-lessons/${lesson.id}`)
+      // Redirect to player page immediately
+      router.push(`/interactive-lessons/${lesson.id}/player`)
 
     } catch (err: any) {
       console.error('Error:', err)
