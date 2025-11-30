@@ -116,20 +116,37 @@ async function convertPdfPageToImage(
   pdfBuffer: Buffer, 
   pageNumber: number
 ): Promise<{ buffer: Buffer; width: number; height: number } | null> {
+  console.log(`       [MuPDF] Converting page ${pageNumber} to image...`)
   try {
+    console.log(`       [MuPDF] Importing mupdf module...`)
     const mupdf = await import('mupdf')
+    console.log(`       [MuPDF] ✓ Module imported`)
+    
+    console.log(`       [MuPDF] Creating ArrayBuffer from PDF buffer (${pdfBuffer.length} bytes)...`)
     const arrayBuffer = pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength)
     const uint8Array = new Uint8Array(arrayBuffer)
+    console.log(`       [MuPDF] ✓ Uint8Array created (${uint8Array.length} bytes)`)
     
+    console.log(`       [MuPDF] Opening PDF document...`)
     const doc = mupdf.Document.openDocument(uint8Array, 'application/pdf')
+    console.log(`       [MuPDF] ✓ Document opened`)
+    
+    console.log(`       [MuPDF] Loading page ${pageNumber - 1} (0-indexed)...`)
     const page = doc.loadPage(pageNumber - 1)
+    console.log(`       [MuPDF] ✓ Page loaded`)
     
     const zoom = 2.0 // Higher quality
+    console.log(`       [MuPDF] Creating matrix with zoom=${zoom}...`)
     const matrix = mupdf.Matrix.scale(zoom, zoom)
-    const pixmap = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false, true)
     
+    console.log(`       [MuPDF] Rendering page to pixmap...`)
+    const pixmap = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false, true)
+    console.log(`       [MuPDF] ✓ Pixmap created: ${pixmap.getWidth()}x${pixmap.getHeight()}`)
+    
+    console.log(`       [MuPDF] Converting to PNG...`)
     const imageData = pixmap.asPNG()
     const buffer = Buffer.from(imageData)
+    console.log(`       [MuPDF] ✓ PNG created: ${buffer.length} bytes`)
     
     return {
       buffer,
@@ -137,7 +154,12 @@ async function convertPdfPageToImage(
       height: pixmap.getHeight()
     }
   } catch (error) {
-    console.error(`MuPDF image conversion error for page ${pageNumber}:`, error)
+    console.error(`       [MuPDF] ❌ ERROR converting page ${pageNumber}:`)
+    console.error(`       [MuPDF] ❌ Error type: ${error instanceof Error ? error.constructor.name : typeof error}`)
+    console.error(`       [MuPDF] ❌ Error message: ${error instanceof Error ? error.message : String(error)}`)
+    if (error instanceof Error && error.stack) {
+      console.error(`       [MuPDF] ❌ Stack trace:`, error.stack)
+    }
     return null
   }
 }
@@ -454,6 +476,14 @@ export async function POST(
     }
 
     // Start processing
+    console.log(`\n\n`)
+    console.log(`╔══════════════════════════════════════════════════════════════╗`)
+    console.log(`║     INTERACTIVE LESSON PROCESSING STARTED                    ║`)
+    console.log(`║     Lesson ID: ${id}`)
+    console.log(`║     Time: ${new Date().toISOString()}`)
+    console.log(`╚══════════════════════════════════════════════════════════════╝`)
+    console.log(`\n`)
+
     await getSupabaseAdmin()
       .from('interactive_lessons')
       .update({ 
@@ -466,12 +496,21 @@ export async function POST(
       })
       .eq('id', id)
 
+    console.log(`[INIT] Found ${lessonDocs.length} lesson documents to process`)
+    lessonDocs.forEach((doc: any, i: number) => {
+      console.log(`  ${i + 1}. ${doc.name} (path: ${doc.file_path})`)
+    })
+
     try {
       // Download all documents and get page counts
+      console.log(`\n[DOWNLOAD] Starting document downloads...`)
       const documentBuffers = new Map<string, { buffer: Buffer; pageCount: number }>()
       let totalPageCount = 0
 
       for (const doc of lessonDocs) {
+        console.log(`\n[DOWNLOAD] Processing: ${doc.name}`)
+        console.log(`  File path: ${doc.file_path}`)
+        
         await updateProgress(id, 'converting', `Téléchargement de ${doc.name}...`, 2, 300)
         
         const { data: fileData, error: downloadError } = await getSupabaseAdmin().storage
@@ -479,18 +518,26 @@ export async function POST(
           .download(doc.file_path)
 
         if (downloadError || !fileData) {
+          console.error(`  ❌ DOWNLOAD FAILED:`, downloadError)
           throw new Error(`Failed to download ${doc.name}`)
         }
 
+        console.log(`  ✓ File downloaded successfully`)
         const buffer = Buffer.from(await fileData.arrayBuffer())
+        console.log(`  ✓ Buffer created: ${buffer.length} bytes (${(buffer.length / 1024 / 1024).toFixed(2)} MB)`)
+        
+        console.log(`  🔍 Getting page count with MuPDF...`)
         const pageCount = await getPdfPageCount(buffer)
+        console.log(`  ✓ Page count: ${pageCount}`)
         
         if (pageCount === 0) {
+          console.error(`  ❌ PAGE COUNT IS ZERO!`)
           throw new Error(`Could not detect pages in ${doc.name}`)
         }
 
         documentBuffers.set(doc.id, { buffer, pageCount })
         totalPageCount += pageCount
+        console.log(`  ✓ Document added to buffer map`)
 
         await getSupabaseAdmin()
           .from('interactive_lesson_documents')
@@ -498,18 +545,34 @@ export async function POST(
           .eq('id', doc.id)
       }
 
-      console.log(`\n========== PHASE 1: CONVERSION DES IMAGES ==========`)
-      console.log(`Total pages to process: ${totalPageCount}`)
+      console.log(`\n[DOWNLOAD] ✓ All documents downloaded`)
+      console.log(`[DOWNLOAD] Total page count: ${totalPageCount}`)
+      console.log(`[DOWNLOAD] Buffer map size: ${documentBuffers.size}`)
+
+      console.log(`\n`)
+      console.log(`╔══════════════════════════════════════════════════════════════╗`)
+      console.log(`║     PHASE 1: CONVERSION DES IMAGES (0-30%)                   ║`)
+      console.log(`║     Total pages: ${totalPageCount}`)
+      console.log(`╚══════════════════════════════════════════════════════════════╝`)
 
       // ========== PHASE 1: CONVERT ALL PAGES TO IMAGES (0-30%) ==========
       let convertedPages = 0
       const imageMetadata: Array<{ docId: string; pageNum: number; imagePath: string }> = []
 
+      console.log(`\n[PHASE 1] Starting image conversion...`)
+      console.log(`[PHASE 1] Documents to process: ${lessonDocs.length}`)
+
       for (const doc of lessonDocs) {
+        console.log(`\n[PHASE 1] Processing document: ${doc.name}`)
         const docData = documentBuffers.get(doc.id)
-        if (!docData) continue
+        if (!docData) {
+          console.error(`[PHASE 1] ❌ No buffer found for document ${doc.id}! SKIPPING!`)
+          continue
+        }
 
         const { buffer, pageCount } = docData
+        console.log(`[PHASE 1] ✓ Buffer found: ${buffer.length} bytes, ${pageCount} pages`)
+        console.log(`[PHASE 1] Starting page loop from 1 to ${pageCount}...`)
 
         for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
           const globalPageNum = convertedPages + 1
@@ -574,18 +637,36 @@ export async function POST(
         }
       }
 
-      console.log(`✓ All ${convertedPages} pages converted to images`)
-      console.log(`✓ Image metadata collected: ${imageMetadata.length} entries`)
-      console.log(`✓ First image path: ${imageMetadata[0]?.imagePath || 'none'}`)
+      console.log(`\n[PHASE 1] ✓ CONVERSION COMPLETE`)
+      console.log(`[PHASE 1] ✓ Pages converted: ${convertedPages}`)
+      console.log(`[PHASE 1] ✓ Image metadata entries: ${imageMetadata.length}`)
+      if (imageMetadata.length > 0) {
+        console.log(`[PHASE 1] ✓ First image: ${imageMetadata[0].imagePath}`)
+        console.log(`[PHASE 1] ✓ Last image: ${imageMetadata[imageMetadata.length - 1].imagePath}`)
+      } else {
+        console.error(`[PHASE 1] ❌ WARNING: imageMetadata is EMPTY! No images to transcribe!`)
+      }
 
       // ========== PHASE 2: TRANSCRIBE ALL IMAGES WITH AI (30-80%) ==========
-      console.log(`\n========== PHASE 2: TRANSCRIPTION IA ==========`)
-      console.log(`📊 Total images to transcribe: ${imageMetadata.length}`)
+      console.log(`\n`)
+      console.log(`╔══════════════════════════════════════════════════════════════╗`)
+      console.log(`║     PHASE 2: TRANSCRIPTION IA (30-80%)                       ║`)
+      console.log(`║     Images to transcribe: ${imageMetadata.length}`)
+      console.log(`╚══════════════════════════════════════════════════════════════╝`)
+      
+      if (imageMetadata.length === 0) {
+        console.error(`\n❌❌❌ CRITICAL ERROR: NO IMAGES TO TRANSCRIBE! ❌❌❌`)
+        console.error(`This means Phase 1 failed to create any images.`)
+        throw new Error('No images were converted - cannot proceed with transcription')
+      }
       
       let transcribedPages = 0
       const allPageTranscriptions: string[] = []
 
+      console.log(`\n[PHASE 2] Starting transcription loop...`)
       for (const { docId, pageNum, imagePath } of imageMetadata) {
+        console.log(`\n[PHASE 2] ═══════════════════════════════════════════════`)
+        console.log(`[PHASE 2] Processing image: ${imagePath}`)
         const globalPageNum = transcribedPages + 1
         const percent = 30 + Math.round((transcribedPages / totalPageCount) * 50) // 30-80%
         const eta = Math.max(10, (totalPageCount - transcribedPages) * 3)
