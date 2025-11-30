@@ -17,6 +17,7 @@
     "next": "14.0.4",
     "openai": "^4.20.1",
     "pdf-parse": "^2.4.5",
+    "pdf-to-png-converter": "^3.11.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^4.12.0",
