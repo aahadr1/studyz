@@ -20,54 +20,51 @@ export default function MCQModeSelector({
     label: string
     description: string
     icon: React.ReactNode
-    color: string
     disabled?: boolean
   }> = [
     {
       id: 'study',
       label: 'Study',
       description: 'See lesson before answering',
-      icon: <FiBook className="w-5 h-5" />,
-      color: 'blue'
+      icon: <FiBook className="w-4 h-4" strokeWidth={1.5} />
     },
     {
       id: 'test',
       label: 'Test',
       description: 'Answer first, then see lesson',
-      icon: <FiEdit3 className="w-5 h-5" />,
-      color: 'purple'
+      icon: <FiEdit3 className="w-4 h-4" strokeWidth={1.5} />
     },
     {
       id: 'challenge',
       label: 'Challenge',
-      description: 'Timed, no hints',
-      icon: <FiZap className="w-5 h-5" />,
-      color: 'red'
+      description: '30s per question',
+      icon: <FiZap className="w-4 h-4" strokeWidth={1.5} />
     },
     {
       id: 'review',
       label: 'Review',
       description: 'Focus on missed questions',
-      icon: <FiRotateCcw className="w-5 h-5" />,
-      color: 'orange',
+      icon: <FiRotateCcw className="w-4 h-4" strokeWidth={1.5} />,
       disabled: !hasIncorrectAnswers
     }
   ]
 
-  const getColorClasses = (color: string, isActive: boolean) => {
-    if (!isActive) return 'bg-elevated text-text-secondary hover:bg-border'
+  const getModeClasses = (modeId: MCQMode, isActive: boolean, isDisabled?: boolean) => {
+    if (isDisabled) return 'border-border text-text-tertiary opacity-40 cursor-not-allowed'
     
-    switch (color) {
-      case 'blue':
-        return 'bg-blue-500 text-white'
-      case 'purple':
-        return 'bg-purple-500 text-white'
-      case 'red':
-        return 'bg-red-500 text-white'
-      case 'orange':
-        return 'bg-orange-500 text-white'
+    if (!isActive) return 'border-border text-text-secondary hover:border-border-light hover:text-text-primary'
+    
+    switch (modeId) {
+      case 'study':
+        return 'border-mode-study text-mode-study bg-mode-study/10'
+      case 'test':
+        return 'border-mode-test text-mode-test bg-mode-test/10'
+      case 'challenge':
+        return 'border-mode-challenge text-mode-challenge bg-mode-challenge/10'
+      case 'review':
+        return 'border-mode-review text-mode-review bg-mode-review/10'
       default:
-        return 'bg-accent text-white'
+        return 'border-text-primary text-text-primary'
     }
   }
 
@@ -78,16 +75,15 @@ export default function MCQModeSelector({
           key={mode.id}
           onClick={() => !mode.disabled && onModeChange(mode.id)}
           disabled={mode.disabled}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-            getColorClasses(mode.color, currentMode === mode.id)
-          } ${mode.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          className={`flex items-center gap-2 px-4 py-2.5 border text-sm font-medium uppercase tracking-wider transition-colors ${
+            getModeClasses(mode.id, currentMode === mode.id, mode.disabled)
+          }`}
           title={mode.description}
         >
           {mode.icon}
-          <span className="text-sm font-medium">{mode.label}</span>
+          <span>{mode.label}</span>
         </button>
       ))}
     </div>
   )
 }
-

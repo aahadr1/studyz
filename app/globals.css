@@ -1,3 +1,10 @@
+/* ============================================
+   STUDYZ DESKTOP - Minimalist Monochrome UI
+   Black & White. Squared. Unique.
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -17,9 +24,18 @@ html {
 body {
   @apply bg-background text-text-primary;
   min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
-/* Typography utilities */
+/* Monospace utility */
+.mono {
+  font-family: 'DM Mono', monospace;
+  letter-spacing: -0.02em;
+}
+
+/* ============================================
+   Typography - Clean & Minimal
+   ============================================ */
 @layer components {
   .heading-1 {
     @apply text-4xl font-semibold tracking-tight text-text-primary;
@@ -30,7 +46,7 @@ body {
   }
   
   .heading-3 {
-    @apply text-xl font-medium text-text-primary;
+    @apply text-lg font-medium text-text-primary;
   }
   
   .body-text {
@@ -40,74 +56,125 @@ body {
   .caption {
     @apply text-sm text-text-tertiary;
   }
+  
+  .label {
+    @apply text-xs font-medium text-text-tertiary uppercase tracking-widest;
+  }
 }
 
-/* Button styles */
+/* ============================================
+   Button Styles - Stark & Squared
+   ============================================ */
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 
-           bg-accent hover:bg-accent-hover text-white font-medium 
-           rounded-md transition-colors duration-150;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 
+           bg-text-primary text-background font-medium text-sm
+           transition-opacity duration-100
+           hover:opacity-80;
   }
   
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 
-           bg-elevated hover:bg-subtle text-text-primary font-medium 
-           rounded-md border border-border transition-colors duration-150;
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 
+           bg-transparent text-text-primary font-medium text-sm
+           border border-border transition-colors duration-100
+           hover:bg-elevated hover:border-border-light;
   }
   
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 
-           text-text-secondary hover:text-text-primary hover:bg-elevated 
-           rounded-md transition-colors duration-150;
+           text-text-secondary text-sm
+           transition-colors duration-100
+           hover:text-text-primary;
   }
   
   .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 
+           bg-transparent text-error font-medium text-sm
+           border border-error/30 transition-colors duration-100
+           hover:bg-error-muted;
+  }
+  
+  /* Mode buttons - these get color */
+  .btn-mode {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 
-           bg-error-muted hover:bg-error/20 text-error font-medium 
-           rounded-md transition-colors duration-150;
+           font-medium text-sm transition-all duration-100;
+  }
+  
+  .btn-mode-study {
+    @apply btn-mode bg-mode-study/10 text-mode-study border border-mode-study/30
+           hover:bg-mode-study/20;
+  }
+  
+  .btn-mode-test {
+    @apply btn-mode bg-mode-test/10 text-mode-test border border-mode-test/30
+           hover:bg-mode-test/20;
+  }
+  
+  .btn-mode-challenge {
+    @apply btn-mode bg-mode-challenge/10 text-mode-challenge border border-mode-challenge/30
+           hover:bg-mode-challenge/20;
+  }
+  
+  .btn-mode-review {
+    @apply btn-mode bg-mode-review/10 text-mode-review border border-mode-review/30
+           hover:bg-mode-review/20;
   }
 }
 
-/* Card styles */
+/* ============================================
+   Card Styles - Flat & Bordered
+   ============================================ */
 @layer components {
   .card {
-    @apply bg-surface border border-border rounded-lg;
+    @apply bg-transparent border border-border;
   }
   
   .card-elevated {
-    @apply bg-elevated border border-border rounded-lg shadow-sm;
+    @apply bg-surface border border-border;
   }
   
   .card-hover {
-    @apply transition-colors duration-150 hover:bg-elevated hover:border-border-light;
+    @apply transition-colors duration-100 hover:bg-elevated hover:border-border-light;
+  }
+  
+  .card-interactive {
+    @apply card card-hover cursor-pointer;
   }
 }
 
-/* Input styles */
+/* ============================================
+   Input Styles
+   ============================================ */
 @layer components {
   .input {
-    @apply w-full px-3 py-2 bg-surface border border-border rounded-md
-           text-text-primary placeholder-text-tertiary
-           focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent
-           transition-all duration-150;
+    @apply w-full px-4 py-3 bg-transparent border border-border
+           text-text-primary placeholder-text-tertiary text-sm
+           focus:outline-none focus:border-text-primary
+           transition-colors duration-100;
   }
   
   .input-label {
-    @apply block text-sm font-medium text-text-secondary mb-1.5;
+    @apply block text-xs font-medium text-text-secondary uppercase tracking-wider mb-2;
+  }
+  
+  .input-error {
+    @apply border-error focus:border-error;
   }
 }
 
-/* Sidebar styles */
+/* ============================================
+   Sidebar Styles
+   ============================================ */
 @layer components {
   .sidebar {
-    @apply h-full bg-surface border-r border-border;
+    @apply h-full bg-background border-r border-border;
   }
   
   .sidebar-item {
-    @apply flex items-center gap-3 px-3 py-2 mx-2 rounded-md
-           text-text-secondary hover:text-text-primary hover:bg-elevated
-           transition-colors duration-150 cursor-pointer;
+    @apply flex items-center gap-3 px-4 py-2.5 mx-2
+           text-text-secondary text-sm
+           transition-colors duration-100 cursor-pointer
+           hover:text-text-primary hover:bg-elevated;
   }
   
   .sidebar-item-active {
@@ -115,56 +182,164 @@ body {
   }
   
   .sidebar-section-title {
-    @apply px-3 py-2 text-xs font-medium text-text-tertiary uppercase tracking-wider;
+    @apply px-4 py-2 text-xs font-medium text-text-tertiary uppercase tracking-widest;
   }
 }
 
-/* Badge styles */
+/* ============================================
+   Badge & Status Styles - Functional Colors Only
+   ============================================ */
 @layer components {
   .badge {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded;
+    @apply inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium uppercase tracking-wider;
   }
   
   .badge-default {
-    @apply bg-elevated text-text-secondary;
-  }
-  
-  .badge-accent {
-    @apply bg-accent-muted text-accent;
+    @apply border border-border text-text-secondary;
   }
   
   .badge-success {
-    @apply bg-success-muted text-success;
+    @apply border border-success/30 text-success bg-success-muted;
   }
   
   .badge-warning {
-    @apply bg-warning-muted text-warning;
+    @apply border border-warning/30 text-warning bg-warning-muted;
   }
   
   .badge-error {
-    @apply bg-error-muted text-error;
+    @apply border border-error/30 text-error bg-error-muted;
+  }
+  
+  /* Mode badges - colored */
+  .badge-study {
+    @apply border border-mode-study/30 text-mode-study bg-mode-study/10;
+  }
+  
+  .badge-test {
+    @apply border border-mode-test/30 text-mode-test bg-mode-test/10;
+  }
+  
+  .badge-challenge {
+    @apply border border-mode-challenge/30 text-mode-challenge bg-mode-challenge/10;
+  }
+  
+  .badge-review {
+    @apply border border-mode-review/30 text-mode-review bg-mode-review/10;
   }
 }
 
-/* Divider */
+/* ============================================
+   MCQ Components - Right/Wrong States Get Color
+   ============================================ */
+@layer components {
+  .mcq-option {
+    @apply flex items-start gap-3 w-full px-4 py-3.5
+           bg-transparent border border-border
+           text-left cursor-pointer
+           transition-colors duration-100
+           hover:bg-elevated hover:border-border-light;
+  }
+  
+  .mcq-option-selected {
+    @apply bg-elevated border-text-primary;
+  }
+  
+  .mcq-option-correct {
+    @apply bg-success/10 border-success text-success;
+  }
+  
+  .mcq-option-incorrect {
+    @apply bg-error/10 border-error/50 text-error opacity-60;
+  }
+  
+  .mcq-option-label {
+    @apply w-6 h-6 border border-current
+           flex items-center justify-center
+           font-mono text-xs font-medium flex-shrink-0;
+  }
+  
+  .mcq-option-selected .mcq-option-label {
+    @apply bg-text-primary text-background;
+  }
+  
+  .mcq-option-correct .mcq-option-label {
+    @apply bg-success border-success text-white;
+  }
+  
+  .mcq-progress {
+    @apply h-0.5 bg-border;
+  }
+  
+  .mcq-progress-fill {
+    @apply h-full bg-text-primary transition-all duration-300;
+  }
+}
+
+/* ============================================
+   Table Styles
+   ============================================ */
+@layer components {
+  .table-header {
+    @apply text-xs font-medium text-text-tertiary uppercase tracking-wider py-3 px-4 text-left border-b border-border;
+  }
+  
+  .table-cell {
+    @apply py-4 px-4 text-sm text-text-secondary border-b border-border;
+  }
+  
+  .table-row-hover {
+    @apply hover:bg-elevated transition-colors duration-100;
+  }
+}
+
+/* ============================================
+   Loading & Progress
+   ============================================ */
+@layer components {
+  .spinner {
+    @apply w-5 h-5 border border-border border-t-text-primary animate-spin;
+  }
+  
+  .spinner-sm {
+    @apply w-4 h-4;
+  }
+  
+  .spinner-lg {
+    @apply w-8 h-8;
+  }
+  
+  .skeleton {
+    @apply bg-elevated animate-pulse;
+  }
+}
+
+/* ============================================
+   Dividers & Lines
+   ============================================ */
 @layer components {
   .divider {
     @apply border-t border-border;
   }
+  
+  .divider-vertical {
+    @apply border-l border-border h-full;
+  }
 }
 
-/* Custom scrollbar - minimal */
+/* ============================================
+   Custom Scrollbar - Minimal
+   ============================================ */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-border rounded-full;
+  @apply bg-border;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -173,32 +348,23 @@ body {
 
 /* Selection */
 ::selection {
-  @apply bg-accent/30 text-text-primary;
+  @apply bg-text-primary text-background;
 }
 
-/* Loading spinner */
-.spinner {
-  border: 2px solid theme('colors.border');
-  border-top: 2px solid theme('colors.accent.DEFAULT');
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Prose for markdown content */
+/* ============================================
+   Prose for Markdown Content
+   ============================================ */
 .prose {
   @apply text-text-secondary leading-relaxed;
 }
 
 .prose h1, .prose h2, .prose h3 {
-  @apply text-text-primary font-semibold mt-6 mb-3;
+  @apply text-text-primary font-semibold mt-8 mb-4;
 }
+
+.prose h1 { @apply text-2xl; }
+.prose h2 { @apply text-xl; }
+.prose h3 { @apply text-lg; }
 
 .prose p {
   @apply mb-4;
@@ -209,13 +375,42 @@ body {
 }
 
 .prose li {
-  @apply mb-1;
+  @apply mb-2;
 }
 
 .prose code {
-  @apply px-1.5 py-0.5 bg-elevated rounded text-sm;
+  @apply px-1.5 py-0.5 bg-elevated text-text-primary font-mono text-sm;
 }
 
 .prose pre {
-  @apply p-4 bg-elevated rounded-lg overflow-x-auto mb-4;
+  @apply p-4 bg-elevated overflow-x-auto mb-4 border border-border;
 }
+
+.prose pre code {
+  @apply bg-transparent p-0;
+}
+
+.prose a {
+  @apply text-text-primary underline underline-offset-2;
+}
+
+.prose blockquote {
+  @apply border-l-2 border-border pl-4 italic text-text-secondary;
+}
+
+/* ============================================
+   Animation Utilities
+   ============================================ */
+.animate-in {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.stagger-children > * {
+  animation: slideUp 0.15s ease-out backwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 30ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 90ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 120ms; }

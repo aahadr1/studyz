@@ -33,68 +33,67 @@ export default function ScoreTracker({
   }
 
   const getAccuracyColor = () => {
-    if (accuracy >= 80) return 'text-green-600'
-    if (accuracy >= 60) return 'text-yellow-600'
-    return 'text-red-600'
-  }
-
-  const getAccuracyBg = () => {
-    if (accuracy >= 80) return 'bg-green-50 border-green-200'
-    if (accuracy >= 60) return 'bg-yellow-50 border-yellow-200'
-    return 'bg-red-50 border-red-200'
+    if (accuracy >= 80) return 'text-success'
+    if (accuracy >= 60) return 'text-warning'
+    return 'text-error'
   }
 
   const getModeLabel = () => {
     switch (mode) {
-      case 'study': return 'Study Mode'
-      case 'test': return 'Test Mode'
-      case 'challenge': return 'Challenge Mode'
-      case 'review': return 'Review Mode'
+      case 'study': return 'Study'
+      case 'test': return 'Test'
+      case 'challenge': return 'Challenge'
+      case 'review': return 'Review'
       default: return 'Practice'
     }
   }
 
-  const getModeColor = () => {
+  const getModeClasses = () => {
     switch (mode) {
-      case 'study': return 'bg-blue-100 text-blue-800'
-      case 'test': return 'bg-purple-100 text-purple-800'
-      case 'challenge': return 'bg-red-100 text-red-800'
-      case 'review': return 'bg-orange-100 text-orange-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'study': return 'border-mode-study text-mode-study'
+      case 'test': return 'border-mode-test text-mode-test'
+      case 'challenge': return 'border-mode-challenge text-mode-challenge'
+      case 'review': return 'border-mode-review text-mode-review'
+      default: return 'border-border text-text-secondary'
     }
   }
 
   if (isComplete) {
     return (
-      <div className={`p-6 rounded-lg border ${getAccuracyBg()}`}>
-        <div className="text-center mb-4">
-          <FiAward className={`w-12 h-12 mx-auto mb-2 ${getAccuracyColor()}`} />
-          <h3 className="text-xl font-bold text-text-primary">Session Complete!</h3>
+      <div className="border border-border p-6">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 border border-border mx-auto mb-4 flex items-center justify-center">
+            <FiAward className={`w-6 h-6 ${getAccuracyColor()}`} strokeWidth={1.5} />
+          </div>
+          <h3 className="text-lg font-semibold text-text-primary mb-1">Complete</h3>
+          <p className="text-xs text-text-tertiary uppercase tracking-wider">Session finished</p>
         </div>
         
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="text-center p-3 bg-white rounded-lg">
-            <div className={`text-3xl font-bold ${getAccuracyColor()}`}>
+        <div className="grid grid-cols-2 gap-px bg-border mb-6">
+          <div className="bg-background p-4 text-center">
+            <div className={`text-3xl font-semibold mono ${getAccuracyColor()}`}>
               {accuracy}%
             </div>
-            <div className="text-xs text-text-tertiary">Accuracy</div>
+            <div className="text-xs text-text-tertiary uppercase tracking-wider mt-1">Accuracy</div>
           </div>
-          <div className="text-center p-3 bg-white rounded-lg">
-            <div className="text-3xl font-bold text-text-primary">
+          <div className="bg-background p-4 text-center">
+            <div className="text-3xl font-semibold mono text-text-primary">
               {formatTime(totalTimeSeconds)}
             </div>
-            <div className="text-xs text-text-tertiary">Time</div>
+            <div className="text-xs text-text-tertiary uppercase tracking-wider mt-1">Time</div>
           </div>
         </div>
 
-        <div className="flex justify-center gap-6 text-sm">
-          <div className="flex items-center gap-1 text-green-600">
-            <FiCheck className="w-4 h-4" />
-            <span>{correctAnswers} correct</span>
+        <div className="flex justify-center gap-8 text-sm">
+          <div className="flex items-center gap-2 text-success">
+            <FiCheck className="w-4 h-4" strokeWidth={2} />
+            <span className="mono">{correctAnswers}</span>
+            <span className="text-text-tertiary">correct</span>
           </div>
-          <div className="flex items-center gap-1 text-red-600">
-            <FiX className="w-4 h-4" />
-            <span>{incorrectAnswers} incorrect</span>
+          <div className="flex items-center gap-2 text-error">
+            <FiX className="w-4 h-4" strokeWidth={2} />
+            <span className="mono">{incorrectAnswers}</span>
+            <span className="text-text-tertiary">wrong</span>
           </div>
         </div>
       </div>
@@ -102,48 +101,47 @@ export default function ScoreTracker({
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 p-3 bg-elevated rounded-lg">
+    <div className="flex items-center justify-between gap-4 p-3 border border-border">
       {/* Mode Badge */}
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getModeColor()}`}>
+      <span className={`px-2.5 py-1 border text-xs font-medium uppercase tracking-wider ${getModeClasses()}`}>
         {getModeLabel()}
       </span>
 
       {/* Stats */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-6">
         {/* Correct/Incorrect */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 text-green-600">
-            <FiCheck className="w-4 h-4" />
-            <span className="text-sm font-medium">{correctAnswers}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 text-success">
+            <FiCheck className="w-4 h-4" strokeWidth={2} />
+            <span className="text-sm font-medium mono">{correctAnswers}</span>
           </div>
-          <div className="flex items-center gap-1 text-red-600">
-            <FiX className="w-4 h-4" />
-            <span className="text-sm font-medium">{incorrectAnswers}</span>
+          <div className="flex items-center gap-1.5 text-error">
+            <FiX className="w-4 h-4" strokeWidth={2} />
+            <span className="text-sm font-medium mono">{incorrectAnswers}</span>
           </div>
         </div>
 
         {/* Accuracy */}
         {answeredQuestions > 0 && (
-          <div className="flex items-center gap-1">
-            <FiTrendingUp className={`w-4 h-4 ${getAccuracyColor()}`} />
-            <span className={`text-sm font-medium ${getAccuracyColor()}`}>
+          <div className="flex items-center gap-1.5">
+            <FiTrendingUp className={`w-4 h-4 ${getAccuracyColor()}`} strokeWidth={1.5} />
+            <span className={`text-sm font-medium mono ${getAccuracyColor()}`}>
               {accuracy}%
             </span>
           </div>
         )}
 
         {/* Time */}
-        <div className="flex items-center gap-1 text-text-tertiary">
-          <FiClock className="w-4 h-4" />
-          <span className="text-sm font-medium">{formatTime(totalTimeSeconds)}</span>
+        <div className="flex items-center gap-1.5 text-text-tertiary">
+          <FiClock className="w-4 h-4" strokeWidth={1.5} />
+          <span className="text-sm font-medium mono">{formatTime(totalTimeSeconds)}</span>
         </div>
       </div>
 
       {/* Progress */}
-      <div className="text-sm text-text-secondary">
+      <div className="text-sm text-text-secondary mono">
         {currentQuestion}/{totalQuestions}
       </div>
     </div>
   )
 }
-

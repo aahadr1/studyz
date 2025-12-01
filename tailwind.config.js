@@ -8,57 +8,55 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Notion-inspired dark theme
-        background: '#191919',
-        surface: '#202020',
-        elevated: '#262626',
-        subtle: '#2f2f2f',
-        border: '#373737',
-        'border-light': '#454545',
+        // Pure monochrome palette
+        background: '#000000',
+        surface: '#0a0a0a',
+        elevated: '#141414',
+        subtle: '#1a1a1a',
+        border: '#262626',
+        'border-light': '#333333',
+        sidebar: '#000000',
         
-        // Text colors
-        'text-primary': '#ebebeb',
-        'text-secondary': '#9b9b9b',
-        'text-tertiary': '#6b6b6b',
+        // Text colors - pure white to grays
+        'text-primary': '#ffffff',
+        'text-secondary': '#a3a3a3',
+        'text-tertiary': '#525252',
         
-        // Accent - subtle blue (can be used sparingly)
-        accent: {
-          DEFAULT: '#2383e2',
-          hover: '#1a73d1',
-          muted: 'rgba(35, 131, 226, 0.15)',
-        },
-        
-        // Semantic colors - muted versions
+        // Semantic colors for functional states only
         success: {
-          DEFAULT: '#2ecc71',
-          muted: 'rgba(46, 204, 113, 0.15)',
+          DEFAULT: '#22c55e',
+          muted: 'rgba(34, 197, 94, 0.15)',
         },
         warning: {
-          DEFAULT: '#e2a52f',
-          muted: 'rgba(226, 165, 47, 0.15)',
+          DEFAULT: '#eab308',
+          muted: 'rgba(234, 179, 8, 0.15)',
         },
         error: {
-          DEFAULT: '#eb5757',
-          muted: 'rgba(235, 87, 87, 0.15)',
+          DEFAULT: '#ef4444',
+          muted: 'rgba(239, 68, 68, 0.15)',
+        },
+        
+        // Mode colors - for study modes and special UI
+        mode: {
+          study: '#3b82f6',      // Blue
+          test: '#8b5cf6',       // Purple  
+          challenge: '#f97316',  // Orange
+          review: '#06b6d4',     // Cyan
+        },
+        
+        // Accent - only for primary CTAs
+        accent: {
+          DEFAULT: '#ffffff',
+          hover: '#e5e5e5',
+          muted: 'rgba(255, 255, 255, 0.1)',
         },
       },
       fontFamily: {
-        sans: [
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Oxygen',
-          'Ubuntu',
-          'Cantarell',
-          'Fira Sans',
-          'Droid Sans',
-          'Helvetica Neue',
-          'sans-serif',
-        ],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        mono: ['DM Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
       fontSize: {
-        'xs': ['0.75rem', { lineHeight: '1rem' }],
+        'xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.05em' }],
         'sm': ['0.8125rem', { lineHeight: '1.25rem' }],
         'base': ['0.875rem', { lineHeight: '1.5rem' }],
         'lg': ['1rem', { lineHeight: '1.75rem' }],
@@ -72,23 +70,28 @@ module.exports = {
         '18': '4.5rem',
         '22': '5.5rem',
       },
+      // Squared design - no border radius
       borderRadius: {
-        'sm': '4px',
-        'DEFAULT': '6px',
-        'md': '8px',
-        'lg': '12px',
-        'xl': '16px',
+        'none': '0',
+        'sm': '0',
+        'DEFAULT': '0',
+        'md': '0',
+        'lg': '0',
+        'xl': '0',
+        'full': '0',
       },
       boxShadow: {
-        'sm': '0 1px 2px 0 rgba(0, 0, 0, 0.3)',
-        'DEFAULT': '0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.3)',
-        'md': '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3)',
-        'lg': '0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3)',
+        'none': 'none',
+        'sm': 'none',
+        'DEFAULT': 'none',
+        'md': 'none',
+        'lg': 'none',
       },
       animation: {
-        'fade-in': 'fadeIn 0.2s ease-out',
-        'slide-up': 'slideUp 0.2s ease-out',
-        'slide-down': 'slideDown 0.2s ease-out',
+        'fade-in': 'fadeIn 0.15s ease-out',
+        'slide-up': 'slideUp 0.15s ease-out',
+        'slide-down': 'slideDown 0.15s ease-out',
+        'spin': 'spin 0.8s linear infinite',
       },
       keyframes: {
         fadeIn: {
@@ -103,8 +106,13 @@ module.exports = {
           '0%': { transform: 'translateY(-8px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
         },
+        spin: {
+          '0%': { transform: 'rotate(0deg)' },
+          '100%': { transform: 'rotate(360deg)' },
+        },
       },
       transitionDuration: {
+        '100': '100ms',
         '150': '150ms',
       },
     },

@@ -11,6 +11,7 @@ interface McqSet {
   source_pdf_name: string
   total_pages: number
   total_questions: number
+  is_corrected?: boolean
   created_at: string
 }
 
@@ -37,7 +38,6 @@ export default function MCQSetsPage() {
           fullName: authUser.user_metadata?.full_name || 'Student',
         })
 
-        // Load MCQ sets
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
           const response = await fetch('/api/mcq/list', {
@@ -90,55 +90,40 @@ export default function MCQSetsPage() {
     window.location.href = '/login'
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
-
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
       <aside className="w-60 sidebar flex flex-col">
-        {/* Logo */}
         <div className="h-14 flex items-center px-4 border-b border-border">
-          <span className="text-lg font-semibold text-text-primary">Studyz</span>
+          <span className="text-sm font-semibold text-text-primary tracking-wider">STUDYZ</span>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 py-4">
           <div className="sidebar-section-title">Menu</div>
           <Link href="/dashboard" className="sidebar-item">
-            <FiHome className="w-4 h-4" />
+            <FiHome className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Dashboard</span>
           </Link>
           <Link href="/lessons" className="sidebar-item">
-            <FiBook className="w-4 h-4" />
-            <span className="text-sm">Interactive Lessons</span>
+            <FiBook className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-sm">Lessons</span>
           </Link>
           <Link href="/mcq" className="sidebar-item sidebar-item-active">
-            <FiCheckSquare className="w-4 h-4" />
-            <span className="text-sm">MCQ Sets</span>
-          </Link>
-          <Link href="/mcq/new" className="sidebar-item">
-            <FiPlus className="w-4 h-4" />
-            <span className="text-sm">New MCQ</span>
+            <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-sm">Quiz Sets</span>
           </Link>
         </nav>
 
-        {/* User section */}
-        <div className="border-t border-border p-3">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 bg-accent rounded-md flex items-center justify-center text-white text-sm font-medium">
+        <div className="border-t border-border p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-9 h-9 border border-border flex items-center justify-center text-sm font-medium mono">
               {user?.fullName?.[0]?.toUpperCase() || 'S'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-text-primary truncate">
                 {user?.fullName || 'Loading...'}
               </p>
-              <p className="text-xs text-text-tertiary truncate">
+              <p className="text-xs text-text-tertiary truncate mono">
                 {user?.email}
               </p>
             </div>
@@ -147,7 +132,7 @@ export default function MCQSetsPage() {
             onClick={handleLogout}
             className="sidebar-item w-full text-text-tertiary hover:text-error"
           >
-            <FiLogOut className="w-4 h-4" />
+            <FiLogOut className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Sign out</span>
           </button>
         </div>
@@ -155,67 +140,76 @@ export default function MCQSetsPage() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        {/* Header */}
         <header className="h-14 border-b border-border flex items-center justify-between px-8">
-          <h1 className="text-lg font-semibold text-text-primary">MCQ Sets</h1>
+          <h1 className="text-sm font-medium text-text-primary uppercase tracking-wider">Quiz Sets</h1>
           <Link href="/mcq/new" className="btn-primary">
-            <FiPlus className="w-4 h-4" />
-            New MCQ Set
+            <FiPlus className="w-4 h-4" strokeWidth={1.5} />
+            New Quiz
           </Link>
         </header>
 
-        {/* Content */}
         <div className="p-8 max-w-4xl">
           {isLoading ? (
-            <div className="text-center py-12 text-text-secondary">Loading...</div>
+            <div className="flex items-center justify-center py-12">
+              <div className="spinner" />
+            </div>
           ) : mcqSets.length === 0 ? (
-            <div className="card p-8 text-center">
-              <div className="w-12 h-12 bg-elevated rounded-lg flex items-center justify-center mx-auto mb-4">
-                <FiCheckSquare className="w-6 h-6 text-text-tertiary" />
+            <div className="border border-border p-10 text-center">
+              <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
+                <FiCheckSquare className="w-5 h-5" strokeWidth={1.5} />
               </div>
-              <h3 className="text-lg font-semibold text-text-primary mb-2">
-                No MCQ sets yet
-              </h3>
-              <p className="text-text-secondary max-w-sm mx-auto mb-4">
-                Upload a PDF with multiple choice questions to create your first MCQ set.
+              <h3 className="font-medium text-text-primary mb-2">No quiz sets yet</h3>
+              <p className="text-sm text-text-secondary mb-6 max-w-xs mx-auto">
+                Upload a PDF with multiple choice questions to create your first quiz set.
               </p>
               <Link href="/mcq/new" className="btn-primary inline-flex">
-                <FiPlus className="w-4 h-4" />
-                Create Your First MCQ Set
+                <FiPlus className="w-4 h-4" strokeWidth={1.5} />
+                Create Quiz
               </Link>
             </div>
           ) : (
-            <div className="grid gap-4">
+            <div className="border border-border divide-y divide-border">
               {mcqSets.map((set) => (
-                <div key={set.id} className="card p-4 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FiCheckSquare className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-text-primary truncate">{set.name}</h4>
-                    <p className="text-sm text-text-tertiary">
-                      {set.total_questions} question{set.total_questions !== 1 ? 's' : ''} · {set.total_pages} page{set.total_pages !== 1 ? 's' : ''} · {formatDate(set.created_at)}
-                    </p>
-                  </div>
+                <div key={set.id} className="flex items-center justify-between p-4 hover:bg-elevated transition-colors">
+                  <Link
+                    href={`/mcq/${set.id}`}
+                    className="flex items-center gap-4 flex-1 min-w-0"
+                  >
+                    <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
+                      <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium text-text-primary truncate">{set.name}</h4>
+                        {set.is_corrected && (
+                          <span className="text-[9px] uppercase tracking-wider border border-success/30 text-success px-1.5 py-0.5">
+                            ✓
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-text-tertiary mono">
+                        {set.total_questions} questions · {new Date(set.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </Link>
                   <div className="flex items-center gap-2">
                     <Link
                       href={`/mcq/${set.id}/edit`}
-                      className="p-2 hover:bg-elevated rounded-lg transition-colors text-text-tertiary hover:text-accent"
-                      title="Edit questions"
+                      className="p-2 text-text-tertiary hover:text-text-primary transition-colors"
                     >
-                      <FiEdit2 className="w-5 h-5" />
+                      <FiEdit2 className="w-4 h-4" strokeWidth={1.5} />
                     </Link>
                     {deleteConfirm === set.id ? (
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleDelete(set.id)}
-                          className="px-3 py-1 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600"
+                          className="px-3 py-1.5 bg-error text-white text-xs uppercase tracking-wider"
                         >
                           Confirm
                         </button>
                         <button
                           onClick={() => setDeleteConfirm(null)}
-                          className="px-3 py-1 bg-elevated text-text-secondary text-sm rounded-lg hover:bg-border"
+                          className="px-3 py-1.5 border border-border text-text-secondary text-xs uppercase tracking-wider hover:bg-elevated"
                         >
                           Cancel
                         </button>
@@ -223,18 +217,16 @@ export default function MCQSetsPage() {
                     ) : (
                       <button
                         onClick={() => setDeleteConfirm(set.id)}
-                        className="p-2 hover:bg-elevated rounded-lg transition-colors text-text-tertiary hover:text-red-500"
-                        title="Delete set"
+                        className="p-2 text-text-tertiary hover:text-error transition-colors"
                       >
-                        <FiTrash2 className="w-5 h-5" />
+                        <FiTrash2 className="w-4 h-4" strokeWidth={1.5} />
                       </button>
                     )}
                     <Link
                       href={`/mcq/${set.id}`}
-                      className="p-2 hover:bg-elevated rounded-lg transition-colors text-text-tertiary hover:text-accent"
-                      title="Practice"
+                      className="p-2 text-text-tertiary hover:text-text-primary transition-colors"
                     >
-                      <FiArrowRight className="w-5 h-5" />
+                      <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
                     </Link>
                   </div>
                 </div>
@@ -246,4 +238,3 @@ export default function MCQSetsPage() {
     </div>
   )
 }
-
