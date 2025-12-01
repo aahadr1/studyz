@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiLogOut, FiHome, FiBook, FiPlus, FiArrowRight } from 'react-icons/fi'
+import { FiLogOut, FiHome, FiBook, FiPlus, FiArrowRight, FiCheckSquare } from 'react-icons/fi'
 import Link from 'next/link'
 import type { Lesson } from '@/types/db'
 
@@ -80,6 +80,13 @@ export default function DashboardPage() {
             <FiBook className="w-4 h-4" />
             <span className="text-sm">Interactive Lessons</span>
           </Link>
+          <Link
+            href="/mcq/new"
+            className="sidebar-item"
+          >
+            <FiCheckSquare className="w-4 h-4" />
+            <span className="text-sm">New MCQ</span>
+          </Link>
         </nav>
 
         {/* User section */}
@@ -141,6 +148,24 @@ export default function DashboardPage() {
                   </p>
                 </div>
                 <FiArrowRight className="w-5 h-5 text-text-tertiary group-hover:text-accent transition-colors" />
+              </div>
+            </Link>
+
+            {/* New MCQ Card */}
+            <Link href="/mcq/new" className="card p-6 card-hover group">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-500 transition-colors">
+                  <FiCheckSquare className="w-6 h-6 text-purple-600 group-hover:text-white transition-colors" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-text-primary mb-1">
+                    New MCQ Set
+                  </h3>
+                  <p className="text-sm text-text-secondary">
+                    Upload a PDF of MCQs and extract questions
+                  </p>
+                </div>
+                <FiArrowRight className="w-5 h-5 text-text-tertiary group-hover:text-purple-600 transition-colors" />
               </div>
             </Link>
 

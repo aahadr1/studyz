@@ -1,9 +1,16 @@
 import OpenAI from 'openai'
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy initialization of OpenAI client to avoid build-time errors
+let openaiInstance: OpenAI | null = null
+
+function getOpenAI(): OpenAI {
+  if (!openaiInstance) {
+    openaiInstance = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return openaiInstance
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -69,6 +76,7 @@ Be concise but thorough. If you can't see relevant content on the current page, 
   }
 
   // Call GPT-4o-mini with vision capability
+  const openai = getOpenAI()
   const response = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: openaiMessages,
@@ -79,4 +87,89 @@ Be concise but thorough. If you can't see relevant content on the current page, 
   return response.choices[0]?.message?.content || 'Sorry, I could not generate a response.'
 }
 
-export default openai
+export interface ExtractedMcqQuestion {
+  question: string
+  options: Array<{ label: string; text: string }>
+  correctOption: string
+  explanation?: string
+}
+
+export interface ExtractedMcqPage {
+  pageNumber: number
+  questions: ExtractedMcqQuestion[]
+}
+
+/**
+ * Extract MCQs from a page image using GPT-4o-mini vision
+ * @param imageUrl - Public URL of the page image
+ * @returns Extracted MCQs from the page
+ */
+export async function extractMcqsFromImage(imageUrl: string): Promise<ExtractedMcqPage> {
+  const openai = getOpenAI()
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `You are an expert at extracting Multiple Choice Questions (MCQs) from document images.
+
+Analyze this image and extract ALL multiple choice questions you find. For each question, identify:
+- The question text
+- All answer options (typically labeled A, B, C, D, etc.)
+- The correct answer option letter
+- Any explanation provided (if available)
+
+Return a JSON object with this exact structure:
+{
+  "pageNumber": 1,
+  "questions": [
+    {
+      "question": "What is the capital of France?",
+      "options": [
+        {"label": "A", "text": "London"},
+        {"label": "B", "text": "Paris"},
+        {"label": "C", "text": "Berlin"},
+        {"label": "D", "text": "Madrid"}
+      ],
+      "correctOption": "B",
+      "explanation": "Paris is the capital and largest city of France."
+    }
+  ]
+}
+
+If no MCQs are found on the page, return an empty questions array.
+Be thorough and extract ALL questions visible on the page.`,
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: imageUrl,
+              detail: 'high',
+            },
+          },
+        ],
+      },
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: 4096,
+    temperature: 0.3,
+  })
+
+  const content = response.choices[0]?.message?.content
+  if (!content) {
+    return { pageNumber: 1, questions: [] }
+  }
+
+  try {
+    const parsed = JSON.parse(content) as ExtractedMcqPage
+    return parsed
+  } catch (error) {
+    console.error('Failed to parse MCQ extraction response:', error)
+    return { pageNumber: 1, questions: [] }
+  }
+}
+
+export default getOpenAI
