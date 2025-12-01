@@ -79,7 +79,11 @@ export async function POST(request: NextRequest) {
 
     if (setError || !mcqSet) {
       console.error('Error creating MCQ set:', setError)
-      return NextResponse.json({ error: 'Failed to create MCQ set' }, { status: 500 })
+      console.error('Supabase error details:', JSON.stringify(setError, null, 2))
+      return NextResponse.json({ 
+        error: 'Failed to create MCQ set. Please ensure the database migration has been run.',
+        details: setError?.message 
+      }, { status: 500 })
     }
 
     // Process each page sequentially: upload image, extract MCQs, save questions
@@ -105,6 +109,13 @@ export async function POST(request: NextRequest) {
 
       if (imageUploadError) {
         console.error(`Error uploading page ${pageNumber}:`, imageUploadError)
+        console.error('Storage error details:', JSON.stringify(imageUploadError, null, 2))
+        // If storage bucket doesn't exist, this will fail - but continue processing
+        // We'll just use a placeholder URL for testing
+        if (imageUploadError.message?.includes('not found') || imageUploadError.message?.includes('does not exist')) {
+          console.warn(`Storage bucket 'mcq-pages' may not exist. Skipping page ${pageNumber}`)
+          continue
+        }
         continue
       }
 
@@ -189,8 +200,13 @@ export async function POST(request: NextRequest) {
       questions: allQuestions,
       message: `Successfully extracted ${totalQuestionCount} questions from ${pageImages.length} pages`
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('MCQ POST error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Error stack:', error?.stack)
+    console.error('Error message:', error?.message)
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+    }, { status: 500 })
   }
 }
