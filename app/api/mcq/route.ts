@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { convertPdfToImages } from '@/lib/pdf-to-images'
 import { extractMcqsFromImage } from '@/lib/openai'
 
 export const runtime = 'nodejs'
@@ -21,7 +20,12 @@ function createServerClient() {
   )
 }
 
-// POST /api/mcq - Create a new MCQ set with PDF upload
+interface PageImageSubmission {
+  pageNumber: number
+  dataUrl: string
+}
+
+// POST /api/mcq - Create a new MCQ set with PDF images from client
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
@@ -39,60 +43,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Parse form data
-    const formData = await request.formData()
-    const name = formData.get('name') as string
-    const file = formData.get('file') as File
-
-    if (!file) {
-      return NextResponse.json({ error: 'File is required' }, { status: 400 })
+    // Parse JSON body with page images
+    const body = await request.json()
+    const { name, sourcePdfName, pageImages } = body as {
+      name?: string
+      sourcePdfName: string
+      pageImages: PageImageSubmission[]
     }
 
-    if (!file.type.includes('pdf')) {
-      return NextResponse.json({ error: 'Only PDF files are supported' }, { status: 400 })
+    if (!pageImages || !Array.isArray(pageImages) || pageImages.length === 0) {
+      return NextResponse.json({ error: 'Page images are required' }, { status: 400 })
     }
 
-    // Check file size (50MB limit)
-    const maxFileSize = 50 * 1024 * 1024 // 50MB in bytes
-    if (file.size > maxFileSize) {
+    // Check page count limit (40 pages max for MCQ processing)
+    const maxPages = 40
+    if (pageImages.length > maxPages) {
       return NextResponse.json({
-        error: `File size (${Math.round(file.size / 1024 / 1024)}MB) exceeds the maximum limit of 50MB`
+        error: `PDF has ${pageImages.length} pages, which exceeds the maximum limit of ${maxPages} pages`
       }, { status: 413 })
     }
 
-    // Convert file to buffer
-    const arrayBuffer = await file.arrayBuffer()
-    const pdfBuffer = Buffer.from(arrayBuffer)
-
-    // Convert PDF to images
-    console.log('Converting PDF to images...')
-    let pageImages: any[] = []
-
-    try {
-      pageImages = await convertPdfToImages(pdfBuffer, 1.5)
-      console.log(`Converted ${pageImages.length} pages`)
-
-      // Check page count limit (40 pages max for MCQ processing)
-      const maxPages = 40
-      if (pageImages.length > maxPages) {
-        return NextResponse.json({
-          error: `PDF has ${pageImages.length} pages, which exceeds the maximum limit of ${maxPages} pages`
-        }, { status: 413 })
-      }
-    } catch (error) {
-      console.error('Error processing PDF:', error)
-      return NextResponse.json({
-        error: 'Failed to process PDF file. Please ensure it\'s a valid PDF document.'
-      }, { status: 400 })
-    }
+    console.log(`Processing ${pageImages.length} pages from ${sourcePdfName}`)
 
     // Create the mcq_sets record first
     const { data: mcqSet, error: setError } = await supabase
       .from('mcq_sets')
       .insert({
         user_id: user.id,
-        name: name || file.name.replace('.pdf', ''),
-        source_pdf_name: file.name,
+        name: name || sourcePdfName.replace('.pdf', ''),
+        source_pdf_name: sourcePdfName,
         total_pages: pageImages.length,
       })
       .select()
@@ -103,49 +82,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create MCQ set' }, { status: 500 })
     }
 
-    // Upload original PDF to storage
-    const pdfPath = `${user.id}/${mcqSet.id}/document.pdf`
-    const { error: uploadError } = await supabase.storage
-      .from('mcq-documents')
-      .upload(pdfPath, pdfBuffer, {
-        contentType: 'application/pdf',
-        upsert: true,
-      })
-
-    if (uploadError) {
-      console.error('Error uploading PDF:', uploadError)
-      // Continue anyway - we have the images
-    }
-
-    // Get signed URL for the document
-    const { data: signedUrlData } = await supabase.storage
-      .from('mcq-documents')
-      .createSignedUrl(pdfPath, 60 * 60 * 24 * 365) // 1 year
-
-    if (signedUrlData) {
-      await supabase
-        .from('mcq_sets')
-        .update({ document_url: signedUrlData.signedUrl })
-        .eq('id', mcqSet.id)
-    }
-
     // Process each page sequentially: upload image, extract MCQs, save questions
     const allQuestions: any[] = []
     let totalQuestionCount = 0
 
-    for (const pageImage of pageImages) {
-      const imagePath = `${user.id}/${mcqSet.id}/page-${pageImage.pageNumber}.png`
+    for (const pageImageData of pageImages) {
+      const { pageNumber, dataUrl } = pageImageData
       
-      // Upload page image
+      // Convert data URL to buffer
+      const base64Data = dataUrl.split(',')[1]
+      const imageBuffer = Buffer.from(base64Data, 'base64')
+      
+      const imagePath = `${user.id}/${mcqSet.id}/page-${pageNumber}.png`
+      
+      // Upload page image to storage
       const { error: imageUploadError } = await supabase.storage
         .from('mcq-pages')
-        .upload(imagePath, pageImage.buffer, {
+        .upload(imagePath, imageBuffer, {
           contentType: 'image/png',
           upsert: true,
         })
 
       if (imageUploadError) {
-        console.error(`Error uploading page ${pageImage.pageNumber}:`, imageUploadError)
+        console.error(`Error uploading page ${pageNumber}:`, imageUploadError)
         continue
       }
 
@@ -159,7 +118,7 @@ export async function POST(request: NextRequest) {
         .from('mcq_pages')
         .insert({
           mcq_set_id: mcqSet.id,
-          page_number: pageImage.pageNumber,
+          page_number: pageNumber,
           image_url: publicUrl,
           extracted_question_count: 0,
         })
@@ -167,12 +126,12 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (pageError) {
-        console.error(`Error creating page record ${pageImage.pageNumber}:`, pageError)
+        console.error(`Error creating page record ${pageNumber}:`, pageError)
         continue
       }
 
       // Extract MCQs from the page image using GPT-4o-mini
-      console.log(`Extracting MCQs from page ${pageImage.pageNumber}...`)
+      console.log(`Extracting MCQs from page ${pageNumber}...`)
       try {
         const extractedData = await extractMcqsFromImage(publicUrl)
         const questions = extractedData.questions || []
@@ -181,7 +140,7 @@ export async function POST(request: NextRequest) {
           // Insert questions into database
           const questionRecords = questions.map((q) => ({
             mcq_set_id: mcqSet.id,
-            page_number: pageImage.pageNumber,
+            page_number: pageNumber,
             question: q.question,
             options: q.options,
             correct_option: q.correctOption,
@@ -194,7 +153,7 @@ export async function POST(request: NextRequest) {
             .select()
 
           if (questionsError) {
-            console.error(`Error inserting questions for page ${pageImage.pageNumber}:`, questionsError)
+            console.error(`Error inserting questions for page ${pageNumber}:`, questionsError)
           } else {
             allQuestions.push(...(insertedQuestions || []))
             totalQuestionCount += questions.length
@@ -207,9 +166,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        console.log(`Extracted ${questions.length} questions from page ${pageImage.pageNumber}`)
+        console.log(`Extracted ${questions.length} questions from page ${pageNumber}`)
       } catch (error) {
-        console.error(`Error extracting MCQs from page ${pageImage.pageNumber}:`, error)
+        console.error(`Error extracting MCQs from page ${pageNumber}:`, error)
         // Continue with next page
       }
     }
@@ -235,4 +194,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

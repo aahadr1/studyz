@@ -5,12 +5,14 @@ import { createClient } from '@/lib/supabase'
 import { FiUpload, FiFile, FiX, FiLoader } from 'react-icons/fi'
 import Link from 'next/link'
 import MCQViewer, { MCQQuestion } from '@/components/MCQViewer'
+import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
 export default function NewMCQPage() {
   const [user, setUser] = useState<any>(null)
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [processingStep, setProcessingStep] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{
     set: { id: string; name: string; total_pages: number; total_questions: number }
@@ -60,8 +62,24 @@ export default function NewMCQPage() {
 
     setIsProcessing(true)
     setError(null)
+    setProcessingStep('Converting PDF to images...')
 
     try {
+      // Convert PDF to images on client side
+      const pageImages = await convertPdfToImagesClient(file, 1.5)
+      console.log(`Converted ${pageImages.length} pages`)
+
+      if (pageImages.length === 0) {
+        throw new Error('No pages found in PDF')
+      }
+
+      if (pageImages.length > 40) {
+        throw new Error(`PDF has ${pageImages.length} pages, which exceeds the maximum limit of 40 pages`)
+      }
+
+      setProcessingStep('Extracting MCQ questions with AI...')
+
+      // Send to API for processing
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
 
@@ -71,18 +89,20 @@ export default function NewMCQPage() {
         return
       }
 
-      const formData = new FormData()
-      formData.append('file', file)
-      if (name) {
-        formData.append('name', name)
-      }
-
       const response = await fetch('/api/mcq', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
         },
-        body: formData,
+        body: JSON.stringify({
+          name: name || file.name.replace('.pdf', ''),
+          sourcePdfName: file.name,
+          pageImages: pageImages.map(p => ({
+            pageNumber: p.pageNumber,
+            dataUrl: p.dataUrl,
+          })),
+        }),
       })
 
       const data = await response.json()
@@ -97,6 +117,7 @@ export default function NewMCQPage() {
       setError(err.message || 'Failed to process PDF')
     } finally {
       setIsProcessing(false)
+      setProcessingStep('')
     }
   }
 
@@ -268,10 +289,10 @@ export default function NewMCQPage() {
                     <FiLoader className="w-5 h-5 text-blue-600 animate-spin" />
                     <div>
                       <p className="text-sm font-medium text-blue-900">
-                        Processing PDF...
+                        {processingStep}
                       </p>
                       <p className="text-xs text-blue-700">
-                        This may take a few minutes. We're converting pages and extracting MCQs.
+                        This may take a few minutes. Please wait...
                       </p>
                     </div>
                   </div>
@@ -303,4 +324,3 @@ export default function NewMCQPage() {
     </div>
   )
 }
-
