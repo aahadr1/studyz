@@ -404,12 +404,12 @@ export default function MCQViewer({
                       <span className="mcq-option-label">{option.label}</span>
                       <span className="flex-1 text-sm">{option.text}</span>
                       <span className="text-xs text-text-tertiary opacity-50 mono">{index + 1}</span>
-                      {showResult && isCorrectOption && (
+                        {showResult && isCorrectOption && (
                         <FiCheck className="w-4 h-4 text-success flex-shrink-0" strokeWidth={2} />
-                      )}
-                      {showResult && isSelected && !isCorrect && (
+                        )}
+                        {showResult && isSelected && !isCorrect && (
                         <FiX className="w-4 h-4 text-error flex-shrink-0" strokeWidth={2} />
-                      )}
+                        )}
                     </button>
                   )
                 })}

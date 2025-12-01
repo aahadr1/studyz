@@ -159,10 +159,10 @@ export default function MobileHomePage() {
           >
             <div className="w-8 h-8 border border-[var(--color-border)] flex items-center justify-center mb-4">
               <FiPlus className="w-4 h-4" strokeWidth={1} />
-            </div>
+              </div>
             <h3 className="font-medium text-sm mb-1">New Lesson</h3>
             <p className="text-xs text-[var(--color-text-secondary)]">Upload PDF</p>
-          </Link>
+            </Link>
           <Link 
             href="/m/mcq/new" 
             className="p-6 border-b border-[var(--color-border)] active:bg-[var(--color-surface)]"
@@ -170,11 +170,11 @@ export default function MobileHomePage() {
           >
             <div className="w-8 h-8 border border-[var(--color-border)] flex items-center justify-center mb-4">
               <FiPlus className="w-4 h-4" strokeWidth={1} />
-            </div>
+              </div>
             <h3 className="font-medium text-sm mb-1">New Quiz</h3>
             <p className="text-xs text-[var(--color-text-secondary)]">Extract MCQs</p>
-          </Link>
-        </div>
+            </Link>
+          </div>
 
         {/* Recent Lessons */}
         <section className="border-b border-[var(--color-border)]">
@@ -212,7 +212,7 @@ export default function MobileHomePage() {
               <p className="text-sm text-[var(--color-text-secondary)] mb-4">No lessons yet</p>
               <Link href="/m/lessons/new" className="btn-mobile btn-primary-mobile inline-flex">
                 Create Lesson
-              </Link>
+                </Link>
             </div>
           )}
         </section>
@@ -253,7 +253,7 @@ export default function MobileHomePage() {
               <p className="text-sm text-[var(--color-text-secondary)] mb-4">No quizzes yet</p>
               <Link href="/m/mcq/new" className="btn-mobile btn-primary-mobile inline-flex">
                 Create Quiz
-              </Link>
+                </Link>
             </div>
           )}
         </section>

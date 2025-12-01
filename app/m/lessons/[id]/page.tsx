@@ -197,10 +197,10 @@ export default function MobileLessonViewerPage() {
           </button>
           <button onClick={() => setChatOpen(true)} className="mobile-header-action relative">
             <FiMessageCircle className="w-5 h-5" strokeWidth={1.5} />
-            {messages.length > 0 && (
+          {messages.length > 0 && (
               <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-[var(--color-text)]" />
-            )}
-          </button>
+          )}
+        </button>
         </div>
       </header>
 
@@ -292,13 +292,13 @@ export default function MobileLessonViewerPage() {
         <div className={`absolute bottom-0 left-0 right-0 bg-[var(--color-bg)] border-t border-[var(--color-border)] flex flex-col transition-transform ${chatOpen ? 'translate-y-0' : 'translate-y-full'}`} style={{ height: '70%' }}>
           {/* Chat Header */}
           <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
-            <div>
+              <div>
               <h2 className="font-medium text-sm">AI Chat</h2>
               <p className="text-[10px] text-[var(--color-text-secondary)] mono">Page {currentPage}</p>
             </div>
             <button onClick={() => setChatOpen(false)} className="p-2">
               <FiX className="w-5 h-5" strokeWidth={1.5} />
-            </button>
+              </button>
           </div>
 
           {/* Messages */}

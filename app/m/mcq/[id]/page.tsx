@@ -535,18 +535,18 @@ export default function MobileMCQViewerPage() {
             />
           </div>
 
-          {/* Options */}
+            {/* Options */}
           <div className="space-y-2">
             {currentQuestion?.options.map((option, index) => {
-              const isSelected = selectedOption === option.label
-              const showResult = hasChecked
-              const isCorrectOption = option.label === currentQuestion.correctOption
+                const isSelected = selectedOption === option.label
+                const showResult = hasChecked
+                const isCorrectOption = option.label === currentQuestion.correctOption
 
               let borderColor = 'var(--color-border)'
               let bgColor = 'transparent'
               let textColor = 'var(--color-text)'
 
-              if (showResult) {
+                if (showResult) {
                 if (isCorrectOption) {
                   borderColor = 'var(--color-success)'
                   bgColor = 'var(--color-success-soft)'
@@ -559,16 +559,16 @@ export default function MobileMCQViewerPage() {
               } else if (isSelected) {
                 borderColor = 'var(--color-text)'
                 bgColor = 'var(--color-surface)'
-              }
+                }
 
-              return (
-                <button
-                  key={option.label}
-                  onClick={() => !hasChecked && setSelectedOption(option.label)}
-                  disabled={hasChecked}
+                return (
+                  <button
+                    key={option.label}
+                    onClick={() => !hasChecked && setSelectedOption(option.label)}
+                    disabled={hasChecked}
                   className="w-full flex items-start gap-3 p-4 text-left transition-colors"
                   style={{ border: `1px solid ${borderColor}`, background: bgColor }}
-                >
+                  >
                   <span 
                     className="w-6 h-6 flex items-center justify-center text-xs font-medium mono flex-shrink-0"
                     style={{ 
@@ -580,13 +580,13 @@ export default function MobileMCQViewerPage() {
                     {showResult && isCorrectOption ? <FiCheck className="w-3 h-3" strokeWidth={2.5} /> : 
                      showResult && isSelected && !isCorrect ? <FiX className="w-3 h-3" strokeWidth={2.5} /> : 
                      option.label}
-                  </span>
+                    </span>
                   <span className="flex-1 text-sm" style={{ color: textColor }}>{option.text}</span>
                   <span className="text-[10px] mono" style={{ color: 'var(--color-text-tertiary)' }}>{index + 1}</span>
-                </button>
-              )
-            })}
-          </div>
+                  </button>
+                )
+              })}
+            </div>
 
           {/* Study Mode: Inline Collapsible Lesson Card */}
           {mode === 'study' && hasLessonCard && (
@@ -691,8 +691,8 @@ export default function MobileMCQViewerPage() {
             </div>
           )}
 
-          {/* Feedback */}
-          {hasChecked && (
+            {/* Feedback */}
+            {hasChecked && (
             <div 
               className="mt-4 p-4 border"
               style={{ 
@@ -700,22 +700,22 @@ export default function MobileMCQViewerPage() {
                 background: isCorrect ? 'var(--color-success-soft)' : 'var(--color-error-soft)'
               }}
             >
-              <div className="flex items-start gap-3">
-                {isCorrect ? (
+                <div className="flex items-start gap-3">
+                  {isCorrect ? (
                   <FiCheck className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--color-success)' }} strokeWidth={2} />
-                ) : (
+                  ) : (
                   <FiX className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--color-error)' }} strokeWidth={2} />
-                )}
+                  )}
                 <div className="flex-1">
                   <p className="font-medium text-sm" style={{ color: isCorrect ? 'var(--color-success)' : 'var(--color-error)' }}>
-                    {isCorrect ? 'Correct!' : 'Incorrect'}
-                  </p>
-                  {!isCorrect && (
+                      {isCorrect ? 'Correct!' : 'Incorrect'}
+                    </p>
+                    {!isCorrect && (
                     <p className="text-xs mt-1" style={{ color: 'var(--color-error)' }}>
                       Correct: <span className="font-medium">{currentQuestion?.correctOption}</span>
-                    </p>
-                  )}
-                  {currentQuestion?.explanation && (
+                      </p>
+                    )}
+                    {currentQuestion?.explanation && (
                     <div className="flex items-start gap-2 mt-2">
                       <p className="flex-1 text-xs text-[var(--color-text-secondary)]">
                         {currentQuestion.explanation}
@@ -726,26 +726,26 @@ export default function MobileMCQViewerPage() {
                         size="sm"
                       />
                     </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Learn More Button */}
           {hasChecked && hasLessonCard && (
-            <button
+              <button
               onClick={() => setShowExplanationSheet(true)}
               className="w-full mt-3 p-4 border flex items-center justify-between"
               style={{ borderColor: 'var(--color-mode-study)', background: 'var(--color-mode-study-soft)' }}
-            >
-              <div className="flex items-center gap-2">
+              >
+                <div className="flex items-center gap-2">
                 <FiBook className="w-4 h-4" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
                 <span className="text-sm font-medium" style={{ color: 'var(--color-mode-study)' }}>Learn More</span>
               </div>
               <FiChevronRight className="w-4 h-4" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
             </button>
-          )}
+            )}
         </div>
 
         {/* Bottom Actions */}

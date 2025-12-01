@@ -65,7 +65,7 @@ export default function RegisterPage() {
 
       {/* Right Panel - Form */}
       <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-sm">
+      <div className="w-full max-w-sm">
           {/* Mobile Logo */}
           <div className="lg:hidden mb-12">
             <Logo size="lg" href="/" />
@@ -74,48 +74,48 @@ export default function RegisterPage() {
           <div className="mb-10">
             <h2 className="text-2xl font-semibold text-text-primary mb-2">Create Account</h2>
             <p className="text-sm text-text-secondary">Fill in your details to get started</p>
-          </div>
+        </div>
 
           <form onSubmit={handleRegister} className="space-y-6">
-            <div>
-              <label className="input-label">Full Name</label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="input"
-                placeholder="John Doe"
+          <div>
+            <label className="input-label">Full Name</label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              className="input"
+              placeholder="John Doe"
                 autoComplete="name"
-              />
-            </div>
+            />
+          </div>
 
-            <div>
-              <label className="input-label">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="input"
-                placeholder="you@example.com"
+          <div>
+            <label className="input-label">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="input"
+              placeholder="you@example.com"
                 autoComplete="email"
-              />
-            </div>
+            />
+          </div>
 
-            <div>
-              <label className="input-label">Password</label>
+          <div>
+            <label className="input-label">Password</label>
               <div className="relative">
-                <input
+            <input
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
                   className="input pr-12"
-                  placeholder="••••••••"
+              placeholder="••••••••"
                   autoComplete="new-password"
-                />
+            />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -144,19 +144,19 @@ export default function RegisterPage() {
                   ))}
                 </div>
               )}
-            </div>
+          </div>
 
-            {error && (
+          {error && (
               <div className="p-4 border border-error/30 bg-error-muted text-error text-sm">
-                {error}
-              </div>
-            )}
+              {error}
+            </div>
+          )}
 
-            <button
-              type="submit"
+          <button
+            type="submit"
               disabled={loading || !isPasswordStrong}
               className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+          >
               {loading ? (
                 <div className="spinner spinner-sm" />
               ) : (
@@ -165,8 +165,8 @@ export default function RegisterPage() {
                   <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
                 </>
               )}
-            </button>
-          </form>
+          </button>
+        </form>
 
           <p className="mt-6 text-center text-xs text-text-tertiary uppercase tracking-wider">
             By creating an account you agree to our Terms
@@ -175,8 +175,8 @@ export default function RegisterPage() {
           <p className="mt-6 text-center text-sm text-text-secondary">
             Already have an account?{' '}
             <a href="/login" className="text-text-primary underline underline-offset-2">
-              Sign in
-            </a>
+            Sign in
+          </a>
           </p>
         </div>
       </div>

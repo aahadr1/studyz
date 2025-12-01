@@ -51,7 +51,7 @@ export default function LoginPage() {
 
       {/* Right Panel - Form */}
       <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-sm">
+      <div className="w-full max-w-sm">
           {/* Mobile Logo */}
           <div className="lg:hidden mb-12">
             <Logo size="lg" href="/" />
@@ -60,35 +60,35 @@ export default function LoginPage() {
           <div className="mb-10">
             <h2 className="text-2xl font-semibold text-text-primary mb-2">Sign In</h2>
             <p className="text-sm text-text-secondary">Enter your credentials to continue</p>
-          </div>
+        </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="input-label">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="input"
-                placeholder="you@example.com"
+          <div>
+            <label className="input-label">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="input"
+              placeholder="you@example.com"
                 autoComplete="email"
-              />
-            </div>
+            />
+          </div>
 
-            <div>
-              <label className="input-label">Password</label>
+          <div>
+            <label className="input-label">Password</label>
               <div className="relative">
-                <input
+            <input
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
                   className="input pr-12"
-                  placeholder="••••••••"
+              placeholder="••••••••"
                   autoComplete="current-password"
-                />
+            />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -97,19 +97,19 @@ export default function LoginPage() {
                   {showPassword ? <FiEyeOff className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
                 </button>
               </div>
-            </div>
+          </div>
 
-            {error && (
+          {error && (
               <div className="p-4 border border-error/30 bg-error-muted text-error text-sm">
-                {error}
-              </div>
-            )}
+              {error}
+            </div>
+          )}
 
-            <button
-              type="submit"
-              disabled={loading}
+          <button
+            type="submit"
+            disabled={loading}
               className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+          >
               {loading ? (
                 <div className="spinner spinner-sm" />
               ) : (
@@ -118,14 +118,14 @@ export default function LoginPage() {
                   <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
                 </>
               )}
-            </button>
-          </form>
+          </button>
+        </form>
 
           <p className="mt-8 text-center text-sm text-text-secondary">
             New to Studyz?{' '}
             <a href="/register" className="text-text-primary underline underline-offset-2">
-              Create an account
-            </a>
+            Create an account
+          </a>
           </p>
         </div>
       </div>

@@ -110,7 +110,7 @@ export default function LessonsPage() {
           <Link href="/mcq" className="sidebar-item">
             <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Quiz Sets</span>
-          </Link>
+        </Link>
         </nav>
 
         <div className="border-t border-border p-4">
@@ -148,57 +148,57 @@ export default function LessonsPage() {
         </header>
 
         <div className="p-8 max-w-4xl">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="spinner" />
-            </div>
-          ) : lessons.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="spinner" />
+          </div>
+        ) : lessons.length === 0 ? (
             <div className="border border-border p-10 text-center">
               <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
                 <FiBook className="w-5 h-5" strokeWidth={1.5} />
-              </div>
+            </div>
               <h3 className="font-medium text-text-primary mb-2">No lessons yet</h3>
               <p className="text-sm text-text-secondary mb-6 max-w-xs mx-auto">
-                Create your first interactive lesson by uploading a PDF document.
-              </p>
-              <Link href="/lessons/new" className="btn-primary inline-flex">
+              Create your first interactive lesson by uploading a PDF document.
+            </p>
+            <Link href="/lessons/new" className="btn-primary inline-flex">
                 <FiPlus className="w-4 h-4" strokeWidth={1.5} />
-                Create Lesson
-              </Link>
-            </div>
-          ) : (
+              Create Lesson
+            </Link>
+          </div>
+        ) : (
             <div className="border border-border divide-y divide-border">
-              {lessons.map((lesson) => (
-                <div
-                  key={lesson.id}
+            {lessons.map((lesson) => (
+              <div
+                key={lesson.id}
                   className="flex items-center justify-between p-4 hover:bg-elevated transition-colors"
-                >
-                  <Link
-                    href={`/lessons/${lesson.id}`}
+              >
+                <Link
+                  href={`/lessons/${lesson.id}`}
                     className="flex items-center gap-4 flex-1 min-w-0"
-                  >
+                >
                     <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
                       <FiBook className="w-4 h-4" strokeWidth={1.5} />
-                    </div>
+                  </div>
                     <div className="min-w-0">
                       <h3 className="font-medium text-text-primary truncate">{lesson.name}</h3>
                       <p className="text-xs text-text-tertiary mono">
                         {lesson.total_pages} pages · {new Date(lesson.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </Link>
+                    </p>
+                  </div>
+                </Link>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleDelete(lesson.id)}
-                      disabled={deleting === lesson.id}
+                <button
+                  onClick={() => handleDelete(lesson.id)}
+                  disabled={deleting === lesson.id}
                       className="p-2 text-text-tertiary hover:text-error transition-colors"
-                    >
-                      {deleting === lesson.id ? (
+                >
+                  {deleting === lesson.id ? (
                         <div className="spinner spinner-sm" />
-                      ) : (
+                  ) : (
                         <FiTrash2 className="w-4 h-4" strokeWidth={1.5} />
-                      )}
-                    </button>
+                  )}
+                </button>
                     <Link
                       href={`/lessons/${lesson.id}`}
                       className="p-2 text-text-tertiary hover:text-text-primary transition-colors"
@@ -206,11 +206,11 @@ export default function LessonsPage() {
                       <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
                     </Link>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       </main>
     </div>
   )

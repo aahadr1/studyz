@@ -165,7 +165,7 @@ export default function DashboardPage() {
                 <div>
                   <div className="w-10 h-10 border border-border flex items-center justify-center mb-4 group-hover:border-text-primary transition-colors">
                     <FiPlus className="w-5 h-5" strokeWidth={1.5} />
-                  </div>
+                </div>
                   <h3 className="text-lg font-medium text-text-primary mb-1">New Lesson</h3>
                   <p className="text-sm text-text-secondary">Upload PDF and learn with AI</p>
                 </div>
@@ -178,7 +178,7 @@ export default function DashboardPage() {
                 <div>
                   <div className="w-10 h-10 border border-border flex items-center justify-center mb-4 group-hover:border-text-primary transition-colors">
                     <FiCheckSquare className="w-5 h-5" strokeWidth={1.5} />
-                  </div>
+                </div>
                   <h3 className="text-lg font-medium text-text-primary mb-1">New Quiz Set</h3>
                   <p className="text-sm text-text-secondary">Extract MCQs from documents</p>
                 </div>
@@ -189,12 +189,12 @@ export default function DashboardPage() {
 
           {/* Recent Lessons */}
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4">
               <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-widest">Recent Lessons</h3>
               <Link href="/lessons" className="text-xs text-text-secondary hover:text-text-primary transition-colors">
                 View all →
-              </Link>
-            </div>
+                </Link>
+              </div>
             
             {recentLessons.length > 0 ? (
               <div className="border border-border divide-y divide-border">
@@ -207,12 +207,12 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-4 min-w-0">
                       <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
                         <FiBook className="w-4 h-4" strokeWidth={1.5} />
-                      </div>
+                    </div>
                       <div className="min-w-0">
-                        <h4 className="font-medium text-text-primary truncate">{lesson.name}</h4>
+                      <h4 className="font-medium text-text-primary truncate">{lesson.name}</h4>
                         <p className="text-xs text-text-tertiary mono">
                           {lesson.total_pages} pages
-                        </p>
+                      </p>
                       </div>
                     </div>
                     <FiArrowRight className="w-4 h-4 text-text-tertiary flex-shrink-0" strokeWidth={1.5} />
@@ -223,7 +223,7 @@ export default function DashboardPage() {
               <div className="border border-border p-8 text-center">
                 <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
                   <FiBook className="w-5 h-5" strokeWidth={1.5} />
-                </div>
+            </div>
                 <h4 className="font-medium text-text-primary mb-2">No lessons yet</h4>
                 <p className="text-sm text-text-secondary mb-4">Create your first lesson to get started</p>
                 <Link href="/lessons/new" className="btn-primary inline-flex">
@@ -276,9 +276,9 @@ export default function DashboardPage() {
                 <Link href="/mcq/new" className="btn-primary inline-flex">
                   <FiPlus className="w-4 h-4" strokeWidth={1.5} />
                   Create Quiz
-                </Link>
-              </div>
-            )}
+              </Link>
+            </div>
+          )}
           </section>
         </div>
       </main>

@@ -204,11 +204,11 @@ export default function MobileLessonsPage() {
             className="flex items-center justify-between p-4 border border-[var(--color-border)] active:bg-[var(--color-surface)] w-full"
           >
             <span className="font-medium text-sm">Delete</span>
-            {deleting ? (
+              {deleting ? (
               <div className="spinner-mobile w-4 h-4" />
-            ) : (
+              ) : (
               <FiTrash2 className="w-4 h-4" strokeWidth={1.5} />
-            )}
+              )}
           </button>
         </div>
       </BottomSheet>

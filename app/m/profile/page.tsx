@@ -102,19 +102,19 @@ export default function MobileProfilePage() {
                 </p>
               )}
             </div>
+            </div>
           </div>
-        </div>
 
-        {/* Stats */}
+          {/* Stats */}
         <div className="grid grid-cols-3 border-b border-[var(--color-border)]">
           <div className="p-5 border-r border-[var(--color-border)] text-center">
             <span className="block text-2xl font-semibold mono">{stats.lessons}</span>
             <span className="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)]">Lessons</span>
-          </div>
+              </div>
           <div className="p-5 border-r border-[var(--color-border)] text-center">
             <span className="block text-2xl font-semibold mono">{stats.quizzes}</span>
             <span className="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)]">Quizzes</span>
-          </div>
+            </div>
           <div className="p-5 text-center">
             <span className="block text-2xl font-semibold mono">0</span>
             <span className="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)]">Streak</span>
@@ -126,7 +126,7 @@ export default function MobileProfilePage() {
           <div className="px-4 py-3 border-b border-[var(--color-border)]">
             <span className="text-[10px] uppercase tracking-[0.15em] text-[var(--color-text-tertiary)]">Settings</span>
           </div>
-          
+
           <button className="flex items-center justify-between w-full px-4 py-4 border-b border-[var(--color-border)] active:bg-[var(--color-surface)]">
             <span className="text-sm">Notifications</span>
             <FiChevronRight className="w-4 h-4 text-[var(--color-text-tertiary)]" strokeWidth={1.5} />
@@ -135,15 +135,15 @@ export default function MobileProfilePage() {
           <button className="flex items-center justify-between w-full px-4 py-4 border-b border-[var(--color-border)] active:bg-[var(--color-surface)]">
             <span className="text-sm">Appearance</span>
             <span className="text-xs text-[var(--color-text-tertiary)] mono">Dark</span>
-          </button>
+              </button>
           
           <button className="flex items-center justify-between w-full px-4 py-4 border-b border-[var(--color-border)] active:bg-[var(--color-surface)]">
             <span className="text-sm">About</span>
             <span className="text-xs text-[var(--color-text-tertiary)] mono">v1.0</span>
-          </button>
-        </div>
+              </button>
+          </div>
 
-        {/* Sign Out */}
+          {/* Sign Out */}
         <div className="p-4">
           <button
             onClick={() => setShowLogoutSheet(true)}

@@ -178,10 +178,10 @@ export default function MCQSetsPage() {
                   >
                     <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
                       <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
-                    </div>
+                  </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-medium text-text-primary truncate">{set.name}</h4>
+                    <h4 className="font-medium text-text-primary truncate">{set.name}</h4>
                         {set.is_corrected && (
                           <span className="text-[9px] uppercase tracking-wider border border-success/30 text-success px-1.5 py-0.5">
                             ✓
@@ -190,8 +190,8 @@ export default function MCQSetsPage() {
                       </div>
                       <p className="text-xs text-text-tertiary mono">
                         {set.total_questions} questions · {new Date(set.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
+                    </p>
+                  </div>
                   </Link>
                   <div className="flex items-center gap-2">
                     <Link

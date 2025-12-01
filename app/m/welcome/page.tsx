@@ -43,7 +43,7 @@ export default function MobileWelcomePage() {
       <div className="mobile-content-full flex flex-col">
         {/* Top Section */}
         <div className="flex-1 flex flex-col justify-center px-6 py-12">
-          {/* Logo */}
+        {/* Logo */}
           <div className="mb-12">
             <Image 
               src="/favicon.png" 
@@ -55,7 +55,7 @@ export default function MobileWelcomePage() {
             />
             <h1 className="text-3xl font-semibold tracking-tight mb-2">Studyz</h1>
             <p className="text-[var(--color-text-secondary)]">Learn smarter with AI</p>
-          </div>
+        </div>
 
           {/* Features */}
           <div className="space-y-4">

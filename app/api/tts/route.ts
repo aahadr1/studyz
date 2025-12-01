@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import Replicate from 'replicate'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60 // Allow up to 60s for TTS generation
 
-const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN,
-})
+// Initialize Replicate client
+function getReplicateClient() {
+  const token = process.env.REPLICATE_API_TOKEN
+  
+  if (!token) {
+    throw new Error('REPLICATE_API_TOKEN is not configured')
+  }
+  
+  return new Replicate({ auth: token })
+}
 
 // Voice mapping for languages
 const VOICES = {
@@ -21,6 +29,15 @@ const VOICES = {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check for API token first
+    if (!process.env.REPLICATE_API_TOKEN) {
+      console.error('[TTS] REPLICATE_API_TOKEN not configured')
+      return NextResponse.json(
+        { error: 'Text-to-speech service not configured. Please add REPLICATE_API_TOKEN to environment variables.' },
+        { status: 503 }
+      )
+    }
+
     const body = await request.json()
     const { 
       text, 
@@ -53,8 +70,10 @@ export async function POST(request: NextRequest) {
 
     console.log(`[TTS] Generating speech: ${text.substring(0, 50)}... (${language}, ${voiceId})`)
 
+    const replicate = getReplicateClient()
+    
     const output = await replicate.run(
-      'minimax/speech-02-turbo',
+      'minimax/speech-02-turbo:4e10f48f00474b07a45e0c50eba1c54ba34a6b22c2e88c5f2da993fd83e3c9b1',
       {
         input: {
           text: text,
@@ -73,6 +92,11 @@ export async function POST(request: NextRequest) {
 
     console.log('[TTS] Generated audio URL:', output)
 
+    // Ensure we have a valid URL
+    if (!output || typeof output !== 'string') {
+      throw new Error('Invalid audio URL returned from TTS service')
+    }
+
     return NextResponse.json({ 
       audioUrl: output,
       voiceId,
@@ -81,8 +105,17 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('[TTS] Error:', error)
+    console.error('[TTS] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    })
+    
     return NextResponse.json(
-      { error: error.message || 'Failed to generate speech' },
+      { 
+        error: error.message || 'Failed to generate speech',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     )
   }

@@ -95,19 +95,19 @@ export default function Home() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
             <div>
               <h2 className="text-2xl font-semibold text-text-primary mb-2">
-                Ready to transform your learning?
-              </h2>
+            Ready to transform your learning?
+          </h2>
               <p className="text-text-secondary">
                 Join students studying smarter with AI.
-              </p>
+          </p>
             </div>
-            <button
-              onClick={() => router.push('/register')}
+          <button
+            onClick={() => router.push('/register')}
               className="btn-primary px-8 py-3"
-            >
-              Get Started Free
+          >
+            Get Started Free
               <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
-            </button>
+          </button>
           </div>
         </div>
       </section>

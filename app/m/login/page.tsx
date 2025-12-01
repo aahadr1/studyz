@@ -52,7 +52,7 @@ export default function MobileLoginPage() {
         {/* Form */}
         <form onSubmit={handleLogin} className="flex-1 flex flex-col">
           <div className="space-y-5 flex-1">
-            <div className="input-group-mobile">
+          <div className="input-group-mobile">
               <label className="input-label-mobile">Email</label>
               <input
                 type="email"
@@ -64,61 +64,61 @@ export default function MobileLoginPage() {
                 autoComplete="email"
                 autoCapitalize="none"
               />
-            </div>
+          </div>
 
-            <div className="input-group-mobile">
-              <label className="input-label-mobile">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
+          <div className="input-group-mobile">
+            <label className="input-label-mobile">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
                   className="input-mobile pr-12"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
-                >
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
+              >
                   {showPassword ? <FiEyeOff className="w-4 h-4" strokeWidth={1.5} /> : <FiEye className="w-4 h-4" strokeWidth={1.5} />}
-                </button>
-              </div>
+              </button>
             </div>
+          </div>
 
-            {error && (
+          {error && (
               <div className="p-4 border border-[var(--color-border)] bg-[var(--color-surface)]">
                 <p className="text-sm text-[var(--color-text)]">{error}</p>
-              </div>
-            )}
+            </div>
+          )}
           </div>
 
           <div className="pt-8">
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-mobile btn-primary-mobile w-full"
-            >
-              {loading ? (
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-mobile btn-primary-mobile w-full"
+          >
+            {loading ? (
                 <div className="spinner-mobile w-5 h-5" />
-              ) : (
-                <>
+            ) : (
+              <>
                   Continue
                   <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                </>
-              )}
-            </button>
+              </>
+            )}
+          </button>
 
             <p className="text-center text-sm text-[var(--color-text-secondary)] mt-6">
               New here?{' '}
               <Link href="/m/register" className="text-[var(--color-text)] underline">
-                Create account
-              </Link>
-            </p>
-          </div>
+              Create account
+            </Link>
+          </p>
+        </div>
         </form>
       </div>
     </div>

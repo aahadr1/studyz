@@ -221,31 +221,31 @@ export default function MCQSetPage() {
               <Link href="/mcq" className="p-2 text-text-tertiary hover:text-text-primary transition-colors">
                 <FiArrowLeft className="w-4 h-4" strokeWidth={1.5} />
               </Link>
-              <div>
+            <div>
                 <h1 className="text-lg font-medium text-text-primary">{mcqSet.name}</h1>
                 <p className="text-xs text-text-tertiary mono flex items-center gap-2">
                   <span>{mcqSet.total_questions} questions</span>
                   <span>·</span>
                   <span>{mcqSet.total_pages} pages</span>
-                  {mcqSet.is_corrected && (
+                {mcqSet.is_corrected && (
                     <>
                       <span>·</span>
                       <span className="text-success flex items-center gap-1">
                         <FiCheck className="w-3 h-3" strokeWidth={2} />
-                        Corrected
-                      </span>
+                    Corrected
+                  </span>
                     </>
-                  )}
-                  {hasLessonCards && (
+                )}
+                {hasLessonCards && (
                     <>
                       <span>·</span>
                       <span className="text-mode-study flex items-center gap-1">
                         <FiBook className="w-3 h-3" strokeWidth={2} />
                         Lesson Cards
-                      </span>
+                  </span>
                     </>
-                  )}
-                </p>
+                )}
+              </p>
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">

@@ -66,7 +66,7 @@ export default function MobileRegisterPage() {
         {/* Form */}
         <form onSubmit={handleRegister} className="flex-1 flex flex-col">
           <div className="space-y-5 flex-1">
-            <div className="input-group-mobile">
+          <div className="input-group-mobile">
               <label className="input-label-mobile">Full Name</label>
               <input
                 type="text"
@@ -77,9 +77,9 @@ export default function MobileRegisterPage() {
                 placeholder="John Doe"
                 autoComplete="name"
               />
-            </div>
+          </div>
 
-            <div className="input-group-mobile">
+          <div className="input-group-mobile">
               <label className="input-label-mobile">Email</label>
               <input
                 type="email"
@@ -91,85 +91,85 @@ export default function MobileRegisterPage() {
                 autoComplete="email"
                 autoCapitalize="none"
               />
-            </div>
+          </div>
 
-            <div className="input-group-mobile">
-              <label className="input-label-mobile">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
+          <div className="input-group-mobile">
+            <label className="input-label-mobile">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
                   className="input-mobile pr-12"
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
-                >
+                placeholder="••••••••"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
+              >
                   {showPassword ? <FiEyeOff className="w-4 h-4" strokeWidth={1.5} /> : <FiEye className="w-4 h-4" strokeWidth={1.5} />}
-                </button>
-              </div>
-              
-              {password.length > 0 && (
+              </button>
+            </div>
+            
+            {password.length > 0 && (
                 <div className="flex gap-4 mt-3">
-                  {passwordChecks.map((check, index) => (
-                    <div 
-                      key={index}
+                {passwordChecks.map((check, index) => (
+                  <div 
+                    key={index}
                       className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider ${
                         check.valid ? 'text-[var(--color-text)]' : 'text-[var(--color-text-tertiary)]'
                       }`}
-                    >
+                  >
                       <div className={`w-3 h-3 border flex items-center justify-center ${
                         check.valid ? 'border-[var(--color-text)] bg-[var(--color-text)]' : 'border-[var(--color-border)]'
-                      }`}>
+                    }`}>
                         {check.valid && <FiCheck className="w-2 h-2 text-[var(--color-bg)]" strokeWidth={2} />}
-                      </div>
-                      {check.label}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {error && (
-              <div className="p-4 border border-[var(--color-border)] bg-[var(--color-surface)]">
-                <p className="text-sm text-[var(--color-text)]">{error}</p>
+                      {check.label}
+                  </div>
+                ))}
               </div>
             )}
           </div>
 
+          {error && (
+              <div className="p-4 border border-[var(--color-border)] bg-[var(--color-surface)]">
+                <p className="text-sm text-[var(--color-text)]">{error}</p>
+            </div>
+          )}
+          </div>
+
           <div className="pt-8">
-            <button
-              type="submit"
-              disabled={loading || !isPasswordStrong}
-              className="btn-mobile btn-primary-mobile w-full"
-            >
-              {loading ? (
+          <button
+            type="submit"
+            disabled={loading || !isPasswordStrong}
+            className="btn-mobile btn-primary-mobile w-full"
+          >
+            {loading ? (
                 <div className="spinner-mobile w-5 h-5" />
-              ) : (
-                <>
+            ) : (
+              <>
                   Create Account
                   <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                </>
-              )}
-            </button>
+              </>
+            )}
+          </button>
 
             <p className="text-[9px] text-center text-[var(--color-text-tertiary)] mt-6 uppercase tracking-wider leading-relaxed">
               By creating an account you agree to our Terms
             </p>
 
             <p className="text-center text-sm text-[var(--color-text-secondary)] mt-4">
-              Already have an account?{' '}
+            Already have an account?{' '}
               <Link href="/m/login" className="text-[var(--color-text)] underline">
-                Sign in
-              </Link>
-            </p>
-          </div>
+              Sign in
+            </Link>
+          </p>
+        </div>
         </form>
       </div>
     </div>

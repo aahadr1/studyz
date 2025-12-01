@@ -209,11 +209,11 @@ export default function MobileLayout({
 }: MobileLayoutProps) {
   return (
     <ToastProvider>
-      <div className="mobile-app">
+    <div className="mobile-app">
         <NetworkStatusBanner />
-        {children}
-        {!hideTabBar && <MobileTabBar />}
-      </div>
+      {children}
+      {!hideTabBar && <MobileTabBar />}
+    </div>
     </ToastProvider>
   )
 }
