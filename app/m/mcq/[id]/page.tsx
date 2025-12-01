@@ -17,8 +17,11 @@ import {
   FiClock,
   FiAward,
   FiTrendingUp,
-  FiInfo
+  FiInfo,
+  FiVolume2,
+  FiGlobe
 } from 'react-icons/fi'
+import { SpeakButton } from '@/components/mobile/TextToSpeech'
 
 interface MCQQuestion {
   id?: string
@@ -69,6 +72,9 @@ export default function MobileMCQViewerPage() {
   const [showLessonSheet, setShowLessonSheet] = useState(false)
   const [showExplanationSheet, setShowExplanationSheet] = useState(false)
   const [showModeSelector, setShowModeSelector] = useState(false)
+  const [showTTSSelector, setShowTTSSelector] = useState(false)
+  const [ttsLanguage, setTtsLanguage] = useState<'en' | 'fr'>('en')
+  const [isStudyMaterialExpanded, setIsStudyMaterialExpanded] = useState(false)
 
   // Touch handling
   const touchStartX = useRef<number>(0)
@@ -179,6 +185,7 @@ export default function MobileMCQViewerPage() {
       setHasChecked(false)
       setShowLessonSheet(false)
       setShowExplanationSheet(false)
+      setIsStudyMaterialExpanded(false)
     } else {
       setIsComplete(true)
     }
@@ -191,6 +198,7 @@ export default function MobileMCQViewerPage() {
       setHasChecked(false)
       setShowLessonSheet(false)
       setShowExplanationSheet(false)
+      setIsStudyMaterialExpanded(false)
     }
   }
 
@@ -203,6 +211,7 @@ export default function MobileMCQViewerPage() {
     setShowModeSelector(false)
     setShowLessonSheet(false)
     setShowExplanationSheet(false)
+    setIsStudyMaterialExpanded(false)
   }
 
   const handleRestart = () => {
@@ -216,6 +225,7 @@ export default function MobileMCQViewerPage() {
     setIsComplete(false)
     setShowLessonSheet(false)
     setShowExplanationSheet(false)
+    setIsStudyMaterialExpanded(false)
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -400,17 +410,28 @@ export default function MobileMCQViewerPage() {
         <div className="flex-1 text-center min-w-0">
           <h1 className="text-xs font-medium uppercase tracking-wider truncate">{mcqSet.name}</h1>
         </div>
-        <button 
-          onClick={() => setShowModeSelector(true)}
-          className="px-2 py-1 text-[10px] uppercase tracking-wider border"
-          style={{ 
-            color: getModeColor(mode),
-            borderColor: getModeColor(mode),
-            background: `${getModeColor(mode)}15`
-          }}
-        >
-          {getModeLabel(mode)}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* TTS Language Toggle */}
+          <button
+            onClick={() => setTtsLanguage(ttsLanguage === 'en' ? 'fr' : 'en')}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wider border border-[var(--color-border)]"
+          >
+            <FiVolume2 className="w-3 h-3" strokeWidth={1.5} />
+            {ttsLanguage.toUpperCase()}
+          </button>
+          {/* Mode Selector */}
+          <button 
+            onClick={() => setShowModeSelector(true)}
+            className="px-2 py-1 text-[10px] uppercase tracking-wider border"
+            style={{ 
+              color: getModeColor(mode),
+              borderColor: getModeColor(mode),
+              background: `${getModeColor(mode)}15`
+            }}
+          >
+            {getModeLabel(mode)}
+          </button>
+        </div>
       </header>
 
       {/* Content */}
@@ -503,9 +524,16 @@ export default function MobileMCQViewerPage() {
 
         {/* Question */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          <h2 className="text-base font-medium text-[var(--color-text)] mb-6 leading-relaxed">
-            {currentQuestion?.question}
-          </h2>
+          <div className="flex items-start gap-3 mb-6">
+            <h2 className="flex-1 text-base font-medium text-[var(--color-text)] leading-relaxed">
+              {currentQuestion?.question}
+            </h2>
+            <SpeakButton 
+              text={currentQuestion?.question || ''} 
+              language={ttsLanguage}
+              size="sm"
+            />
+          </div>
 
           {/* Options */}
           <div className="space-y-2">
@@ -560,6 +588,109 @@ export default function MobileMCQViewerPage() {
             })}
           </div>
 
+          {/* Study Mode: Inline Collapsible Lesson Card */}
+          {mode === 'study' && hasLessonCard && (
+            <div className="mt-4">
+              <button
+                onClick={() => setIsStudyMaterialExpanded(!isStudyMaterialExpanded)}
+                className="w-full p-4 border text-left transition-all"
+                style={{ 
+                  borderColor: 'var(--color-mode-study)', 
+                  background: 'var(--color-mode-study-soft)' 
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <FiBook className="w-4 h-4" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
+                    <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: 'var(--color-mode-study)' }}>Study Material</span>
+                  </div>
+                  <FiChevronRight 
+                    className="w-4 h-4 transition-transform" 
+                    style={{ 
+                      color: 'var(--color-mode-study)',
+                      transform: isStudyMaterialExpanded ? 'rotate(90deg)' : 'rotate(0deg)'
+                    }} 
+                    strokeWidth={1.5} 
+                  />
+                </div>
+                <h4 className="font-medium text-sm text-[var(--color-text)]">{currentQuestion.lesson_card?.title}</h4>
+                {!isStudyMaterialExpanded && (
+                  <p className="text-xs text-[var(--color-text-secondary)] mt-1 line-clamp-2">
+                    {currentQuestion.lesson_card?.conceptOverview}
+                  </p>
+                )}
+              </button>
+
+              {/* Expanded Content */}
+              {isStudyMaterialExpanded && (
+                <div className="border border-t-0 p-4 space-y-4" style={{ borderColor: 'var(--color-mode-study)' }}>
+                  {/* Concept Overview */}
+                  <div>
+                    <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                      {currentQuestion.lesson_card?.conceptOverview}
+                    </p>
+                  </div>
+
+                  {/* Key Points */}
+                  {currentQuestion.lesson_card?.keyPoints && currentQuestion.lesson_card.keyPoints.length > 0 && (
+                    <div>
+                      <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Key Points</h4>
+                      <div className="space-y-2">
+                        {currentQuestion.lesson_card.keyPoints.map((point, i) => (
+                          <div key={i} className="flex items-start gap-3 p-3 border border-[var(--color-border)]">
+                            <FiCheck className="w-4 h-4 text-[var(--color-success)] flex-shrink-0 mt-0.5" strokeWidth={2} />
+                            <p className="text-sm text-[var(--color-text-secondary)]">{point}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detailed Explanation */}
+                  {currentQuestion.lesson_card?.detailedExplanation && (
+                    <div>
+                      <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Detailed Explanation</h4>
+                      <div className="p-3 border border-[var(--color-border)] bg-[var(--color-surface)]">
+                        <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-line">
+                          {currentQuestion.lesson_card.detailedExplanation}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Examples */}
+                  {currentQuestion.lesson_card?.examples && currentQuestion.lesson_card.examples.length > 0 && (
+                    <div>
+                      <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Examples</h4>
+                      <div className="space-y-2">
+                        {currentQuestion.lesson_card.examples.map((example, i) => (
+                          <div key={i} className="p-3 border border-[var(--color-border)] bg-[var(--color-surface)]">
+                            <p className="text-sm text-[var(--color-text-secondary)]">{example}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Common Mistakes */}
+                  {currentQuestion.lesson_card?.commonMistakes && currentQuestion.lesson_card.commonMistakes.length > 0 && (
+                    <div>
+                      <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Common Mistakes</h4>
+                      <div className="space-y-2">
+                        {currentQuestion.lesson_card.commonMistakes.map((mistake, i) => (
+                          <div key={i} className="flex items-start gap-3 p-3 border border-[var(--color-error)]" style={{ background: 'var(--color-error-soft)' }}>
+                            <FiInfo className="w-4 h-4 text-[var(--color-error)] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+                            <p className="text-sm text-[var(--color-text-secondary)]">{mistake}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Feedback */}
           {hasChecked && (
             <div 
@@ -585,9 +716,16 @@ export default function MobileMCQViewerPage() {
                     </p>
                   )}
                   {currentQuestion?.explanation && (
-                    <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-                      {currentQuestion.explanation}
-                    </p>
+                    <div className="flex items-start gap-2 mt-2">
+                      <p className="flex-1 text-xs text-[var(--color-text-secondary)]">
+                        {currentQuestion.explanation}
+                      </p>
+                      <SpeakButton 
+                        text={currentQuestion.explanation} 
+                        language={ttsLanguage}
+                        size="sm"
+                      />
+                    </div>
                   )}
                 </div>
               </div>
@@ -712,7 +850,14 @@ export default function MobileMCQViewerPage() {
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div>
-                <h3 className="text-lg font-semibold mb-2">{currentQuestion.lesson_card?.title}</h3>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <h3 className="text-lg font-semibold">{currentQuestion.lesson_card?.title}</h3>
+                  <SpeakButton 
+                    text={`${currentQuestion.lesson_card?.title}. ${currentQuestion.lesson_card?.conceptOverview}`} 
+                    language={ttsLanguage}
+                    size="sm"
+                  />
+                </div>
                 <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
                   {currentQuestion.lesson_card?.conceptOverview}
                 </p>
@@ -774,7 +919,14 @@ export default function MobileMCQViewerPage() {
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
               {/* Title & Overview */}
               <div>
-                <h3 className="text-lg font-semibold mb-2">{currentQuestion.lesson_card?.title}</h3>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <h3 className="text-lg font-semibold">{currentQuestion.lesson_card?.title}</h3>
+                  <SpeakButton 
+                    text={`${currentQuestion.lesson_card?.title}. ${currentQuestion.lesson_card?.conceptOverview}. ${currentQuestion.explanation || ''}`} 
+                    language={ttsLanguage}
+                    size="md"
+                  />
+                </div>
                 <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
                   {currentQuestion.lesson_card?.conceptOverview}
                 </p>
