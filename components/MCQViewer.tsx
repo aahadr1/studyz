@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { FiCheck, FiX, FiArrowRight, FiArrowLeft, FiBook, FiCommand } from 'react-icons/fi'
+import { FiCheck, FiX, FiArrowRight, FiArrowLeft, FiBook, FiCommand, FiVolume2 } from 'react-icons/fi'
 import LessonCard, { LessonCardData } from './LessonCard'
 import ScoreTracker from './ScoreTracker'
 import MCQModeSelector, { MCQMode } from './MCQModeSelector'
+import { SpeakButton } from './mobile/TextToSpeech'
 
 export interface MCQQuestion {
   id?: string
@@ -69,6 +70,7 @@ export default function MCQViewer({
   const [isComplete, setIsComplete] = useState(false)
   
   const [challengeTimeLeft, setChallengeTimeLeft] = useState(30)
+  const [ttsLanguage, setTtsLanguage] = useState<'en' | 'fr'>('en')
   
   const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({})
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -348,9 +350,20 @@ export default function MCQViewer({
             {/* Study Mode: Show lesson card before answering */}
             {showLessonBeforeAnswer && currentQuestion.lesson_card && (
               <div className="mb-6 p-4 border border-mode-study/30 bg-mode-study/5">
-                <div className="flex items-center gap-2 mb-3">
-                  <FiBook className="w-4 h-4 text-mode-study" />
-                  <span className="text-xs uppercase tracking-wider text-mode-study">Study First</span>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <FiBook className="w-4 h-4 text-mode-study" />
+                    <span className="text-xs uppercase tracking-wider text-mode-study">Study First</span>
+                  </div>
+                  <SpeakButton 
+                    text={`${currentQuestion.lesson_card.title}. ${currentQuestion.lesson_card.conceptOverview}${
+                      currentQuestion.lesson_card.keyPoints 
+                        ? '. Key points: ' + currentQuestion.lesson_card.keyPoints.join('. ') 
+                        : ''
+                    }`} 
+                    language={ttsLanguage}
+                    size="sm"
+                  />
                 </div>
                 <div className="border border-border p-4 bg-background">
                   <h4 className="font-medium text-text-primary mb-2">{currentQuestion.lesson_card.title}</h4>
@@ -371,9 +384,17 @@ export default function MCQViewer({
 
             {/* Question Card */}
             <div className="border border-border p-6 mb-6">
-              <h2 className="text-lg font-medium text-text-primary mb-6 leading-relaxed">
-                {currentQuestion.question}
-              </h2>
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <h2 className="text-lg font-medium text-text-primary leading-relaxed flex-1">
+                  {currentQuestion.question}
+                </h2>
+                <SpeakButton 
+                  text={currentQuestion.question} 
+                  language={ttsLanguage}
+                  size="md"
+                  showLanguageToggle
+                />
+              </div>
 
               {/* Options */}
               <div className="space-y-2">
@@ -425,9 +446,18 @@ export default function MCQViewer({
                       <FiX className="w-5 h-5 text-error flex-shrink-0 mt-0.5" strokeWidth={2} />
                     )}
                     <div className="flex-1">
-                      <p className={`font-medium mb-1 ${isCorrect ? 'text-success' : 'text-error'}`}>
-                        {isCorrect ? 'Correct' : 'Incorrect'}
-                      </p>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className={`font-medium ${isCorrect ? 'text-success' : 'text-error'}`}>
+                          {isCorrect ? 'Correct' : 'Incorrect'}
+                        </p>
+                        {currentQuestion.explanation && (
+                          <SpeakButton 
+                            text={currentQuestion.explanation} 
+                            language={ttsLanguage}
+                            size="sm"
+                          />
+                        )}
+                      </div>
                       {!isCorrect && (
                         <p className="text-sm text-text-secondary mb-2">
                           Correct answer: <span className="font-medium text-text-primary">{currentQuestion.correctOption}</span>
@@ -444,9 +474,16 @@ export default function MCQViewer({
               {/* Show lesson card after answer in Test mode */}
               {showLessonAfterAnswer && currentQuestion.lesson_card && mode === 'test' && (
                 <div className="mt-4 p-4 border border-mode-study/30 bg-mode-study/5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FiBook className="w-4 h-4 text-mode-study" />
-                    <span className="text-xs uppercase tracking-wider text-mode-study">Learn More</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <FiBook className="w-4 h-4 text-mode-study" />
+                      <span className="text-xs uppercase tracking-wider text-mode-study">Learn More</span>
+                    </div>
+                    <SpeakButton 
+                      text={currentQuestion.lesson_card.conceptOverview} 
+                      language={ttsLanguage}
+                      size="sm"
+                    />
                   </div>
                   <p className="text-sm text-text-secondary">{currentQuestion.lesson_card.conceptOverview}</p>
                 </div>
@@ -492,12 +529,35 @@ export default function MCQViewer({
               </div>
             </div>
 
-            {/* Keyboard shortcuts */}
-            <div className="mt-6 text-center">
+            {/* Keyboard shortcuts & TTS toggle */}
+            <div className="mt-6 flex items-center justify-center gap-6">
               <p className="text-xs text-text-tertiary mono">
                 <FiCommand className="w-3 h-3 inline mr-1" />
                 1-4 / A-D select · Enter check · Space next · L lessons
               </p>
+              <div className="flex items-center gap-2 border border-border px-2 py-1">
+                <FiVolume2 className="w-3 h-3 text-text-tertiary" strokeWidth={1.5} />
+                <button
+                  onClick={() => setTtsLanguage('en')}
+                  className={`text-xs font-medium uppercase tracking-wider px-2 py-0.5 transition-colors ${
+                    ttsLanguage === 'en' 
+                      ? 'bg-white text-black' 
+                      : 'text-text-tertiary hover:text-text-secondary'
+                  }`}
+                >
+                  EN
+                </button>
+                <button
+                  onClick={() => setTtsLanguage('fr')}
+                  className={`text-xs font-medium uppercase tracking-wider px-2 py-0.5 transition-colors ${
+                    ttsLanguage === 'fr' 
+                      ? 'bg-white text-black' 
+                      : 'text-text-tertiary hover:text-text-secondary'
+                  }`}
+                >
+                  FR
+                </button>
+              </div>
             </div>
           </>
         )}

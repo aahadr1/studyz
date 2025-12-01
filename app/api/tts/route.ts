@@ -1,50 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Replicate from 'replicate'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60 // Allow up to 60s for TTS generation
+export const maxDuration = 60
 
-// Initialize Replicate client
-function getReplicateClient() {
-  const token = process.env.REPLICATE_API_TOKEN
-  
-  if (!token) {
-    throw new Error('REPLICATE_API_TOKEN is not configured')
-  }
-  
-  return new Replicate({ auth: token })
-}
-
-// Voice mapping for languages
-const VOICES = {
+// ElevenLabs voices (more reliable)
+const ELEVENLABS_VOICES = {
   en: {
-    male: 'English_CaptivatingStoryteller',
-    female: 'English_FriendlyPerson',
+    male: 'TxGEqnHWrfWFTfGW9XjX', // Josh
+    female: 'EXAVITQu4vr4xnSDxMaL', // Bella
   },
   fr: {
-    male: 'French_MaleNarrator',
-    female: 'French_Female_News Anchor',
+    male: 'onwK4e9ZLuTAKqWW03F9', // Daniel (multilingual)
+    female: 'XrExE9yKIg1WjnnlVkGX', // Charlotte (multilingual)
   },
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Check for API token first
-    if (!process.env.REPLICATE_API_TOKEN) {
-      console.error('[TTS] REPLICATE_API_TOKEN not configured')
-      return NextResponse.json(
-        { error: 'Text-to-speech service not configured. Please add REPLICATE_API_TOKEN to environment variables.' },
-        { status: 503 }
-      )
-    }
-
     const body = await request.json()
     const { 
       text, 
       language = 'en', 
       voice = 'male',
-      speed = 1,
-      emotion = 'auto'
     } = body
 
     if (!text || text.trim().length === 0) {
@@ -54,70 +31,137 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (text.length > 10000) {
-      return NextResponse.json(
-        { error: 'Text exceeds maximum length of 10,000 characters' },
-        { status: 400 }
-      )
-    }
+    // Limit text length
+    const trimmedText = text.trim().substring(0, 5000)
 
-    // Get the appropriate voice based on language and preference
-    const voiceId = VOICES[language as keyof typeof VOICES]?.[voice as keyof typeof VOICES.en] 
-      || VOICES.en.male
-
-    // Language boost mapping
-    const languageBoost = language === 'fr' ? 'French' : 'English'
-
-    console.log(`[TTS] Generating speech: ${text.substring(0, 50)}... (${language}, ${voiceId})`)
-
-    const replicate = getReplicateClient()
+    // Try ElevenLabs first if token is available
+    const elevenLabsKey = process.env.ELEVENLABS_API_KEY
     
-    const output = await replicate.run(
-      'minimax/speech-02-turbo:4e10f48f00474b07a45e0c50eba1c54ba34a6b22c2e88c5f2da993fd83e3c9b1',
-      {
-        input: {
-          text: text,
-          voice_id: voiceId,
-          speed: speed,
-          emotion: emotion,
-          language_boost: languageBoost,
-          sample_rate: 32000,
-          bitrate: 128000,
-          audio_format: 'mp3',
-          channel: 'mono',
-          english_normalization: language === 'en',
+    if (elevenLabsKey) {
+      try {
+        const voiceId = ELEVENLABS_VOICES[language as keyof typeof ELEVENLABS_VOICES]?.[voice as keyof typeof ELEVENLABS_VOICES.en] 
+          || ELEVENLABS_VOICES.en.male
+
+        console.log(`[TTS] Using ElevenLabs, voice: ${voiceId}, text: ${trimmedText.substring(0, 50)}...`)
+
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'audio/mpeg',
+            'Content-Type': 'application/json',
+            'xi-api-key': elevenLabsKey,
+          },
+          body: JSON.stringify({
+            text: trimmedText,
+            model_id: 'eleven_multilingual_v2',
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75,
+            },
+          }),
+        })
+
+        if (response.ok) {
+          const audioBuffer = await response.arrayBuffer()
+          const base64Audio = Buffer.from(audioBuffer).toString('base64')
+          const dataUrl = `data:audio/mpeg;base64,${base64Audio}`
+          
+          console.log('[TTS] ElevenLabs success, audio length:', audioBuffer.byteLength)
+          
+          return NextResponse.json({ 
+            audioUrl: dataUrl,
+            provider: 'elevenlabs',
+            language 
+          })
+        } else {
+          const errorText = await response.text()
+          console.error('[TTS] ElevenLabs error:', response.status, errorText)
         }
+      } catch (elevenError: any) {
+        console.error('[TTS] ElevenLabs failed:', elevenError.message)
       }
-    )
-
-    console.log('[TTS] Generated audio URL:', output)
-
-    // Ensure we have a valid URL
-    if (!output || typeof output !== 'string') {
-      throw new Error('Invalid audio URL returned from TTS service')
     }
 
+    // Try Replicate minimax as fallback
+    const replicateToken = process.env.REPLICATE_API_TOKEN
+    
+    if (replicateToken) {
+      try {
+        console.log(`[TTS] Using Replicate minimax, text: ${trimmedText.substring(0, 50)}...`)
+
+        // Use fetch directly for more control
+        const response = await fetch('https://api.replicate.com/v1/predictions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${replicateToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            version: '0544d2d437c9fdce5a5cf43a06b29f4df8a2c0bfef97f5c7f85a1f0c55b5eb06',
+            input: {
+              text: trimmedText,
+              voice_id: language === 'fr' ? 'Friendly_Person' : 'male-qn-qingse',
+              speed: 1.0,
+              vol: 1.0,
+              pitch: 0,
+            },
+          }),
+        })
+
+        if (response.ok) {
+          const prediction = await response.json()
+          
+          // Poll for result
+          let result = prediction
+          let attempts = 0
+          
+          while (result.status !== 'succeeded' && result.status !== 'failed' && attempts < 30) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            
+            const statusResponse = await fetch(result.urls.get, {
+              headers: { 'Authorization': `Bearer ${replicateToken}` },
+            })
+            
+            result = await statusResponse.json()
+            attempts++
+          }
+
+          if (result.status === 'succeeded' && result.output) {
+            console.log('[TTS] Replicate success:', result.output)
+            return NextResponse.json({ 
+              audioUrl: result.output,
+              provider: 'replicate',
+              language 
+            })
+          } else {
+            console.error('[TTS] Replicate failed:', result.error || 'Unknown error')
+          }
+        } else {
+          const errorText = await response.text()
+          console.error('[TTS] Replicate API error:', response.status, errorText)
+        }
+      } catch (replicateError: any) {
+        console.error('[TTS] Replicate failed:', replicateError.message)
+      }
+    }
+
+    // No providers available - return instruction to use browser TTS
+    console.log('[TTS] No providers available, suggesting browser TTS')
     return NextResponse.json({ 
-      audioUrl: output,
-      voiceId,
-      language 
+      useBrowserTTS: true,
+      text: trimmedText,
+      language,
+      message: 'No TTS providers configured. Using browser speech synthesis.'
     })
 
   } catch (error: any) {
     console.error('[TTS] Error:', error)
-    console.error('[TTS] Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    })
-    
     return NextResponse.json(
       { 
         error: error.message || 'Failed to generate speech',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        useBrowserTTS: true,
       },
       { status: 500 }
     )
   }
 }
-

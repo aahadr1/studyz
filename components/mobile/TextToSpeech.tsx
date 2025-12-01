@@ -1,19 +1,13 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { FiVolume2, FiVolumeX, FiLoader, FiGlobe } from 'react-icons/fi'
 
+// ============================================
+// Types
+// ============================================
 type Language = 'en' | 'fr'
 type VoiceGender = 'male' | 'female'
-
-interface TextToSpeechProps {
-  text: string
-  className?: string
-  compact?: boolean
-  showLanguageSelector?: boolean
-  defaultLanguage?: Language
-  onLanguageChange?: (lang: Language) => void
-}
 
 interface TTSState {
   isPlaying: boolean
@@ -22,8 +16,56 @@ interface TTSState {
   audioUrl: string | null
 }
 
-export function useTextToSpeech() {
-  const [language, setLanguage] = useState<Language>('en')
+// ============================================
+// Browser Speech Synthesis Helper
+// ============================================
+function useBrowserSpeech() {
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
+
+  const speak = useCallback((text: string, lang: Language) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      return false
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel()
+
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = lang === 'fr' ? 'fr-FR' : 'en-US'
+    utterance.rate = 0.9
+    utterance.pitch = 1
+
+    // Try to find a good voice
+    const voices = window.speechSynthesis.getVoices()
+    const langCode = lang === 'fr' ? 'fr' : 'en'
+    const voice = voices.find(v => v.lang.startsWith(langCode) && v.name.includes('Natural')) 
+      || voices.find(v => v.lang.startsWith(langCode))
+    
+    if (voice) {
+      utterance.voice = voice
+    }
+
+    speechRef.current = utterance
+    window.speechSynthesis.speak(utterance)
+    return true
+  }, [])
+
+  const stop = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+  }, [])
+
+  const isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+
+  return { speak, stop, isSupported }
+}
+
+// ============================================
+// Main TTS Hook
+// ============================================
+export function useTextToSpeech(defaultLanguage: Language = 'en') {
+  const [language, setLanguage] = useState<Language>(defaultLanguage)
   const [voiceGender, setVoiceGender] = useState<VoiceGender>('male')
   const [state, setState] = useState<TTSState>({
     isPlaying: false,
@@ -33,72 +75,107 @@ export function useTextToSpeech() {
   })
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const currentTextRef = useRef<string>('')
+  const browserSpeech = useBrowserSpeech()
 
   const stopAudio = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
     }
+    browserSpeech.stop()
     setState(prev => ({ ...prev, isPlaying: false }))
-  }, [])
+  }, [browserSpeech])
 
   const speak = useCallback(async (text: string) => {
     if (!text || text.trim().length === 0) return
 
-    // If same text is playing, toggle pause/play
-    if (currentTextRef.current === text && audioRef.current) {
-      if (state.isPlaying) {
-        audioRef.current.pause()
-        setState(prev => ({ ...prev, isPlaying: false }))
-        return
-      } else if (state.audioUrl) {
-        audioRef.current.play()
-        setState(prev => ({ ...prev, isPlaying: true }))
-        return
-      }
+    // If already playing, stop
+    if (state.isPlaying) {
+      stopAudio()
+      return
     }
-
-    // Stop any current playback
-    stopAudio()
-    currentTextRef.current = text
 
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     try {
+      // Call API
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text,
+          text: text.substring(0, 5000),
           language,
           voice: voiceGender,
-          speed: 1,
-          emotion: 'auto',
         }),
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to generate speech')
+      const data = await response.json()
+
+      // If API suggests using browser TTS
+      if (data.useBrowserTTS || !data.audioUrl) {
+        console.log('[TTS] Using browser speech synthesis')
+        
+        if (browserSpeech.isSupported) {
+          browserSpeech.speak(text, language)
+          setState(prev => ({ 
+            ...prev, 
+            isLoading: false, 
+            isPlaying: true 
+          }))
+
+          // Set a timeout to reset playing state (estimate based on text length)
+          const duration = Math.max(3000, text.length * 60)
+          setTimeout(() => {
+            setState(prev => ({ ...prev, isPlaying: false }))
+          }, duration)
+        } else {
+          setState(prev => ({ 
+            ...prev, 
+            isLoading: false, 
+            error: 'Speech synthesis not supported' 
+          }))
+        }
+        return
       }
 
-      const { audioUrl } = await response.json()
+      // Play audio URL
+      const audioUrl = data.audioUrl
 
-      // Create and play audio
+      // Clean up previous audio
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+
       const audio = new Audio(audioUrl)
       audioRef.current = audio
-      
+
       audio.onended = () => {
         setState(prev => ({ ...prev, isPlaying: false }))
       }
-      
-      audio.onerror = () => {
-        setState(prev => ({ 
-          ...prev, 
-          isPlaying: false, 
-          error: 'Failed to play audio' 
-        }))
+
+      audio.onerror = (e) => {
+        console.error('[TTS] Audio playback error:', e)
+        // Fallback to browser TTS
+        if (browserSpeech.isSupported) {
+          browserSpeech.speak(text, language)
+          setState(prev => ({ 
+            ...prev, 
+            isLoading: false, 
+            isPlaying: true 
+          }))
+          const duration = Math.max(3000, text.length * 60)
+          setTimeout(() => {
+            setState(prev => ({ ...prev, isPlaying: false }))
+          }, duration)
+        } else {
+          setState(prev => ({ 
+            ...prev, 
+            isLoading: false,
+            isPlaying: false,
+            error: 'Failed to play audio' 
+          }))
+        }
       }
 
       await audio.play()
@@ -111,13 +188,28 @@ export function useTextToSpeech() {
 
     } catch (error: any) {
       console.error('[TTS] Error:', error)
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: false, 
-        error: error.message 
-      }))
+      
+      // Fallback to browser TTS
+      if (browserSpeech.isSupported) {
+        browserSpeech.speak(text, language)
+        setState(prev => ({ 
+          ...prev, 
+          isLoading: false, 
+          isPlaying: true 
+        }))
+        const duration = Math.max(3000, text.length * 60)
+        setTimeout(() => {
+          setState(prev => ({ ...prev, isPlaying: false }))
+        }, duration)
+      } else {
+        setState(prev => ({ 
+          ...prev, 
+          isLoading: false, 
+          error: error.message 
+        }))
+      }
     }
-  }, [language, voiceGender, state.isPlaying, state.audioUrl, stopAudio])
+  }, [language, voiceGender, state.isPlaying, stopAudio, browserSpeech])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -126,8 +218,9 @@ export function useTextToSpeech() {
         audioRef.current.pause()
         audioRef.current = null
       }
+      browserSpeech.stop()
     }
-  }, [])
+  }, [browserSpeech])
 
   return {
     speak,
@@ -142,249 +235,159 @@ export function useTextToSpeech() {
   }
 }
 
-// Compact speak button
+// ============================================
+// Compact Speak Button
+// ============================================
 export function SpeakButton({ 
   text, 
   className = '',
   size = 'md',
-  language = 'en',
-  showLabel = false,
+  language: propLanguage,
+  showLanguageToggle = false,
 }: { 
   text: string
-  className?: string
+  className?: string 
   size?: 'sm' | 'md' | 'lg'
   language?: Language
-  showLabel?: boolean
+  showLanguageToggle?: boolean
 }) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const { speak, stopAudio, isPlaying, isLoading, language, setLanguage } = useTextToSpeech(propLanguage || 'en')
 
-  const handleClick = async () => {
-    if (isPlaying && audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.currentTime = 0
-      setIsPlaying(false)
-      return
-    }
-
-    setIsLoading(true)
-
-    try {
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, language, voice: 'male' }),
-      })
-
-      if (!response.ok) throw new Error('Failed')
-
-      const { audioUrl } = await response.json()
-      const audio = new Audio(audioUrl)
-      audioRef.current = audio
-
-      audio.onended = () => setIsPlaying(false)
-      audio.onerror = () => setIsPlaying(false)
-
-      await audio.play()
-      setIsPlaying(true)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-      }
-    }
-  }, [])
-
-  const sizes = {
-    sm: 'w-8 h-8',
-    md: 'w-10 h-10',
-    lg: 'w-12 h-12',
+  const sizeClasses = {
+    sm: 'w-6 h-6',
+    md: 'w-8 h-8',
+    lg: 'w-10 h-10',
   }
 
   const iconSizes = {
-    sm: 'w-4 h-4',
-    md: 'w-5 h-5',
-    lg: 'w-6 h-6',
+    sm: 'w-3.5 h-3.5',
+    md: 'w-4 h-4',
+    lg: 'w-5 h-5',
   }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={isLoading || !text}
-      className={`${sizes[size]} border border-[var(--color-border)] flex items-center justify-center gap-2 transition-colors disabled:opacity-30 ${
-        isPlaying ? 'bg-[var(--color-text)] text-[var(--color-bg)]' : 'active:bg-[var(--color-surface)]'
-      } ${className}`}
-      title={isPlaying ? 'Stop' : `Speak (${language === 'fr' ? 'French' : 'English'})`}
-    >
-      {isLoading ? (
-        <FiLoader className={`${iconSizes[size]} animate-spin`} strokeWidth={1.5} />
-      ) : isPlaying ? (
-        <FiVolumeX className={iconSizes[size]} strokeWidth={1.5} />
-      ) : (
-        <FiVolume2 className={iconSizes[size]} strokeWidth={1.5} />
-      )}
-      {showLabel && <span className="text-xs">{isPlaying ? 'Stop' : 'Listen'}</span>}
-    </button>
-  )
-}
-
-// Full TTS control panel
-export default function TextToSpeech({ 
-  text, 
-  className = '',
-  compact = false,
-  showLanguageSelector = true,
-  defaultLanguage = 'en',
-  onLanguageChange,
-}: TextToSpeechProps) {
-  const { 
-    speak, 
-    stopAudio,
-    language, 
-    setLanguage,
-    isPlaying, 
-    isLoading, 
-    error 
-  } = useTextToSpeech()
-
-  useEffect(() => {
-    setLanguage(defaultLanguage)
-  }, [defaultLanguage, setLanguage])
-
-  const handleLanguageChange = (lang: Language) => {
-    setLanguage(lang)
-    stopAudio()
-    onLanguageChange?.(lang)
-  }
-
-  const handleSpeak = () => {
-    speak(text)
-  }
-
-  if (compact) {
-    return (
-      <div className={`flex items-center gap-2 ${className}`}>
-        {showLanguageSelector && (
-          <div className="flex border border-[var(--color-border)]">
-            <button
-              onClick={() => handleLanguageChange('en')}
-              className={`px-2 py-1 text-[10px] uppercase tracking-wider ${
-                language === 'en' 
-                  ? 'bg-[var(--color-text)] text-[var(--color-bg)]' 
-                  : 'text-[var(--color-text-secondary)]'
-              }`}
-            >
-              EN
-            </button>
-            <button
-              onClick={() => handleLanguageChange('fr')}
-              className={`px-2 py-1 text-[10px] uppercase tracking-wider border-l border-[var(--color-border)] ${
-                language === 'fr' 
-                  ? 'bg-[var(--color-text)] text-[var(--color-bg)]' 
-                  : 'text-[var(--color-text-secondary)]'
-              }`}
-            >
-              FR
-            </button>
-          </div>
-        )}
+    <div className={`flex items-center gap-1 ${className}`}>
+      {showLanguageToggle && (
         <button
-          onClick={handleSpeak}
-          disabled={isLoading || !text}
-          className={`w-10 h-10 border border-[var(--color-border)] flex items-center justify-center transition-colors disabled:opacity-30 ${
-            isPlaying ? 'bg-[var(--color-text)] text-[var(--color-bg)]' : 'active:bg-[var(--color-surface)]'
-          }`}
+          onClick={() => setLanguage(language === 'en' ? 'fr' : 'en')}
+          className={`${sizeClasses[size]} flex items-center justify-center rounded-[var(--radius)] 
+            border border-[var(--color-border)] text-[var(--color-text-tertiary)] 
+            hover:text-[var(--color-text-secondary)] hover:border-[var(--color-border-light)]
+            transition-colors text-[10px] font-medium uppercase`}
+          title={`Switch to ${language === 'en' ? 'French' : 'English'}`}
         >
-          {isLoading ? (
-            <FiLoader className="w-5 h-5 animate-spin" strokeWidth={1.5} />
-          ) : isPlaying ? (
-            <FiVolumeX className="w-5 h-5" strokeWidth={1.5} />
-          ) : (
-            <FiVolume2 className="w-5 h-5" strokeWidth={1.5} />
-          )}
+          {language.toUpperCase()}
         </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className={`border border-[var(--color-border)] p-4 ${className}`}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <FiVolume2 className="w-4 h-4 text-[var(--color-text-secondary)]" strokeWidth={1.5} />
-          <span className="text-xs uppercase tracking-wider text-[var(--color-text-secondary)]">
-            Text to Speech
-          </span>
-        </div>
-        
-        {showLanguageSelector && (
-          <div className="flex items-center gap-1">
-            <FiGlobe className="w-3 h-3 text-[var(--color-text-tertiary)]" strokeWidth={1.5} />
-            <div className="flex border border-[var(--color-border)]">
-              <button
-                onClick={() => handleLanguageChange('en')}
-                className={`px-3 py-1.5 text-[10px] uppercase tracking-wider transition-colors ${
-                  language === 'en' 
-                    ? 'bg-[var(--color-text)] text-[var(--color-bg)]' 
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]'
-                }`}
-              >
-                English
-              </button>
-              <button
-                onClick={() => handleLanguageChange('fr')}
-                className={`px-3 py-1.5 text-[10px] uppercase tracking-wider border-l border-[var(--color-border)] transition-colors ${
-                  language === 'fr' 
-                    ? 'bg-[var(--color-text)] text-[var(--color-bg)]' 
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]'
-                }`}
-              >
-                Français
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
+      )}
       <button
-        onClick={handleSpeak}
+        onClick={() => isPlaying ? stopAudio() : speak(text)}
         disabled={isLoading || !text}
-        className={`w-full h-12 flex items-center justify-center gap-2 font-medium text-sm uppercase tracking-wider transition-colors disabled:opacity-30 ${
-          isPlaying 
-            ? 'bg-[var(--color-text)] text-[var(--color-bg)]' 
-            : 'border border-[var(--color-border)] active:bg-[var(--color-surface)]'
-        }`}
+        className={`${sizeClasses[size]} flex items-center justify-center rounded-[var(--radius)] 
+          border border-[var(--color-border)] 
+          ${isPlaying 
+            ? 'bg-[var(--color-white)] text-[var(--color-black)] border-[var(--color-white)]' 
+            : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-border-light)]'
+          }
+          disabled:opacity-40 transition-colors`}
+        title={isPlaying ? 'Stop' : 'Listen'}
       >
         {isLoading ? (
-          <>
-            <FiLoader className="w-5 h-5 animate-spin" strokeWidth={1.5} />
-            Generating...
-          </>
+          <FiLoader className={`${iconSizes[size]} animate-spin`} strokeWidth={1.5} />
         ) : isPlaying ? (
-          <>
-            <FiVolumeX className="w-5 h-5" strokeWidth={1.5} />
-            Stop
-          </>
+          <FiVolumeX className={iconSizes[size]} strokeWidth={1.5} />
         ) : (
-          <>
-            <FiVolume2 className="w-5 h-5" strokeWidth={1.5} />
-            Listen {language === 'fr' ? '(Français)' : '(English)'}
-          </>
+          <FiVolume2 className={iconSizes[size]} strokeWidth={1.5} />
         )}
       </button>
-
-      {error && (
-        <p className="mt-2 text-xs text-[var(--color-error)]">{error}</p>
-      )}
     </div>
   )
 }
 
+// ============================================
+// Full TTS Panel (for settings)
+// ============================================
+export default function TextToSpeech({ 
+  text,
+  showLanguageSelector = true,
+  compact = false,
+}: { 
+  text: string
+  showLanguageSelector?: boolean
+  compact?: boolean
+}) {
+  const { 
+    speak, 
+    stopAudio, 
+    language, 
+    setLanguage, 
+    isPlaying, 
+    isLoading 
+  } = useTextToSpeech()
+
+  if (compact) {
+    return (
+      <SpeakButton 
+        text={text} 
+        language={language}
+        showLanguageToggle={showLanguageSelector}
+      />
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {showLanguageSelector && (
+        <div className="flex items-center gap-1 border border-[var(--color-border)] rounded-[var(--radius)] p-0.5">
+          <button
+            onClick={() => setLanguage('en')}
+            className={`px-2 py-1 text-xs font-medium uppercase tracking-wider rounded-[var(--radius)] transition-colors
+              ${language === 'en' 
+                ? 'bg-[var(--color-white)] text-[var(--color-black)]' 
+                : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
+              }`}
+          >
+            EN
+          </button>
+          <button
+            onClick={() => setLanguage('fr')}
+            className={`px-2 py-1 text-xs font-medium uppercase tracking-wider rounded-[var(--radius)] transition-colors
+              ${language === 'fr' 
+                ? 'bg-[var(--color-white)] text-[var(--color-black)]' 
+                : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
+              }`}
+          >
+            FR
+          </button>
+        </div>
+      )}
+      
+      <button
+        onClick={() => isPlaying ? stopAudio() : speak(text)}
+        disabled={isLoading || !text}
+        className={`flex items-center gap-2 px-3 py-2 rounded-[var(--radius)] border transition-colors
+          ${isPlaying 
+            ? 'bg-[var(--color-white)] text-[var(--color-black)] border-[var(--color-white)]' 
+            : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-border-light)]'
+          }
+          disabled:opacity-40`}
+      >
+        {isLoading ? (
+          <>
+            <FiLoader className="w-4 h-4 animate-spin" strokeWidth={1.5} />
+            <span className="text-xs uppercase tracking-wider font-medium">Loading...</span>
+          </>
+        ) : isPlaying ? (
+          <>
+            <FiVolumeX className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-xs uppercase tracking-wider font-medium">Stop</span>
+          </>
+        ) : (
+          <>
+            <FiVolume2 className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-xs uppercase tracking-wider font-medium">Listen</span>
+          </>
+        )}
+      </button>
+    </div>
+  )
+}
