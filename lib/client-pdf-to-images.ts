@@ -6,8 +6,8 @@ let pdfjsLib: any = null
 async function getPdfJs() {
   if (!pdfjsLib && typeof window !== 'undefined') {
     pdfjsLib = await import('pdfjs-dist')
-    // Use unpkg CDN which properly serves the worker file
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
+    // Use local worker from public directory to avoid CORS issues
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
   }
   return pdfjsLib
 }
