@@ -22,9 +22,8 @@ export async function POST(request: NextRequest) {
     const apiToken = process.env.REPLICATE_API_TOKEN
     
     if (!apiToken) {
-      console.error('[TTS] REPLICATE_API_TOKEN not set')
       return NextResponse.json(
-        { error: 'TTS not configured. Set REPLICATE_API_TOKEN in Vercel.' },
+        { error: 'TTS not configured. Set REPLICATE_API_TOKEN.' },
         { status: 503 }
       )
     }
@@ -34,8 +33,6 @@ export async function POST(request: NextRequest) {
       text, 
       language = 'en', 
       voice = 'male',
-      speed = 1,
-      emotion = 'auto'
     } = body
 
     if (!text || text.trim().length === 0) {
@@ -48,21 +45,20 @@ export async function POST(request: NextRequest) {
 
     console.log(`[TTS] Starting: "${trimmedText.substring(0, 40)}..." voice=${voiceId}`)
 
-    // Create prediction using Replicate API directly
+    // Create prediction - use model name, NOT version hash
     const createResponse = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json',
-        'Prefer': 'wait'  // Wait for result synchronously
       },
       body: JSON.stringify({
         model: 'minimax/speech-02-turbo',
         input: {
           text: trimmedText,
           voice_id: voiceId,
-          speed: speed,
-          emotion: emotion,
+          speed: 1,
+          emotion: 'auto',
           pitch: 0,
           volume: 1,
           sample_rate: 32000,
@@ -75,64 +71,63 @@ export async function POST(request: NextRequest) {
       })
     })
 
-    const createData = await createResponse.json()
-    console.log('[TTS] Create response:', createResponse.status, JSON.stringify(createData).substring(0, 200))
-
     if (!createResponse.ok) {
+      const errorText = await createResponse.text()
+      console.error('[TTS] Create failed:', createResponse.status, errorText)
       return NextResponse.json(
-        { error: createData.detail || createData.error || 'Replicate API error', status: createResponse.status },
+        { error: `Replicate error: ${createResponse.status}`, details: errorText },
         { status: 500 }
       )
     }
 
-    // If using 'Prefer: wait', the output should be ready
-    let output = createData.output
+    let prediction = await createResponse.json()
+    console.log('[TTS] Created prediction:', prediction.id, prediction.status)
 
-    // If not ready, poll for completion
-    if (!output && createData.status !== 'succeeded' && createData.urls?.get) {
-      console.log('[TTS] Polling for result...')
+    // Poll for completion
+    let attempts = 0
+    while (prediction.status !== 'succeeded' && prediction.status !== 'failed' && attempts < 60) {
+      await new Promise(r => setTimeout(r, 1000))
       
-      for (let i = 0; i < 60; i++) {
-        await new Promise(r => setTimeout(r, 1000))
-        
-        const pollResponse = await fetch(createData.urls.get, {
-          headers: { 'Authorization': `Bearer ${apiToken}` }
-        })
-        const pollData = await pollResponse.json()
-        
-        console.log(`[TTS] Poll ${i + 1}: status=${pollData.status}`)
-        
-        if (pollData.status === 'succeeded') {
-          output = pollData.output
-          break
-        } else if (pollData.status === 'failed') {
-          return NextResponse.json(
-            { error: pollData.error || 'TTS generation failed' },
-            { status: 500 }
-          )
-        }
+      const pollResponse = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+        headers: { 'Authorization': `Bearer ${apiToken}` }
+      })
+      
+      prediction = await pollResponse.json()
+      attempts++
+      
+      if (attempts % 5 === 0) {
+        console.log(`[TTS] Poll ${attempts}: ${prediction.status}`)
       }
     }
 
-    if (!output) {
+    if (prediction.status === 'failed') {
+      console.error('[TTS] Prediction failed:', prediction.error)
       return NextResponse.json(
-        { error: 'TTS timed out or no output' },
+        { error: prediction.error || 'TTS generation failed' },
+        { status: 500 }
+      )
+    }
+
+    if (!prediction.output) {
+      console.error('[TTS] No output:', prediction)
+      return NextResponse.json(
+        { error: 'No audio generated' },
         { status: 500 }
       )
     }
 
     const duration = Date.now() - startTime
-    console.log(`[TTS] Done in ${duration}ms: ${String(output).substring(0, 80)}...`)
+    console.log(`[TTS] Done in ${duration}ms: ${String(prediction.output).substring(0, 80)}...`)
 
     return NextResponse.json({ 
-      audioUrl: output,
+      audioUrl: prediction.output,
       voiceId,
       language,
       duration 
     })
 
   } catch (error: any) {
-    console.error('[TTS] Error:', error.message, error.stack)
+    console.error('[TTS] Error:', error.message)
     return NextResponse.json(
       { error: error.message || 'TTS failed' },
       { status: 500 }
