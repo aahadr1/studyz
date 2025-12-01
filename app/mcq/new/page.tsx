@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiUpload, FiFile, FiX, FiLoader } from 'react-icons/fi'
+import { FiUpload, FiFile, FiX, FiLoader, FiCheck } from 'react-icons/fi'
 import Link from 'next/link'
 import MCQViewer, { MCQQuestion } from '@/components/MCQViewer'
 import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
@@ -13,6 +13,8 @@ export default function NewMCQPage() {
   const [name, setName] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStep, setProcessingStep] = useState('')
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{
     set: { id: string; name: string; total_pages: number; total_questions: number }
@@ -77,9 +79,9 @@ export default function NewMCQPage() {
         throw new Error(`PDF has ${pageImages.length} pages, which exceeds the maximum limit of 40 pages`)
       }
 
-      setProcessingStep('Extracting MCQ questions with AI...')
+      setTotalPages(pageImages.length)
 
-      // Send to API for processing
+      // Get auth session
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
 
@@ -89,7 +91,9 @@ export default function NewMCQPage() {
         return
       }
 
-      const response = await fetch('/api/mcq', {
+      // Step 1: Create MCQ set
+      setProcessingStep('Creating MCQ set...')
+      const createResponse = await fetch('/api/mcq', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -98,26 +102,75 @@ export default function NewMCQPage() {
         body: JSON.stringify({
           name: name || file.name.replace('.pdf', ''),
           sourcePdfName: file.name,
-          pageImages: pageImages.map(p => ({
-            pageNumber: p.pageNumber,
-            dataUrl: p.dataUrl,
-          })),
+          totalPages: pageImages.length,
         }),
       })
 
-      const data = await response.json()
+      const createData = await createResponse.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process PDF')
+      if (!createResponse.ok) {
+        throw new Error(createData.error || 'Failed to create MCQ set')
       }
 
-      setResult(data)
+      const mcqSetId = createData.set.id
+      const allQuestions: MCQQuestion[] = []
+
+      // Step 2: Upload and process each page one by one
+      for (let i = 0; i < pageImages.length; i++) {
+        const pageImage = pageImages[i]
+        setCurrentPage(i + 1)
+        setProcessingStep(`Processing page ${i + 1} of ${pageImages.length}...`)
+
+        try {
+          const pageResponse = await fetch(`/api/mcq/${mcqSetId}/page`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              pageNumber: pageImage.pageNumber,
+              dataUrl: pageImage.dataUrl,
+            }),
+          })
+
+          const pageData = await pageResponse.json()
+
+          if (!pageResponse.ok) {
+            console.error(`Error processing page ${i + 1}:`, pageData.error)
+            // Continue with next page
+            continue
+          }
+
+          // Collect questions from this page
+          if (pageData.questions && pageData.questions.length > 0) {
+            allQuestions.push(...pageData.questions)
+          }
+
+          console.log(`Page ${i + 1}: extracted ${pageData.questionsExtracted} questions`)
+        } catch (pageError) {
+          console.error(`Error processing page ${i + 1}:`, pageError)
+          // Continue with next page
+        }
+      }
+
+      setResult({
+        set: {
+          id: mcqSetId,
+          name: createData.set.name,
+          total_pages: pageImages.length,
+          total_questions: allQuestions.length,
+        },
+        questions: allQuestions,
+        message: `Successfully extracted ${allQuestions.length} questions from ${pageImages.length} pages`
+      })
     } catch (err: any) {
       console.error('Upload error:', err)
       setError(err.message || 'Failed to process PDF')
     } finally {
       setIsProcessing(false)
       setProcessingStep('')
+      setCurrentPage(0)
     }
   }
 
@@ -126,6 +179,8 @@ export default function NewMCQPage() {
     setName('')
     setError(null)
     setResult(null)
+    setCurrentPage(0)
+    setTotalPages(0)
   }
 
   if (!user) {
@@ -146,7 +201,7 @@ export default function NewMCQPage() {
             <div>
               <h1 className="text-lg font-semibold text-text-primary">{result.set.name}</h1>
               <p className="text-sm text-text-secondary">
-                {result.set.total_questions} question{result.set.total_questions !== 1 ? 's' : ''} extracted
+                {result.set.total_questions} question{result.set.total_questions !== 1 ? 's' : ''} extracted from {result.set.total_pages} page{result.set.total_pages !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="flex gap-3">
@@ -285,17 +340,28 @@ export default function NewMCQPage() {
               {/* Processing status */}
               {isProcessing && (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mb-3">
                     <FiLoader className="w-5 h-5 text-blue-600 animate-spin" />
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-blue-900">
                         {processingStep}
                       </p>
-                      <p className="text-xs text-blue-700">
-                        This may take a few minutes. Please wait...
-                      </p>
                     </div>
                   </div>
+                  {totalPages > 0 && currentPage > 0 && (
+                    <div>
+                      <div className="flex justify-between text-xs text-blue-700 mb-1">
+                        <span>Page {currentPage} of {totalPages}</span>
+                        <span>{Math.round((currentPage / totalPages) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${(currentPage / totalPages) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
