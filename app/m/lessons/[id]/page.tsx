@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef, use } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useRef } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
   FiChevronLeft, 
@@ -14,10 +14,10 @@ import {
 } from 'react-icons/fi'
 import type { Lesson, LessonPage, LessonMessage } from '@/types/db'
 
-export default function MobileLessonViewerPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function MobileLessonViewerPage() {
+  const params = useParams()
   const router = useRouter()
-  const lessonId = resolvedParams.id
+  const lessonId = params.id as string
 
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [pages, setPages] = useState<LessonPage[]>([])

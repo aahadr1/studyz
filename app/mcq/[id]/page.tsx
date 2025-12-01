@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { FiLoader, FiEdit2, FiBook, FiZap, FiCheckCircle } from 'react-icons/fi'
 import Link from 'next/link'
 import MCQViewer, { MCQQuestion, Lesson } from '@/components/MCQViewer'
 
-export default function MCQSetPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function MCQSetPage() {
+  const params = useParams()
+  const mcqSetId = params.id as string
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mcqSet, setMcqSet] = useState<any>(null)
@@ -36,7 +38,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
           return
         }
 
-        const response = await fetch(`/api/mcq/${resolvedParams.id}`, {
+        const response = await fetch(`/api/mcq/${mcqSetId}`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
           },
@@ -59,7 +61,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
     }
 
     loadMCQSet()
-  }, [resolvedParams.id])
+  }, [mcqSetId])
 
   const handleGenerateLesson = async () => {
     setGeneratingLesson(true)
@@ -69,7 +71,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
       
       if (!session) return
 
-      const response = await fetch(`/api/mcq/${resolvedParams.id}/generate-lesson`, {
+      const response = await fetch(`/api/mcq/${mcqSetId}/generate-lesson`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -82,7 +84,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
         setLesson(data.lesson)
         
         // Refetch questions to get updated section_ids
-        const questionsResponse = await fetch(`/api/mcq/${resolvedParams.id}`, {
+        const questionsResponse = await fetch(`/api/mcq/${mcqSetId}`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
           },
@@ -110,7 +112,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
       
       if (!session) return
 
-      const response = await fetch(`/api/mcq/${resolvedParams.id}/generate-lesson-cards`, {
+      const response = await fetch(`/api/mcq/${mcqSetId}/generate-lesson-cards`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -121,7 +123,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
       
       if (response.ok) {
         // Refetch to get updated questions with lesson cards
-        const questionsResponse = await fetch(`/api/mcq/${resolvedParams.id}`, {
+        const questionsResponse = await fetch(`/api/mcq/${mcqSetId}`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
           },
@@ -153,7 +155,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
       
       if (!session) return
 
-      const response = await fetch(`/api/mcq/${resolvedParams.id}/auto-correct`, {
+      const response = await fetch(`/api/mcq/${mcqSetId}/auto-correct`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -164,7 +166,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
       
       if (response.ok) {
         // Refetch to get corrected questions
-        const questionsResponse = await fetch(`/api/mcq/${resolvedParams.id}`, {
+        const questionsResponse = await fetch(`/api/mcq/${mcqSetId}`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
           },
@@ -305,7 +307,7 @@ export default function MCQSetPage({ params }: { params: Promise<{ id: string }>
                 </button>
               )}
               
-              <Link href={`/mcq/${resolvedParams.id}/edit`} className="btn-secondary text-sm">
+              <Link href={`/mcq/${mcqSetId}/edit`} className="btn-secondary text-sm">
                 <FiEdit2 className="w-4 h-4" />
                 Edit
               </Link>

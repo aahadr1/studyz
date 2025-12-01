@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback, use } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
   FiChevronLeft, 
@@ -35,10 +35,10 @@ interface MCQQuestion {
 
 type MCQMode = 'study' | 'test' | 'challenge' | 'review'
 
-export default function MobileMCQViewerPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function MobileMCQViewerPage() {
+  const params = useParams()
   const router = useRouter()
-  const mcqSetId = resolvedParams.id
+  const mcqSetId = params.id as string
 
   // Data state
   const [mcqSet, setMcqSet] = useState<any>(null)
