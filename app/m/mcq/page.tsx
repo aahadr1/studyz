@@ -1,22 +1,29 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import MobileLayout, { MobileHeader, FloatingActionButton, EmptyState, BottomSheet } from '@/components/mobile/MobileLayout'
+import MobileLayout, { 
+  MobileHeader, 
+  FloatingActionButton, 
+  EmptyState, 
+  BottomSheet,
+  ListSkeleton,
+  PullToRefreshIndicator
+} from '@/components/mobile/MobileLayout'
+import { usePullToRefresh, useHapticFeedback } from '@/components/mobile/useMobileUtils'
 import { 
   FiPlus, 
   FiCheckSquare, 
   FiTrash2, 
-  FiArrowRight,
   FiMoreVertical,
   FiCalendar,
   FiHelpCircle,
   FiEdit2,
   FiPlay,
   FiCheckCircle,
-  FiBook
+  FiSearch
 } from 'react-icons/fi'
 
 interface McqSet {
@@ -36,12 +43,11 @@ export default function MobileMCQPage() {
   const [selectedSet, setSelectedSet] = useState<McqSet | null>(null)
   const [showActionSheet, setShowActionSheet] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
+  const { triggerHaptic } = useHapticFeedback()
 
-  useEffect(() => {
-    loadMcqSets()
-  }, [])
-
-  const loadMcqSets = async () => {
+  const loadMcqSets = useCallback(async () => {
     const supabase = createClient()
     
     try {
@@ -64,12 +70,29 @@ export default function MobileMCQPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [router])
+
+  useEffect(() => {
+    loadMcqSets()
+  }, [loadMcqSets])
+
+  // Pull to refresh
+  const {
+    containerRef,
+    isRefreshing,
+    pullProgress
+  } = usePullToRefresh({
+    onRefresh: async () => {
+      triggerHaptic('medium')
+      await loadMcqSets()
+    }
+  })
 
   const handleDelete = async () => {
     if (!selectedSet) return
     
     setDeleting(true)
+    triggerHaptic('warning')
     const supabase = createClient()
     
     try {
@@ -82,10 +105,12 @@ export default function MobileMCQPage() {
       })
 
       if (response.ok) {
+        triggerHaptic('success')
         setMcqSets(mcqSets.filter(s => s.id !== selectedSet.id))
       }
     } catch (error) {
       console.error('Error deleting MCQ set:', error)
+      triggerHaptic('error')
     } finally {
       setDeleting(false)
       setShowActionSheet(false)
@@ -106,12 +131,16 @@ export default function MobileMCQPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
+  const filteredSets = searchQuery.trim()
+    ? mcqSets.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : mcqSets
+
   if (loading) {
     return (
       <MobileLayout>
         <MobileHeader title="Quiz" />
-        <div className="mobile-content flex items-center justify-center">
-          <div className="spinner-mobile" />
+        <div className="mobile-content">
+          <ListSkeleton count={5} />
         </div>
       </MobileLayout>
     )
@@ -122,13 +151,43 @@ export default function MobileMCQPage() {
       <MobileHeader 
         title="Quiz Sets" 
         rightAction={
-          <Link href="/m/mcq/new" className="mobile-header-action">
-            <FiPlus className="w-6 h-6" />
-          </Link>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => setShowSearch(!showSearch)} 
+              className="mobile-header-action"
+            >
+              <FiSearch className="w-5 h-5" />
+            </button>
+            <Link href="/m/mcq/new" className="mobile-header-action">
+              <FiPlus className="w-6 h-6" />
+            </Link>
+          </div>
         }
       />
 
-      <div className="mobile-content">
+      <div 
+        ref={containerRef}
+        className="mobile-content"
+      >
+        <PullToRefreshIndicator progress={pullProgress} isRefreshing={isRefreshing} />
+
+        {/* Search Bar */}
+        {showSearch && (
+          <div className="px-4 py-3 border-b border-[var(--color-border)] animate-slide-down">
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)]" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search quizzes..."
+                className="input-mobile pl-10 py-2.5 text-sm"
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
+
         {mcqSets.length === 0 ? (
           <EmptyState
             icon={<FiCheckSquare />}
@@ -141,13 +200,24 @@ export default function MobileMCQPage() {
               </Link>
             }
           />
+        ) : filteredSets.length === 0 ? (
+          <EmptyState
+            icon={<FiSearch />}
+            title="No results"
+            description={`No quizzes matching "${searchQuery}"`}
+          />
         ) : (
           <div className="px-4 py-4 space-y-3 stagger-children">
-            {mcqSets.map((mcq) => (
-              <div key={mcq.id} className="item-card pr-2">
+            {filteredSets.map((mcq, index) => (
+              <div 
+                key={mcq.id} 
+                className="item-card pr-2"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
                 <Link
                   href={`/m/mcq/${mcq.id}`}
                   className="flex items-center gap-3 flex-1 min-w-0"
+                  onClick={() => triggerHaptic('light')}
                 >
                   <div className="item-card-icon bg-[var(--color-secondary-soft)]">
                     <FiCheckSquare className="text-[var(--color-secondary)]" />
@@ -176,10 +246,11 @@ export default function MobileMCQPage() {
                 <button
                   onClick={(e) => {
                     e.preventDefault()
+                    triggerHaptic('light')
                     setSelectedSet(mcq)
                     setShowActionSheet(true)
                   }}
-                  className="p-2 -mr-1 text-[var(--color-text-tertiary)]"
+                  className="p-2 -mr-1 text-[var(--color-text-tertiary)] active:scale-90 transition-transform"
                 >
                   <FiMoreVertical className="w-5 h-5" />
                 </button>
@@ -209,7 +280,10 @@ export default function MobileMCQPage() {
           <Link
             href={`/m/mcq/${selectedSet?.id}`}
             className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] active:bg-[var(--color-surface-hover)] transition-colors"
-            onClick={() => setShowActionSheet(false)}
+            onClick={() => {
+              triggerHaptic('light')
+              setShowActionSheet(false)
+            }}
           >
             <div className="w-10 h-10 rounded-full bg-[var(--color-accent-soft)] flex items-center justify-center">
               <FiPlay className="w-5 h-5 text-[var(--color-accent)]" />
@@ -220,7 +294,10 @@ export default function MobileMCQPage() {
           <Link
             href={`/m/mcq/${selectedSet?.id}/edit`}
             className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] active:bg-[var(--color-surface-hover)] transition-colors"
-            onClick={() => setShowActionSheet(false)}
+            onClick={() => {
+              triggerHaptic('light')
+              setShowActionSheet(false)
+            }}
           >
             <div className="w-10 h-10 rounded-full bg-[var(--color-secondary-soft)] flex items-center justify-center">
               <FiEdit2 className="w-5 h-5 text-[var(--color-secondary)]" />
@@ -249,4 +326,3 @@ export default function MobileMCQPage() {
     </MobileLayout>
   )
 }
-

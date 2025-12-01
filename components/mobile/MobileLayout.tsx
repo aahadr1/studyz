@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { 
@@ -9,8 +9,12 @@ import {
   FiCheckSquare, 
   FiUser,
   FiChevronLeft,
-  FiMoreHorizontal
+  FiRefreshCw,
+  FiWifi,
+  FiWifiOff
 } from 'react-icons/fi'
+import { ToastProvider } from './MobileToast'
+import { useNetworkStatus } from './useMobileUtils'
 
 // ============================================
 // Types
@@ -29,6 +33,56 @@ interface MobileHeaderProps {
   rightAction?: ReactNode
   transparent?: boolean
   largeTitle?: boolean
+}
+
+// ============================================
+// Network Status Banner
+// ============================================
+function NetworkStatusBanner() {
+  const { isOnline } = useNetworkStatus()
+  const [showBanner, setShowBanner] = useState(false)
+  const [wasOffline, setWasOffline] = useState(false)
+
+  useEffect(() => {
+    if (!isOnline) {
+      setShowBanner(true)
+      setWasOffline(true)
+    } else if (wasOffline) {
+      // Show "back online" message briefly
+      setShowBanner(true)
+      const timer = setTimeout(() => {
+        setShowBanner(false)
+        setWasOffline(false)
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [isOnline, wasOffline])
+
+  if (!showBanner) return null
+
+  return (
+    <div 
+      className={`fixed top-0 left-0 right-0 z-[600] px-4 py-2 text-center text-sm font-medium transition-all duration-300 safe-top ${
+        isOnline 
+          ? 'bg-[var(--color-success)] text-white' 
+          : 'bg-[var(--color-error)] text-white'
+      }`}
+    >
+      <div className="flex items-center justify-center gap-2">
+        {isOnline ? (
+          <>
+            <FiWifi className="w-4 h-4" />
+            <span>Back online</span>
+          </>
+        ) : (
+          <>
+            <FiWifiOff className="w-4 h-4" />
+            <span>No internet connection</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ============================================
@@ -154,10 +208,13 @@ export default function MobileLayout({
   hideTabBar = false 
 }: MobileLayoutProps) {
   return (
-    <div className="mobile-app">
-      {children}
-      {!hideTabBar && <MobileTabBar />}
-    </div>
+    <ToastProvider>
+      <div className="mobile-app">
+        <NetworkStatusBanner />
+        {children}
+        {!hideTabBar && <MobileTabBar />}
+      </div>
+    </ToastProvider>
   )
 }
 
@@ -262,6 +319,18 @@ export function BottomSheet({
   title?: string
   children: ReactNode
 }) {
+  // Lock body scroll when open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
+
   return (
     <>
       {/* Overlay */}
@@ -327,6 +396,93 @@ export function EmptyState({
 }
 
 // ============================================
+// Pull to Refresh Indicator
+// ============================================
+export function PullToRefreshIndicator({ 
+  progress, 
+  isRefreshing 
+}: { 
+  progress: number
+  isRefreshing: boolean 
+}) {
+  if (progress === 0 && !isRefreshing) return null
+
+  return (
+    <div 
+      className="flex items-center justify-center py-4 transition-all"
+      style={{ 
+        opacity: Math.min(progress, 1),
+        transform: `translateY(${Math.min(progress * 20, 20)}px)` 
+      }}
+    >
+      <div 
+        className={`w-8 h-8 rounded-full border-2 border-[var(--color-accent)] flex items-center justify-center ${
+          isRefreshing ? 'animate-spin' : ''
+        }`}
+        style={{ 
+          borderTopColor: 'transparent',
+          transform: `rotate(${progress * 360}deg)` 
+        }}
+      >
+        <FiRefreshCw className={`w-4 h-4 text-[var(--color-accent)] ${isRefreshing ? '' : 'hidden'}`} />
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// Skeleton Loader Component
+// ============================================
+export function Skeleton({ 
+  className = '', 
+  variant = 'text' 
+}: { 
+  className?: string
+  variant?: 'text' | 'circular' | 'rectangular' 
+}) {
+  const baseClasses = 'skeleton animate-pulse'
+  const variantClasses = {
+    text: 'h-4 rounded',
+    circular: 'rounded-full',
+    rectangular: 'rounded-lg',
+  }
+
+  return (
+    <div className={`${baseClasses} ${variantClasses[variant]} ${className}`} />
+  )
+}
+
+// ============================================
+// Card Skeleton Loader
+// ============================================
+export function CardSkeleton() {
+  return (
+    <div className="mobile-card p-4 animate-pulse">
+      <div className="flex items-center gap-3">
+        <Skeleton variant="circular" className="w-11 h-11 flex-shrink-0" />
+        <div className="flex-1">
+          <Skeleton className="w-3/4 mb-2" />
+          <Skeleton className="w-1/2" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// List Skeleton Loader
+// ============================================
+export function ListSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div className="space-y-3 px-4 py-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <CardSkeleton key={i} />
+      ))}
+    </div>
+  )
+}
+
+// ============================================
 // Pull to Refresh Hook (for future use)
 // ============================================
 export function usePullToRefresh(onRefresh: () => Promise<void>) {
@@ -337,4 +493,3 @@ export function usePullToRefresh(onRefresh: () => Promise<void>) {
     pullProgress: 0
   }
 }
-

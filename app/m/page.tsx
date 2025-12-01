@@ -1,21 +1,26 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import MobileLayout, { MobileHeader, FloatingActionButton, EmptyState } from '@/components/mobile/MobileLayout'
+import MobileLayout, { 
+  FloatingActionButton, 
+  PullToRefreshIndicator,
+  ListSkeleton,
+  Skeleton 
+} from '@/components/mobile/MobileLayout'
+import { usePullToRefresh, useHapticFeedback } from '@/components/mobile/useMobileUtils'
 import { 
   FiPlus, 
   FiBook, 
   FiCheckSquare, 
   FiArrowRight, 
-  FiClock,
-  FiTrendingUp,
   FiAward,
-  FiZap,
   FiUpload,
-  FiFileText
+  FiFileText,
+  FiTrendingUp,
+  FiCalendar
 } from 'react-icons/fi'
 import type { Lesson } from '@/types/db'
 
@@ -34,18 +39,9 @@ export default function MobileHomePage() {
   const [loading, setLoading] = useState(true)
   const [greeting, setGreeting] = useState('Hello')
   const horizontalScrollRef = useRef<HTMLDivElement>(null)
+  const { triggerHaptic } = useHapticFeedback()
 
-  useEffect(() => {
-    // Set greeting based on time
-    const hour = new Date().getHours()
-    if (hour < 12) setGreeting('Good morning')
-    else if (hour < 18) setGreeting('Good afternoon')
-    else setGreeting('Good evening')
-
-    loadDashboard()
-  }, [])
-
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     const supabase = createClient()
     
     try {
@@ -87,16 +83,78 @@ export default function MobileHomePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [router])
+
+  useEffect(() => {
+    // Set greeting based on time
+    const hour = new Date().getHours()
+    if (hour < 12) setGreeting('Good morning')
+    else if (hour < 18) setGreeting('Good afternoon')
+    else setGreeting('Good evening')
+
+    loadDashboard()
+  }, [loadDashboard])
+
+  // Pull to refresh
+  const {
+    containerRef,
+    isRefreshing,
+    pullProgress
+  } = usePullToRefresh({
+    onRefresh: async () => {
+      triggerHaptic('medium')
+      setLoading(true)
+      await loadDashboard()
+    }
+  })
 
   const firstName = user?.fullName?.split(' ')[0] || 'there'
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    
+    if (days === 0) return 'Today'
+    if (days === 1) return 'Yesterday'
+    if (days < 7) return `${days}d ago`
+    
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
 
   if (loading) {
     return (
       <MobileLayout>
-        <MobileHeader title="Home" />
-        <div className="mobile-content flex items-center justify-center">
-          <div className="spinner-mobile" />
+        {/* Custom Header Skeleton */}
+        <header className="mobile-header">
+          <div className="flex-1">
+            <Skeleton className="w-20 h-3 mb-1" />
+            <Skeleton className="w-32 h-5" />
+          </div>
+          <Skeleton variant="circular" className="w-10 h-10" />
+        </header>
+
+        <div 
+          className="mobile-content"
+        >
+          {/* Stats Skeleton */}
+          <section className="px-4 pt-4 pb-2">
+            <div className="grid grid-cols-3 gap-3">
+              {[1, 2, 3].map(i => (
+                <Skeleton key={i} variant="rectangular" className="h-24" />
+              ))}
+            </div>
+          </section>
+
+          {/* Quick Actions Skeleton */}
+          <section className="px-4 py-4">
+            <Skeleton className="w-28 h-5 mb-3" />
+            <div className="grid grid-cols-2 gap-3">
+              <Skeleton variant="rectangular" className="h-32" />
+              <Skeleton variant="rectangular" className="h-32" />
+            </div>
+          </section>
         </div>
       </MobileLayout>
     )
@@ -118,24 +176,37 @@ export default function MobileHomePage() {
       </header>
 
       {/* Scrollable Content */}
-      <div className="mobile-content">
+      <div 
+        ref={containerRef}
+        className="mobile-content"
+      >
+        <PullToRefreshIndicator progress={pullProgress} isRefreshing={isRefreshing} />
+        
         {/* Quick Stats */}
         <section className="px-4 pt-4 pb-2">
           <div className="grid grid-cols-3 gap-3">
-            <div className="feature-card p-4 text-center">
+            <Link 
+              href="/m/lessons"
+              className="feature-card p-4 text-center active:scale-[0.97] transition-transform"
+              onClick={() => triggerHaptic('light')}
+            >
               <div className="feature-card-icon cyan mx-auto mb-2 w-10 h-10">
                 <FiBook className="w-5 h-5" />
               </div>
               <div className="text-xl font-bold text-[var(--color-text-primary)]">{recentLessons.length}</div>
               <div className="text-[10px] text-[var(--color-text-secondary)] font-medium">Lessons</div>
-            </div>
-            <div className="feature-card p-4 text-center">
+            </Link>
+            <Link 
+              href="/m/mcq"
+              className="feature-card p-4 text-center active:scale-[0.97] transition-transform"
+              onClick={() => triggerHaptic('light')}
+            >
               <div className="feature-card-icon purple mx-auto mb-2 w-10 h-10">
                 <FiCheckSquare className="w-5 h-5" />
               </div>
               <div className="text-xl font-bold text-[var(--color-text-primary)]">{recentMcqs.length}</div>
               <div className="text-[10px] text-[var(--color-text-secondary)] font-medium">Quizzes</div>
-            </div>
+            </Link>
             <div className="feature-card p-4 text-center">
               <div className="feature-card-icon gold mx-auto mb-2 w-10 h-10">
                 <FiAward className="w-5 h-5" />
@@ -150,7 +221,11 @@ export default function MobileHomePage() {
         <section className="px-4 py-4">
           <h2 className="text-base font-bold text-[var(--color-text-primary)] mb-3">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
-            <Link href="/m/lessons/new" className="feature-card p-4 active:scale-[0.98] transition-transform">
+            <Link 
+              href="/m/lessons/new" 
+              className="feature-card p-4 active:scale-[0.98] transition-transform"
+              onClick={() => triggerHaptic('light')}
+            >
               <div className="feature-card-icon cyan mb-3">
                 <FiUpload className="w-6 h-6" />
               </div>
@@ -159,7 +234,11 @@ export default function MobileHomePage() {
                 Upload a PDF to study
               </p>
             </Link>
-            <Link href="/m/mcq/new" className="feature-card p-4 active:scale-[0.98] transition-transform">
+            <Link 
+              href="/m/mcq/new" 
+              className="feature-card p-4 active:scale-[0.98] transition-transform"
+              onClick={() => triggerHaptic('light')}
+            >
               <div className="feature-card-icon purple mb-3">
                 <FiFileText className="w-6 h-6" />
               </div>
@@ -175,22 +254,28 @@ export default function MobileHomePage() {
         <section className="py-4">
           <div className="flex items-center justify-between px-4 mb-3">
             <h2 className="text-base font-bold text-[var(--color-text-primary)]">Recent Lessons</h2>
-            <Link href="/m/lessons" className="text-xs font-semibold text-[var(--color-accent)]">
+            <Link 
+              href="/m/lessons" 
+              className="text-xs font-semibold text-[var(--color-accent)] flex items-center gap-1"
+              onClick={() => triggerHaptic('light')}
+            >
               See all
+              <FiArrowRight className="w-3 h-3" />
             </Link>
           </div>
           
           {recentLessons.length > 0 ? (
             <div 
               ref={horizontalScrollRef}
-              className="flex gap-3 overflow-x-auto px-4 pb-2 no-scrollbar"
+              className="flex gap-3 overflow-x-auto px-4 pb-2 no-scrollbar snap-x snap-mandatory"
             >
               {recentLessons.map((lesson, index) => (
                 <Link
                   key={lesson.id}
                   href={`/m/lessons/${lesson.id}`}
-                  className="flex-shrink-0 w-[200px] mobile-card p-4 active:scale-[0.98] transition-transform animate-slide-in"
+                  className="flex-shrink-0 w-[180px] mobile-card p-4 active:scale-[0.98] transition-transform animate-slide-in snap-start"
                   style={{ animationDelay: `${index * 50}ms` }}
+                  onClick={() => triggerHaptic('light')}
                 >
                   <div className="w-10 h-10 rounded-xl bg-[var(--color-accent-soft)] flex items-center justify-center mb-3">
                     <FiBook className="w-5 h-5 text-[var(--color-accent)]" />
@@ -198,11 +283,25 @@ export default function MobileHomePage() {
                   <h3 className="font-semibold text-[var(--color-text-primary)] text-sm mb-1 line-clamp-2">
                     {lesson.name}
                   </h3>
-                  <p className="text-xs text-[var(--color-text-secondary)]">
-                    {lesson.total_pages} page{lesson.total_pages !== 1 ? 's' : ''}
-                  </p>
+                  <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                    <span>{lesson.total_pages}p</span>
+                    <span>•</span>
+                    <span>{formatDate(lesson.created_at)}</span>
+                  </div>
                 </Link>
               ))}
+              
+              {/* Add More Card */}
+              <Link
+                href="/m/lessons/new"
+                className="flex-shrink-0 w-[180px] mobile-card p-4 flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-border)] bg-transparent active:scale-[0.98] transition-transform snap-start"
+                onClick={() => triggerHaptic('light')}
+              >
+                <div className="w-10 h-10 rounded-xl bg-[var(--color-surface)] flex items-center justify-center mb-2">
+                  <FiPlus className="w-5 h-5 text-[var(--color-text-tertiary)]" />
+                </div>
+                <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Add Lesson</span>
+              </Link>
             </div>
           ) : (
             <div className="px-4">
@@ -224,18 +323,25 @@ export default function MobileHomePage() {
         <section className="py-4 pb-8">
           <div className="flex items-center justify-between px-4 mb-3">
             <h2 className="text-base font-bold text-[var(--color-text-primary)]">Recent Quizzes</h2>
-            <Link href="/m/mcq" className="text-xs font-semibold text-[var(--color-accent)]">
+            <Link 
+              href="/m/mcq" 
+              className="text-xs font-semibold text-[var(--color-accent)] flex items-center gap-1"
+              onClick={() => triggerHaptic('light')}
+            >
               See all
+              <FiArrowRight className="w-3 h-3" />
             </Link>
           </div>
           
           {recentMcqs.length > 0 ? (
             <div className="px-4 space-y-2 stagger-children">
-              {recentMcqs.slice(0, 3).map((mcq) => (
+              {recentMcqs.slice(0, 3).map((mcq, index) => (
                 <Link
                   key={mcq.id}
                   href={`/m/mcq/${mcq.id}`}
                   className="item-card"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                  onClick={() => triggerHaptic('light')}
                 >
                   <div className="item-card-icon bg-[var(--color-secondary-soft)]">
                     <FiCheckSquare className="text-[var(--color-secondary)]" />
@@ -243,7 +349,7 @@ export default function MobileHomePage() {
                   <div className="item-card-content">
                     <h3 className="item-card-title">{mcq.name}</h3>
                     <p className="item-card-meta">
-                      {mcq.total_questions} question{mcq.total_questions !== 1 ? 's' : ''}
+                      {mcq.total_questions} question{mcq.total_questions !== 1 ? 's' : ''} • {formatDate(mcq.created_at)}
                     </p>
                   </div>
                   <FiArrowRight className="item-card-chevron w-5 h-5" />
@@ -265,6 +371,23 @@ export default function MobileHomePage() {
             </div>
           )}
         </section>
+
+        {/* Study Tip */}
+        <section className="px-4 pb-8">
+          <div className="mobile-card-gradient p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[var(--color-tertiary-soft)] flex items-center justify-center flex-shrink-0">
+                <FiTrendingUp className="w-5 h-5 text-[var(--color-tertiary)]" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-[var(--color-text-primary)] text-sm mb-1">Study Tip</h3>
+                <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+                  Review your quizzes regularly to reinforce learning. Spaced repetition helps retain information longer!
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
       {/* Floating Action Button */}
@@ -276,4 +399,3 @@ export default function MobileHomePage() {
     </MobileLayout>
   )
 }
-

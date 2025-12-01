@@ -1,19 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import MobileLayout, { MobileHeader, FloatingActionButton, EmptyState, BottomSheet } from '@/components/mobile/MobileLayout'
+import MobileLayout, { 
+  MobileHeader, 
+  FloatingActionButton, 
+  EmptyState, 
+  BottomSheet, 
+  ListSkeleton,
+  PullToRefreshIndicator 
+} from '@/components/mobile/MobileLayout'
+import { usePullToRefresh, useHapticFeedback } from '@/components/mobile/useMobileUtils'
 import { 
   FiPlus, 
   FiBook, 
   FiTrash2, 
-  FiArrowRight,
   FiMoreVertical,
   FiCalendar,
   FiFileText,
-  FiAlertCircle
+  FiSearch
 } from 'react-icons/fi'
 import type { Lesson } from '@/types/db'
 
@@ -24,12 +31,11 @@ export default function MobileLessonsPage() {
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null)
   const [showActionSheet, setShowActionSheet] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
+  const { triggerHaptic } = useHapticFeedback()
 
-  useEffect(() => {
-    loadLessons()
-  }, [])
-
-  const loadLessons = async () => {
+  const loadLessons = useCallback(async () => {
     const supabase = createClient()
     
     try {
@@ -52,12 +58,29 @@ export default function MobileLessonsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [router])
+
+  useEffect(() => {
+    loadLessons()
+  }, [loadLessons])
+
+  // Pull to refresh
+  const {
+    containerRef,
+    isRefreshing,
+    pullProgress
+  } = usePullToRefresh({
+    onRefresh: async () => {
+      triggerHaptic('medium')
+      await loadLessons()
+    }
+  })
 
   const handleDelete = async () => {
     if (!selectedLesson) return
     
     setDeleting(true)
+    triggerHaptic('warning')
     const supabase = createClient()
     
     try {
@@ -70,10 +93,12 @@ export default function MobileLessonsPage() {
       })
 
       if (response.ok) {
+        triggerHaptic('success')
         setLessons(lessons.filter(l => l.id !== selectedLesson.id))
       }
     } catch (error) {
       console.error('Error deleting lesson:', error)
+      triggerHaptic('error')
     } finally {
       setDeleting(false)
       setShowActionSheet(false)
@@ -97,12 +122,16 @@ export default function MobileLessonsPage() {
     })
   }
 
+  const filteredLessons = searchQuery.trim()
+    ? lessons.filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : lessons
+
   if (loading) {
     return (
       <MobileLayout>
         <MobileHeader title="Lessons" />
-        <div className="mobile-content flex items-center justify-center">
-          <div className="spinner-mobile" />
+        <div className="mobile-content">
+          <ListSkeleton count={5} />
         </div>
       </MobileLayout>
     )
@@ -113,13 +142,43 @@ export default function MobileLessonsPage() {
       <MobileHeader 
         title="Lessons" 
         rightAction={
-          <Link href="/m/lessons/new" className="mobile-header-action">
-            <FiPlus className="w-6 h-6" />
-          </Link>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => setShowSearch(!showSearch)} 
+              className="mobile-header-action"
+            >
+              <FiSearch className="w-5 h-5" />
+            </button>
+            <Link href="/m/lessons/new" className="mobile-header-action">
+              <FiPlus className="w-6 h-6" />
+            </Link>
+          </div>
         }
       />
 
-      <div className="mobile-content">
+      <div 
+        ref={containerRef}
+        className="mobile-content"
+      >
+        <PullToRefreshIndicator progress={pullProgress} isRefreshing={isRefreshing} />
+        
+        {/* Search Bar */}
+        {showSearch && (
+          <div className="px-4 py-3 border-b border-[var(--color-border)] animate-slide-down">
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)]" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search lessons..."
+                className="input-mobile pl-10 py-2.5 text-sm"
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
+
         {lessons.length === 0 ? (
           <EmptyState
             icon={<FiBook />}
@@ -132,13 +191,24 @@ export default function MobileLessonsPage() {
               </Link>
             }
           />
+        ) : filteredLessons.length === 0 ? (
+          <EmptyState
+            icon={<FiSearch />}
+            title="No results"
+            description={`No lessons matching "${searchQuery}"`}
+          />
         ) : (
           <div className="px-4 py-4 space-y-3 stagger-children">
-            {lessons.map((lesson) => (
-              <div key={lesson.id} className="item-card pr-2">
+            {filteredLessons.map((lesson, index) => (
+              <div 
+                key={lesson.id} 
+                className="item-card pr-2"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
                 <Link
                   href={`/m/lessons/${lesson.id}`}
                   className="flex items-center gap-3 flex-1 min-w-0"
+                  onClick={() => triggerHaptic('light')}
                 >
                   <div className="item-card-icon bg-[var(--color-accent-soft)]">
                     <FiBook className="text-[var(--color-accent)]" />
@@ -160,10 +230,11 @@ export default function MobileLessonsPage() {
                 <button
                   onClick={(e) => {
                     e.preventDefault()
+                    triggerHaptic('light')
                     setSelectedLesson(lesson)
                     setShowActionSheet(true)
                   }}
-                  className="p-2 -mr-1 text-[var(--color-text-tertiary)]"
+                  className="p-2 -mr-1 text-[var(--color-text-tertiary)] active:scale-90 transition-transform"
                 >
                   <FiMoreVertical className="w-5 h-5" />
                 </button>
@@ -193,7 +264,10 @@ export default function MobileLessonsPage() {
           <Link
             href={`/m/lessons/${selectedLesson?.id}`}
             className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] active:bg-[var(--color-surface-hover)] transition-colors"
-            onClick={() => setShowActionSheet(false)}
+            onClick={() => {
+              triggerHaptic('light')
+              setShowActionSheet(false)
+            }}
           >
             <div className="w-10 h-10 rounded-full bg-[var(--color-accent-soft)] flex items-center justify-center">
               <FiBook className="w-5 h-5 text-[var(--color-accent)]" />
@@ -222,4 +296,3 @@ export default function MobileLessonsPage() {
     </MobileLayout>
   )
 }
-

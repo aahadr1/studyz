@@ -10,8 +10,8 @@ import {
   FiCheckSquare, 
   FiMessageCircle,
   FiArrowRight,
-  FiChevronRight,
-  FiChevronLeft
+  FiShield,
+  FiCloud
 } from 'react-icons/fi'
 
 const slides = [
@@ -20,22 +20,31 @@ const slides = [
     title: 'Interactive Lessons',
     description: 'Upload any PDF and study with AI-powered assistance that understands your content.',
     color: 'cyan',
-    gradient: 'from-cyan-500 to-blue-500'
+    gradient: 'from-cyan-500 to-blue-500',
+    bgGlow: 'rgba(0, 212, 255, 0.15)'
   },
   {
     icon: FiCheckSquare,
     title: 'Smart Quizzes',
     description: 'Extract MCQs from your materials automatically and test your knowledge.',
     color: 'purple',
-    gradient: 'from-purple-500 to-pink-500'
+    gradient: 'from-purple-500 to-pink-500',
+    bgGlow: 'rgba(168, 85, 247, 0.15)'
   },
   {
     icon: FiMessageCircle,
     title: 'AI Assistant',
     description: 'Ask questions about your content and get instant, contextual answers.',
     color: 'emerald',
-    gradient: 'from-emerald-500 to-teal-500'
+    gradient: 'from-emerald-500 to-teal-500',
+    bgGlow: 'rgba(16, 185, 129, 0.15)'
   }
+]
+
+const features = [
+  { icon: FiShield, text: 'Secure & Private' },
+  { icon: FiCloud, text: 'Cloud Sync' },
+  { icon: FiZap, text: 'AI Powered' },
 ]
 
 export default function MobileWelcomePage() {
@@ -43,6 +52,7 @@ export default function MobileWelcomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const touchStartX = useRef(0)
+  const autoSlideTimer = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     // Check if already logged in
@@ -60,14 +70,18 @@ export default function MobileWelcomePage() {
 
   // Auto-advance slides
   useEffect(() => {
-    const timer = setInterval(() => {
+    autoSlideTimer.current = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length)
-    }, 5000)
-    return () => clearInterval(timer)
+    }, 4000)
+    return () => {
+      if (autoSlideTimer.current) clearInterval(autoSlideTimer.current)
+    }
   }, [])
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX
+    // Pause auto-advance while touching
+    if (autoSlideTimer.current) clearInterval(autoSlideTimer.current)
   }
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -79,12 +93,21 @@ export default function MobileWelcomePage() {
         setCurrentSlide(prev => prev - 1)
       }
     }
+    // Resume auto-advance
+    autoSlideTimer.current = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % slides.length)
+    }, 4000)
   }
 
   if (checkingAuth) {
     return (
       <div className="mobile-app flex items-center justify-center bg-[var(--color-bg-primary)]">
-        <div className="spinner-mobile" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-secondary)] flex items-center justify-center animate-pulse">
+            <FiZap className="w-8 h-8 text-white" />
+          </div>
+          <div className="spinner-mobile" />
+        </div>
       </div>
     )
   }
@@ -92,37 +115,49 @@ export default function MobileWelcomePage() {
   const CurrentIcon = slides[currentSlide].icon
 
   return (
-    <div className="mobile-app bg-[var(--color-bg-primary)]">
+    <div className="mobile-app bg-[var(--color-bg-primary)] overflow-hidden">
       {/* Background Effects */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Main glow */}
         <div 
-          className={`absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full blur-[120px] opacity-20 transition-all duration-1000 bg-gradient-to-br ${slides[currentSlide].gradient}`}
-          style={{ top: '-200px' }}
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full blur-[120px] transition-all duration-1000"
+          style={{ 
+            top: '-200px',
+            background: slides[currentSlide].bgGlow 
+          }}
+        />
+        {/* Grid pattern */}
+        <div 
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+            backgroundSize: '40px 40px'
+          }}
         />
       </div>
 
       {/* Content */}
-      <div className="mobile-content-full flex flex-col px-6 pt-12 pb-8 relative">
+      <div className="mobile-content-full flex flex-col px-6 pt-safe-top relative">
         {/* Logo */}
-        <div className="flex items-center gap-2 mb-12">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-secondary)] flex items-center justify-center">
-            <FiZap className="w-5 h-5 text-white" />
+        <div className="flex items-center gap-2.5 pt-6 mb-8">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-secondary)] flex items-center justify-center shadow-lg shadow-[var(--color-accent)]/25">
+            <FiZap className="w-6 h-6 text-white" />
           </div>
-          <span className="text-xl font-bold text-[var(--color-text-primary)]">Studyz</span>
+          <span className="text-xl font-bold text-[var(--color-text-primary)] tracking-tight">Studyz</span>
         </div>
 
         {/* Slides */}
         <div 
-          className="flex-1 flex flex-col items-center justify-center"
+          className="flex-1 flex flex-col items-center justify-center py-8"
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
           {/* Icon */}
           <div 
-            className={`w-28 h-28 rounded-3xl flex items-center justify-center mb-8 bg-gradient-to-br ${slides[currentSlide].gradient} animate-scale-in`}
+            className={`w-32 h-32 rounded-3xl flex items-center justify-center mb-8 bg-gradient-to-br ${slides[currentSlide].gradient} shadow-2xl animate-scale-in`}
             key={currentSlide}
           >
-            <CurrentIcon className="w-14 h-14 text-white" />
+            <CurrentIcon className="w-16 h-16 text-white" />
           </div>
 
           {/* Title */}
@@ -135,7 +170,7 @@ export default function MobileWelcomePage() {
 
           {/* Description */}
           <p 
-            className="text-center text-[var(--color-text-secondary)] text-lg leading-relaxed max-w-xs animate-slide-up"
+            className="text-center text-[var(--color-text-secondary)] text-lg leading-relaxed max-w-[280px] animate-slide-up"
             key={`desc-${currentSlide}`}
             style={{ animationDelay: '50ms' }}
           >
@@ -144,27 +179,41 @@ export default function MobileWelcomePage() {
         </div>
 
         {/* Dots */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+        <div className="flex items-center justify-center gap-2 mb-6">
           {slides.map((_, index) => (
             <button
               key={index}
               onClick={() => setCurrentSlide(index)}
-              className={`h-2 rounded-full transition-all duration-300 ${
+              className={`rounded-full transition-all duration-300 ${
                 index === currentSlide 
-                  ? 'w-8 bg-[var(--color-accent)]' 
-                  : 'w-2 bg-[var(--color-border)]'
+                  ? 'w-8 h-2 bg-[var(--color-accent)]' 
+                  : 'w-2 h-2 bg-[var(--color-border)]'
               }`}
+              aria-label={`Go to slide ${index + 1}`}
             />
           ))}
         </div>
 
+        {/* Features Row */}
+        <div className="flex items-center justify-center gap-6 mb-6">
+          {features.map((feature, i) => {
+            const Icon = feature.icon
+            return (
+              <div key={i} className="flex items-center gap-1.5 text-[var(--color-text-tertiary)]">
+                <Icon className="w-3.5 h-3.5" />
+                <span className="text-xs font-medium">{feature.text}</span>
+              </div>
+            )
+          })}
+        </div>
+
         {/* CTA Buttons */}
-        <div className="space-y-3 animate-slide-up" style={{ animationDelay: '100ms' }}>
+        <div className="space-y-3 pb-8 animate-slide-up" style={{ animationDelay: '100ms' }}>
           <Link 
             href="/m/register" 
             className="btn-mobile btn-primary-mobile w-full"
           >
-            Get Started
+            Get Started Free
             <FiArrowRight className="w-5 h-5" />
           </Link>
           
@@ -176,12 +225,11 @@ export default function MobileWelcomePage() {
           </Link>
         </div>
 
-        {/* Skip to app hint */}
-        <p className="text-center text-xs text-[var(--color-text-tertiary)] mt-6">
-          Swipe to explore features
+        {/* Footer */}
+        <p className="text-center text-[10px] text-[var(--color-text-tertiary)] pb-6">
+          By continuing, you agree to our Terms of Service
         </p>
       </div>
     </div>
   )
 }
-
