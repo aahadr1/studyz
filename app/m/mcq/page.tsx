@@ -9,22 +9,10 @@ import MobileLayout, {
   FloatingActionButton, 
   EmptyState, 
   BottomSheet,
-  ListSkeleton,
   PullToRefreshIndicator
 } from '@/components/mobile/MobileLayout'
 import { usePullToRefresh, useHapticFeedback } from '@/components/mobile/useMobileUtils'
-import { 
-  FiPlus, 
-  FiCheckSquare, 
-  FiTrash2, 
-  FiMoreVertical,
-  FiCalendar,
-  FiHelpCircle,
-  FiEdit2,
-  FiPlay,
-  FiCheckCircle,
-  FiSearch
-} from 'react-icons/fi'
+import { FiPlus, FiTrash2, FiMoreVertical, FiArrowRight, FiEdit2, FiPlay } from 'react-icons/fi'
 
 interface McqSet {
   id: string
@@ -43,8 +31,6 @@ export default function MobileMCQPage() {
   const [selectedSet, setSelectedSet] = useState<McqSet | null>(null)
   const [showActionSheet, setShowActionSheet] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showSearch, setShowSearch] = useState(false)
   const { triggerHaptic } = useHapticFeedback()
 
   const loadMcqSets = useCallback(async () => {
@@ -76,7 +62,6 @@ export default function MobileMCQPage() {
     loadMcqSets()
   }, [loadMcqSets])
 
-  // Pull to refresh
   const {
     containerRef,
     isRefreshing,
@@ -105,12 +90,10 @@ export default function MobileMCQPage() {
       })
 
       if (response.ok) {
-        triggerHaptic('success')
         setMcqSets(mcqSets.filter(s => s.id !== selectedSet.id))
       }
     } catch (error) {
       console.error('Error deleting MCQ set:', error)
-      triggerHaptic('error')
     } finally {
       setDeleting(false)
       setShowActionSheet(false)
@@ -118,29 +101,12 @@ export default function MobileMCQPage() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-    
-    if (days === 0) return 'Today'
-    if (days === 1) return 'Yesterday'
-    if (days < 7) return `${days} days ago`
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
-
-  const filteredSets = searchQuery.trim()
-    ? mcqSets.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : mcqSets
-
   if (loading) {
     return (
       <MobileLayout>
         <MobileHeader title="Quiz" />
-        <div className="mobile-content">
-          <ListSkeleton count={5} />
+        <div className="mobile-content flex items-center justify-center">
+          <div className="spinner-mobile" />
         </div>
       </MobileLayout>
     )
@@ -149,99 +115,62 @@ export default function MobileMCQPage() {
   return (
     <MobileLayout>
       <MobileHeader 
-        title="Quiz Sets" 
+        title="Quiz" 
         rightAction={
-          <div className="flex items-center gap-1">
-            <button 
-              onClick={() => setShowSearch(!showSearch)} 
-              className="mobile-header-action"
-            >
-              <FiSearch className="w-5 h-5" />
-            </button>
-            <Link href="/m/mcq/new" className="mobile-header-action">
-              <FiPlus className="w-6 h-6" />
-            </Link>
-          </div>
+          <Link href="/m/mcq/new" className="mobile-header-action">
+            <FiPlus className="w-5 h-5" strokeWidth={1.5} />
+          </Link>
         }
       />
 
-      <div 
-        ref={containerRef}
-        className="mobile-content"
-      >
+      <div ref={containerRef} className="mobile-content">
         <PullToRefreshIndicator progress={pullProgress} isRefreshing={isRefreshing} />
-
-        {/* Search Bar */}
-        {showSearch && (
-          <div className="px-4 py-3 border-b border-[var(--color-border)] animate-slide-down">
-            <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)]" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search quizzes..."
-                className="input-mobile pl-10 py-2.5 text-sm"
-                autoFocus
-              />
-            </div>
-          </div>
-        )}
 
         {mcqSets.length === 0 ? (
           <EmptyState
-            icon={<FiCheckSquare />}
-            title="No quizzes yet"
-            description="Upload a PDF with MCQs or paste text to create your first quiz set"
+            icon={<span className="text-lg mono">0</span>}
+            title="No Quizzes"
+            description="Upload a PDF with MCQs to get started"
             action={
               <Link href="/m/mcq/new" className="btn-mobile btn-primary-mobile">
-                <FiPlus className="w-5 h-5" />
                 Create Quiz
               </Link>
             }
           />
-        ) : filteredSets.length === 0 ? (
-          <EmptyState
-            icon={<FiSearch />}
-            title="No results"
-            description={`No quizzes matching "${searchQuery}"`}
-          />
         ) : (
-          <div className="px-4 py-4 space-y-3 stagger-children">
-            {filteredSets.map((mcq, index) => (
+          <div>
+            {/* Count */}
+            <div className="px-4 py-3 border-b border-[var(--color-border)]">
+              <span className="text-[10px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)] mono">
+                {mcqSets.length} quiz{mcqSets.length !== 1 ? 'zes' : ''}
+              </span>
+            </div>
+            
+            {/* List */}
+            {mcqSets.map((mcq) => (
               <div 
                 key={mcq.id} 
-                className="item-card pr-2"
-                style={{ animationDelay: `${index * 50}ms` }}
+                className="flex items-center border-b border-[var(--color-border)]"
               >
                 <Link
                   href={`/m/mcq/${mcq.id}`}
-                  className="flex items-center gap-3 flex-1 min-w-0"
+                  className="flex-1 flex items-center justify-between px-4 py-4 active:bg-[var(--color-surface)]"
                   onClick={() => triggerHaptic('light')}
                 >
-                  <div className="item-card-icon bg-[var(--color-secondary-soft)]">
-                    <FiCheckSquare className="text-[var(--color-secondary)]" />
-                  </div>
-                  <div className="item-card-content">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="item-card-title flex-1">{mcq.name}</h3>
+                      <h3 className="font-medium text-sm truncate">{mcq.name}</h3>
                       {mcq.is_corrected && (
-                        <span className="badge-mobile success">
-                          <FiCheckCircle className="w-3 h-3" />
+                        <span className="text-[8px] uppercase tracking-wider border border-[var(--color-border)] px-1.5 py-0.5">
+                          ✓
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
-                      <span className="flex items-center gap-1">
-                        <FiHelpCircle className="w-3 h-3" />
-                        {mcq.total_questions} Q
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <FiCalendar className="w-3 h-3" />
-                        {formatDate(mcq.created_at)}
-                      </span>
-                    </div>
+                    <p className="text-xs text-[var(--color-text-secondary)] mono mt-0.5">
+                      {mcq.total_questions} questions
+                    </p>
                   </div>
+                  <FiArrowRight className="w-4 h-4 text-[var(--color-text-tertiary)] ml-4" strokeWidth={1} />
                 </Link>
                 <button
                   onClick={(e) => {
@@ -250,9 +179,9 @@ export default function MobileMCQPage() {
                     setSelectedSet(mcq)
                     setShowActionSheet(true)
                   }}
-                  className="p-2 -mr-1 text-[var(--color-text-tertiary)] active:scale-90 transition-transform"
+                  className="px-4 py-4 text-[var(--color-text-tertiary)] active:opacity-50"
                 >
-                  <FiMoreVertical className="w-5 h-5" />
+                  <FiMoreVertical className="w-4 h-4" strokeWidth={1.5} />
                 </button>
               </div>
             ))}
@@ -260,14 +189,12 @@ export default function MobileMCQPage() {
         )}
       </div>
 
-      {/* Floating Action Button */}
       <FloatingActionButton
         href="/m/mcq/new"
-        icon={<FiPlus />}
-        label="New quiz"
+        icon={<FiPlus strokeWidth={1.5} />}
+        label="New"
       />
 
-      {/* Action Sheet */}
       <BottomSheet
         isOpen={showActionSheet}
         onClose={() => {
@@ -279,47 +206,33 @@ export default function MobileMCQPage() {
         <div className="space-y-2">
           <Link
             href={`/m/mcq/${selectedSet?.id}`}
-            className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] active:bg-[var(--color-surface-hover)] transition-colors"
-            onClick={() => {
-              triggerHaptic('light')
-              setShowActionSheet(false)
-            }}
+            className="flex items-center justify-between p-4 border border-[var(--color-border)] active:bg-[var(--color-surface)]"
+            onClick={() => setShowActionSheet(false)}
           >
-            <div className="w-10 h-10 rounded-full bg-[var(--color-accent-soft)] flex items-center justify-center">
-              <FiPlay className="w-5 h-5 text-[var(--color-accent)]" />
-            </div>
-            <span className="font-medium text-[var(--color-text-primary)]">Practice Quiz</span>
+            <span className="font-medium text-sm">Practice</span>
+            <FiPlay className="w-4 h-4" strokeWidth={1.5} />
           </Link>
           
           <Link
             href={`/m/mcq/${selectedSet?.id}/edit`}
-            className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] active:bg-[var(--color-surface-hover)] transition-colors"
-            onClick={() => {
-              triggerHaptic('light')
-              setShowActionSheet(false)
-            }}
+            className="flex items-center justify-between p-4 border border-[var(--color-border)] active:bg-[var(--color-surface)]"
+            onClick={() => setShowActionSheet(false)}
           >
-            <div className="w-10 h-10 rounded-full bg-[var(--color-secondary-soft)] flex items-center justify-center">
-              <FiEdit2 className="w-5 h-5 text-[var(--color-secondary)]" />
-            </div>
-            <span className="font-medium text-[var(--color-text-primary)]">Edit Questions</span>
+            <span className="font-medium text-sm">Edit</span>
+            <FiEdit2 className="w-4 h-4" strokeWidth={1.5} />
           </Link>
           
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] active:bg-[var(--color-error-soft)] transition-colors w-full"
+            className="flex items-center justify-between p-4 border border-[var(--color-border)] active:bg-[var(--color-surface)] w-full"
           >
-            <div className="w-10 h-10 rounded-full bg-[var(--color-error-soft)] flex items-center justify-center">
-              {deleting ? (
-                <div className="spinner-mobile w-5 h-5" style={{ borderWidth: '2px', borderTopColor: 'var(--color-error)' }} />
-              ) : (
-                <FiTrash2 className="w-5 h-5 text-[var(--color-error)]" />
-              )}
-            </div>
-            <span className="font-medium text-[var(--color-error)]">
-              {deleting ? 'Deleting...' : 'Delete Quiz'}
-            </span>
+            <span className="font-medium text-sm">Delete</span>
+            {deleting ? (
+              <div className="spinner-mobile w-4 h-4" />
+            ) : (
+              <FiTrash2 className="w-4 h-4" strokeWidth={1.5} />
+            )}
           </button>
         </div>
       </BottomSheet>

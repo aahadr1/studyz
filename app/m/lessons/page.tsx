@@ -9,19 +9,10 @@ import MobileLayout, {
   FloatingActionButton, 
   EmptyState, 
   BottomSheet, 
-  ListSkeleton,
   PullToRefreshIndicator 
 } from '@/components/mobile/MobileLayout'
 import { usePullToRefresh, useHapticFeedback } from '@/components/mobile/useMobileUtils'
-import { 
-  FiPlus, 
-  FiBook, 
-  FiTrash2, 
-  FiMoreVertical,
-  FiCalendar,
-  FiFileText,
-  FiSearch
-} from 'react-icons/fi'
+import { FiPlus, FiTrash2, FiMoreVertical, FiArrowRight } from 'react-icons/fi'
 import type { Lesson } from '@/types/db'
 
 export default function MobileLessonsPage() {
@@ -31,8 +22,6 @@ export default function MobileLessonsPage() {
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null)
   const [showActionSheet, setShowActionSheet] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showSearch, setShowSearch] = useState(false)
   const { triggerHaptic } = useHapticFeedback()
 
   const loadLessons = useCallback(async () => {
@@ -64,7 +53,6 @@ export default function MobileLessonsPage() {
     loadLessons()
   }, [loadLessons])
 
-  // Pull to refresh
   const {
     containerRef,
     isRefreshing,
@@ -98,7 +86,6 @@ export default function MobileLessonsPage() {
       }
     } catch (error) {
       console.error('Error deleting lesson:', error)
-      triggerHaptic('error')
     } finally {
       setDeleting(false)
       setShowActionSheet(false)
@@ -106,32 +93,12 @@ export default function MobileLessonsPage() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-    
-    if (days === 0) return 'Today'
-    if (days === 1) return 'Yesterday'
-    if (days < 7) return `${days} days ago`
-    
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric' 
-    })
-  }
-
-  const filteredLessons = searchQuery.trim()
-    ? lessons.filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : lessons
-
   if (loading) {
     return (
       <MobileLayout>
         <MobileHeader title="Lessons" />
-        <div className="mobile-content">
-          <ListSkeleton count={5} />
+        <div className="mobile-content flex items-center justify-center">
+          <div className="spinner-mobile" />
         </div>
       </MobileLayout>
     )
@@ -142,90 +109,53 @@ export default function MobileLessonsPage() {
       <MobileHeader 
         title="Lessons" 
         rightAction={
-          <div className="flex items-center gap-1">
-            <button 
-              onClick={() => setShowSearch(!showSearch)} 
-              className="mobile-header-action"
-            >
-              <FiSearch className="w-5 h-5" />
-            </button>
-            <Link href="/m/lessons/new" className="mobile-header-action">
-              <FiPlus className="w-6 h-6" />
-            </Link>
-          </div>
+          <Link href="/m/lessons/new" className="mobile-header-action">
+            <FiPlus className="w-5 h-5" strokeWidth={1.5} />
+          </Link>
         }
       />
 
-      <div 
-        ref={containerRef}
-        className="mobile-content"
-      >
+      <div ref={containerRef} className="mobile-content">
         <PullToRefreshIndicator progress={pullProgress} isRefreshing={isRefreshing} />
-        
-        {/* Search Bar */}
-        {showSearch && (
-          <div className="px-4 py-3 border-b border-[var(--color-border)] animate-slide-down">
-            <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)]" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search lessons..."
-                className="input-mobile pl-10 py-2.5 text-sm"
-                autoFocus
-              />
-            </div>
-          </div>
-        )}
 
         {lessons.length === 0 ? (
           <EmptyState
-            icon={<FiBook />}
-            title="No lessons yet"
-            description="Upload a PDF document to create your first interactive lesson"
+            icon={<span className="text-lg mono">0</span>}
+            title="No Lessons"
+            description="Upload a PDF to create your first lesson"
             action={
               <Link href="/m/lessons/new" className="btn-mobile btn-primary-mobile">
-                <FiPlus className="w-5 h-5" />
                 Create Lesson
               </Link>
             }
           />
-        ) : filteredLessons.length === 0 ? (
-          <EmptyState
-            icon={<FiSearch />}
-            title="No results"
-            description={`No lessons matching "${searchQuery}"`}
-          />
         ) : (
-          <div className="px-4 py-4 space-y-3 stagger-children">
-            {filteredLessons.map((lesson, index) => (
+          <div>
+            {/* Count */}
+            <div className="px-4 py-3 border-b border-[var(--color-border)]">
+              <span className="text-[10px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)] mono">
+                {lessons.length} lesson{lessons.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            
+            {/* List */}
+            {lessons.map((lesson) => (
               <div 
                 key={lesson.id} 
-                className="item-card pr-2"
-                style={{ animationDelay: `${index * 50}ms` }}
+                className="flex items-center border-b border-[var(--color-border)]"
               >
                 <Link
                   href={`/m/lessons/${lesson.id}`}
-                  className="flex items-center gap-3 flex-1 min-w-0"
+                  className="flex-1 flex items-center justify-between px-4 py-4 active:bg-[var(--color-surface)]"
                   onClick={() => triggerHaptic('light')}
                 >
-                  <div className="item-card-icon bg-[var(--color-accent-soft)]">
-                    <FiBook className="text-[var(--color-accent)]" />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-sm truncate">{lesson.name}</h3>
+                    <p className="text-xs text-[var(--color-text-secondary)] mono mt-0.5">
+                      {lesson.total_pages} pages
+                    </p>
                   </div>
-                  <div className="item-card-content">
-                    <h3 className="item-card-title">{lesson.name}</h3>
-                    <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
-                      <span className="flex items-center gap-1">
-                        <FiFileText className="w-3 h-3" />
-                        {lesson.total_pages} page{lesson.total_pages !== 1 ? 's' : ''}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <FiCalendar className="w-3 h-3" />
-                        {formatDate(lesson.created_at)}
-                      </span>
-                    </div>
-                  </div>
+                  <FiArrowRight className="w-4 h-4 text-[var(--color-text-tertiary)] ml-4" strokeWidth={1} />
                 </Link>
                 <button
                   onClick={(e) => {
@@ -234,9 +164,9 @@ export default function MobileLessonsPage() {
                     setSelectedLesson(lesson)
                     setShowActionSheet(true)
                   }}
-                  className="p-2 -mr-1 text-[var(--color-text-tertiary)] active:scale-90 transition-transform"
+                  className="px-4 py-4 text-[var(--color-text-tertiary)] active:opacity-50"
                 >
-                  <FiMoreVertical className="w-5 h-5" />
+                  <FiMoreVertical className="w-4 h-4" strokeWidth={1.5} />
                 </button>
               </div>
             ))}
@@ -244,14 +174,12 @@ export default function MobileLessonsPage() {
         )}
       </div>
 
-      {/* Floating Action Button */}
       <FloatingActionButton
         href="/m/lessons/new"
-        icon={<FiPlus />}
-        label="New lesson"
+        icon={<FiPlus strokeWidth={1.5} />}
+        label="New"
       />
 
-      {/* Action Sheet */}
       <BottomSheet
         isOpen={showActionSheet}
         onClose={() => {
@@ -263,33 +191,24 @@ export default function MobileLessonsPage() {
         <div className="space-y-2">
           <Link
             href={`/m/lessons/${selectedLesson?.id}`}
-            className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] active:bg-[var(--color-surface-hover)] transition-colors"
-            onClick={() => {
-              triggerHaptic('light')
-              setShowActionSheet(false)
-            }}
+            className="flex items-center justify-between p-4 border border-[var(--color-border)] active:bg-[var(--color-surface)]"
+            onClick={() => setShowActionSheet(false)}
           >
-            <div className="w-10 h-10 rounded-full bg-[var(--color-accent-soft)] flex items-center justify-center">
-              <FiBook className="w-5 h-5 text-[var(--color-accent)]" />
-            </div>
-            <span className="font-medium text-[var(--color-text-primary)]">Open Lesson</span>
+            <span className="font-medium text-sm">Open</span>
+            <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
           </Link>
           
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] active:bg-[var(--color-error-soft)] transition-colors w-full"
+            className="flex items-center justify-between p-4 border border-[var(--color-border)] active:bg-[var(--color-surface)] w-full"
           >
-            <div className="w-10 h-10 rounded-full bg-[var(--color-error-soft)] flex items-center justify-center">
-              {deleting ? (
-                <div className="spinner-mobile w-5 h-5" style={{ borderWidth: '2px', borderTopColor: 'var(--color-error)' }} />
-              ) : (
-                <FiTrash2 className="w-5 h-5 text-[var(--color-error)]" />
-              )}
-            </div>
-            <span className="font-medium text-[var(--color-error)]">
-              {deleting ? 'Deleting...' : 'Delete Lesson'}
-            </span>
+            <span className="font-medium text-sm">Delete</span>
+            {deleting ? (
+              <div className="spinner-mobile w-4 h-4" />
+            ) : (
+              <FiTrash2 className="w-4 h-4" strokeWidth={1.5} />
+            )}
           </button>
         </div>
       </BottomSheet>
