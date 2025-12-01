@@ -81,11 +81,11 @@ export default function DashboardPage() {
             <span className="text-sm">Interactive Lessons</span>
           </Link>
           <Link
-            href="/mcq/new"
+            href="/mcq"
             className="sidebar-item"
           >
             <FiCheckSquare className="w-4 h-4" />
-            <span className="text-sm">New MCQ</span>
+            <span className="text-sm">MCQ Sets</span>
           </Link>
         </nav>
 

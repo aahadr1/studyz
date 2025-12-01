@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiUpload, FiFile, FiX, FiLoader, FiCheck } from 'react-icons/fi'
+import { FiUpload, FiFile, FiX, FiLoader, FiCheck, FiEdit2 } from 'react-icons/fi'
 import Link from 'next/link'
 import MCQViewer, { MCQQuestion } from '@/components/MCQViewer'
 import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
@@ -205,11 +205,15 @@ export default function NewMCQPage() {
               </p>
             </div>
             <div className="flex gap-3">
+              <Link href={`/mcq/${result.set.id}/edit`} className="btn-secondary">
+                <FiEdit2 className="w-4 h-4" />
+                Edit Questions
+              </Link>
               <button onClick={handleReset} className="btn-secondary">
                 Upload Another
               </button>
-              <Link href="/dashboard" className="btn-secondary">
-                Back to Dashboard
+              <Link href="/mcq" className="btn-secondary">
+                All MCQ Sets
               </Link>
             </div>
           </div>

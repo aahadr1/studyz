@@ -15,13 +15,13 @@ function createServerClient() {
   )
 }
 
-// GET /api/mcq/[id] - Get MCQ set details with all questions
-export async function GET(
+// PUT /api/mcq/[id]/question/[questionId] - Update a question
+export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string; questionId: string }> }
 ) {
   try {
-    const { id } = await params
+    const { id: mcqSetId, questionId } = await params
     const supabase = createServerClient()
     
     // Get user from auth header
@@ -37,11 +37,11 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Verify ownership and fetch MCQ set
+    // Verify MCQ set ownership
     const { data: mcqSet, error: setError } = await supabase
       .from('mcq_sets')
-      .select('*')
-      .eq('id', id)
+      .select('id')
+      .eq('id', mcqSetId)
       .eq('user_id', user.id)
       .single()
 
@@ -49,46 +49,43 @@ export async function GET(
       return NextResponse.json({ error: 'MCQ set not found' }, { status: 404 })
     }
 
-    // Fetch pages
-    const { data: pages, error: pagesError } = await supabase
-      .from('mcq_pages')
-      .select('*')
-      .eq('mcq_set_id', id)
-      .order('page_number', { ascending: true })
+    // Parse request body
+    const body = await request.json()
+    const { question, options, correct_option, explanation } = body
 
-    if (pagesError) {
-      console.error('Error fetching pages:', pagesError)
-    }
-
-    // Fetch questions
-    const { data: questions, error: questionsError } = await supabase
+    // Update the question
+    const { data: updatedQuestion, error: updateError } = await supabase
       .from('mcq_questions')
-      .select('*')
-      .eq('mcq_set_id', id)
-      .order('page_number', { ascending: true })
+      .update({
+        question,
+        options,
+        correct_option,
+        explanation,
+      })
+      .eq('id', questionId)
+      .eq('mcq_set_id', mcqSetId)
+      .select()
+      .single()
 
-    if (questionsError) {
-      console.error('Error fetching questions:', questionsError)
+    if (updateError) {
+      console.error('Error updating question:', updateError)
+      return NextResponse.json({ error: 'Failed to update question' }, { status: 500 })
     }
 
-    return NextResponse.json({
-      set: mcqSet,
-      pages: pages || [],
-      questions: questions || [],
-    })
+    return NextResponse.json({ question: updatedQuestion })
   } catch (error) {
-    console.error('MCQ GET error:', error)
+    console.error('Question PUT error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// DELETE /api/mcq/[id] - Delete an MCQ set
+// DELETE /api/mcq/[id]/question/[questionId] - Delete a question
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string; questionId: string }> }
 ) {
   try {
-    const { id } = await params
+    const { id: mcqSetId, questionId } = await params
     const supabase = createServerClient()
     
     // Get user from auth header
@@ -104,11 +101,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Verify ownership
+    // Verify MCQ set ownership
     const { data: mcqSet, error: setError } = await supabase
       .from('mcq_sets')
-      .select('id')
-      .eq('id', id)
+      .select('id, total_questions')
+      .eq('id', mcqSetId)
       .eq('user_id', user.id)
       .single()
 
@@ -116,24 +113,27 @@ export async function DELETE(
       return NextResponse.json({ error: 'MCQ set not found' }, { status: 404 })
     }
 
-    // Delete the MCQ set (cascades to pages and questions)
+    // Delete the question
     const { error: deleteError } = await supabase
-      .from('mcq_sets')
+      .from('mcq_questions')
       .delete()
-      .eq('id', id)
+      .eq('id', questionId)
+      .eq('mcq_set_id', mcqSetId)
 
     if (deleteError) {
-      console.error('Error deleting MCQ set:', deleteError)
-      return NextResponse.json({ error: 'Failed to delete MCQ set' }, { status: 500 })
+      console.error('Error deleting question:', deleteError)
+      return NextResponse.json({ error: 'Failed to delete question' }, { status: 500 })
     }
 
-    // Also delete storage files
-    const storagePath = `${user.id}/${id}`
-    await supabase.storage.from('mcq-pages').remove([storagePath])
+    // Update total questions count
+    await supabase
+      .from('mcq_sets')
+      .update({ total_questions: Math.max(0, (mcqSet.total_questions || 1) - 1) })
+      .eq('id', mcqSetId)
 
-    return NextResponse.json({ message: 'MCQ set deleted successfully' })
+    return NextResponse.json({ message: 'Question deleted successfully' })
   } catch (error) {
-    console.error('MCQ DELETE error:', error)
+    console.error('Question DELETE error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

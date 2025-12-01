@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiLoader, FiEdit2 } from 'react-icons/fi'
+import { FiLoader, FiArrowLeft, FiPlay } from 'react-icons/fi'
 import Link from 'next/link'
-import MCQViewer, { MCQQuestion } from '@/components/MCQViewer'
+import MCQEditor, { MCQQuestionData } from '@/components/MCQEditor'
 
-export default function MCQSetPage({ params }: { params: { id: string } }) {
+export default function MCQEditPage({ params }: { params: { id: string } }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mcqSet, setMcqSet] = useState<any>(null)
-  const [questions, setQuestions] = useState<MCQQuestion[]>([])
+  const [questions, setQuestions] = useState<MCQQuestionData[]>([])
+  const [accessToken, setAccessToken] = useState<string>('')
 
   useEffect(() => {
     const loadMCQSet = async () => {
@@ -30,6 +31,8 @@ export default function MCQSetPage({ params }: { params: { id: string } }) {
           setIsLoading(false)
           return
         }
+
+        setAccessToken(session.access_token)
 
         const response = await fetch(`/api/mcq/${params.id}`, {
           headers: {
@@ -54,6 +57,14 @@ export default function MCQSetPage({ params }: { params: { id: string } }) {
 
     loadMCQSet()
   }, [params.id])
+
+  const handleQuestionsUpdate = (updatedQuestions: MCQQuestionData[]) => {
+    setQuestions(updatedQuestions)
+    // Update set's total questions
+    if (mcqSet) {
+      setMcqSet({ ...mcqSet, total_questions: updatedQuestions.length })
+    }
+  }
 
   if (isLoading) {
     return (
@@ -85,36 +96,36 @@ export default function MCQSetPage({ params }: { params: { id: string } }) {
       {/* Header */}
       <header className="h-14 border-b border-border flex items-center px-8 bg-sidebar">
         <div className="flex items-center justify-between w-full max-w-6xl mx-auto">
-          <div>
-            <h1 className="text-lg font-semibold text-text-primary">{mcqSet.name}</h1>
-            <p className="text-sm text-text-secondary">
-              {mcqSet.total_questions} question{mcqSet.total_questions !== 1 ? 's' : ''} · {mcqSet.total_pages} page{mcqSet.total_pages !== 1 ? 's' : ''}
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Link href={`/mcq/${params.id}/edit`} className="btn-secondary">
-              <FiEdit2 className="w-4 h-4" />
-              Edit Questions
+          <div className="flex items-center gap-4">
+            <Link href="/mcq" className="p-2 hover:bg-elevated rounded-lg transition-colors text-text-tertiary hover:text-text-primary">
+              <FiArrowLeft className="w-5 h-5" />
             </Link>
-            <Link href="/mcq" className="btn-secondary">
-              All MCQ Sets
-            </Link>
+            <div>
+              <h1 className="text-lg font-semibold text-text-primary">{mcqSet.name}</h1>
+              <p className="text-sm text-text-secondary">
+                Editing {questions.length} question{questions.length !== 1 ? 's' : ''}
+              </p>
+            </div>
           </div>
+          <Link href={`/mcq/${params.id}`} className="btn-primary">
+            <FiPlay className="w-4 h-4" />
+            Practice
+          </Link>
         </div>
       </header>
 
       {/* Content */}
       <main className="p-8">
-        <div className="max-w-6xl mx-auto">
-          {questions.length > 0 ? (
-            <MCQViewer questions={questions} />
-          ) : (
-            <div className="card p-8 text-center">
-              <p className="text-text-secondary">No questions found in this set.</p>
-            </div>
-          )}
+        <div className="max-w-4xl mx-auto">
+          <MCQEditor
+            questions={questions}
+            mcqSetId={params.id}
+            accessToken={accessToken}
+            onUpdate={handleQuestionsUpdate}
+          />
         </div>
       </main>
     </div>
   )
 }
+
