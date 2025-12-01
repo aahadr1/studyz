@@ -2,15 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiLoader, FiEdit2 } from 'react-icons/fi'
+import { FiLoader, FiEdit2, FiBook } from 'react-icons/fi'
 import Link from 'next/link'
-import MCQViewer, { MCQQuestion } from '@/components/MCQViewer'
+import MCQViewer, { MCQQuestion, Lesson } from '@/components/MCQViewer'
 
 export default function MCQSetPage({ params }: { params: { id: string } }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mcqSet, setMcqSet] = useState<any>(null)
   const [questions, setQuestions] = useState<MCQQuestion[]>([])
+  const [lesson, setLesson] = useState<Lesson | null>(null)
+  const [generatingLesson, setGeneratingLesson] = useState(false)
 
   useEffect(() => {
     const loadMCQSet = async () => {
@@ -44,6 +46,7 @@ export default function MCQSetPage({ params }: { params: { id: string } }) {
         const data = await response.json()
         setMcqSet(data.set)
         setQuestions(data.questions || [])
+        setLesson(data.set.lesson_content || null)
       } catch (err: any) {
         console.error('Load error:', err)
         setError(err.message || 'Failed to load MCQ set')
@@ -54,6 +57,45 @@ export default function MCQSetPage({ params }: { params: { id: string } }) {
 
     loadMCQSet()
   }, [params.id])
+
+  const handleGenerateLesson = async () => {
+    setGeneratingLesson(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) return
+
+      const response = await fetch(`/api/mcq/${params.id}/generate-lesson`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+
+      const data = await response.json()
+      
+      if (response.ok && data.lesson) {
+        setLesson(data.lesson)
+        
+        // Refetch questions to get updated section_ids
+        const questionsResponse = await fetch(`/api/mcq/${params.id}`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        })
+        
+        if (questionsResponse.ok) {
+          const questionsData = await questionsResponse.json()
+          setQuestions(questionsData.questions || [])
+        }
+      }
+    } catch (err) {
+      console.error('Error generating lesson:', err)
+    } finally {
+      setGeneratingLesson(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -92,6 +134,25 @@ export default function MCQSetPage({ params }: { params: { id: string } }) {
             </p>
           </div>
           <div className="flex gap-3">
+            {!lesson && questions.length > 0 && (
+              <button
+                onClick={handleGenerateLesson}
+                disabled={generatingLesson}
+                className="btn-secondary"
+              >
+                {generatingLesson ? (
+                  <>
+                    <FiLoader className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <FiBook className="w-4 h-4" />
+                    Generate Lesson
+                  </>
+                )}
+              </button>
+            )}
             <Link href={`/mcq/${params.id}/edit`} className="btn-secondary">
               <FiEdit2 className="w-4 h-4" />
               Edit Questions
@@ -105,10 +166,10 @@ export default function MCQSetPage({ params }: { params: { id: string } }) {
 
       {/* Content */}
       <main className="p-8">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {questions.length > 0 ? (
-            <MCQViewer questions={questions} />
-          ) : (
+              <MCQViewer questions={questions} lesson={lesson} />
+            ) : (
             <div className="card p-8 text-center">
               <p className="text-text-secondary">No questions found in this set.</p>
             </div>

@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiUpload, FiFile, FiX, FiLoader, FiCheck, FiEdit2 } from 'react-icons/fi'
+import { FiUpload, FiFile, FiX, FiLoader, FiCheck, FiEdit2, FiBook } from 'react-icons/fi'
 import Link from 'next/link'
-import MCQViewer, { MCQQuestion } from '@/components/MCQViewer'
+import MCQViewer, { MCQQuestion, Lesson } from '@/components/MCQViewer'
 import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
 export default function NewMCQPage() {
   const [user, setUser] = useState<any>(null)
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
+  const [generateLesson, setGenerateLesson] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStep, setProcessingStep] = useState('')
   const [currentPage, setCurrentPage] = useState(0)
@@ -19,6 +20,7 @@ export default function NewMCQPage() {
   const [result, setResult] = useState<{
     set: { id: string; name: string; total_pages: number; total_questions: number }
     questions: MCQQuestion[]
+    lesson?: Lesson | null
     message: string
   } | null>(null)
 
@@ -119,7 +121,7 @@ export default function NewMCQPage() {
       for (let i = 0; i < pageImages.length; i++) {
         const pageImage = pageImages[i]
         setCurrentPage(i + 1)
-        setProcessingStep(`Processing page ${i + 1} of ${pageImages.length}...`)
+        setProcessingStep(`Extracting MCQs from page ${i + 1} of ${pageImages.length}...`)
 
         try {
           const pageResponse = await fetch(`/api/mcq/${mcqSetId}/page`, {
@@ -138,7 +140,6 @@ export default function NewMCQPage() {
 
           if (!pageResponse.ok) {
             console.error(`Error processing page ${i + 1}:`, pageData.error)
-            // Continue with next page
             continue
           }
 
@@ -150,7 +151,46 @@ export default function NewMCQPage() {
           console.log(`Page ${i + 1}: extracted ${pageData.questionsExtracted} questions`)
         } catch (pageError) {
           console.error(`Error processing page ${i + 1}:`, pageError)
-          // Continue with next page
+        }
+      }
+
+      // Step 3: Generate lesson if requested
+      let lesson: Lesson | null = null
+      if (generateLesson && allQuestions.length > 0) {
+        setProcessingStep('Generating lesson content with AI...')
+        setCurrentPage(0)
+        
+        try {
+          const lessonResponse = await fetch(`/api/mcq/${mcqSetId}/generate-lesson`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          })
+
+          const lessonData = await lessonResponse.json()
+
+          if (lessonResponse.ok && lessonData.lesson) {
+            lesson = lessonData.lesson
+            console.log(`Generated lesson with ${lessonData.lesson.sections.length} sections`)
+
+            // Refetch questions to get updated section_ids
+            const questionsResponse = await fetch(`/api/mcq/${mcqSetId}`, {
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+            })
+            
+            if (questionsResponse.ok) {
+              const questionsData = await questionsResponse.json()
+              allQuestions.length = 0
+              allQuestions.push(...questionsData.questions)
+            }
+          } else {
+            console.error('Failed to generate lesson:', lessonData.error)
+          }
+        } catch (lessonError) {
+          console.error('Error generating lesson:', lessonError)
         }
       }
 
@@ -162,6 +202,7 @@ export default function NewMCQPage() {
           total_questions: allQuestions.length,
         },
         questions: allQuestions,
+        lesson,
         message: `Successfully extracted ${allQuestions.length} questions from ${pageImages.length} pages`
       })
     } catch (err: any) {
@@ -177,6 +218,7 @@ export default function NewMCQPage() {
   const handleReset = () => {
     setFile(null)
     setName('')
+    setGenerateLesson(false)
     setError(null)
     setResult(null)
     setCurrentPage(0)
@@ -197,11 +239,12 @@ export default function NewMCQPage() {
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="h-14 border-b border-border flex items-center px-8 bg-sidebar">
-          <div className="flex items-center justify-between w-full max-w-6xl mx-auto">
+          <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
             <div>
               <h1 className="text-lg font-semibold text-text-primary">{result.set.name}</h1>
               <p className="text-sm text-text-secondary">
-                {result.set.total_questions} question{result.set.total_questions !== 1 ? 's' : ''} extracted from {result.set.total_pages} page{result.set.total_pages !== 1 ? 's' : ''}
+                {result.set.total_questions} question{result.set.total_questions !== 1 ? 's' : ''} extracted
+                {result.lesson && ' · Lesson generated'}
               </p>
             </div>
             <div className="flex gap-3">
@@ -221,9 +264,9 @@ export default function NewMCQPage() {
 
         {/* Content */}
         <main className="p-8">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             {result.questions.length > 0 ? (
-              <MCQViewer questions={result.questions} />
+              <MCQViewer questions={result.questions} lesson={result.lesson} />
             ) : (
               <div className="card p-8 text-center">
                 <p className="text-text-secondary mb-4">
@@ -247,8 +290,8 @@ export default function NewMCQPage() {
       <header className="h-14 border-b border-border flex items-center px-8 bg-sidebar">
         <div className="flex items-center justify-between w-full max-w-4xl mx-auto">
           <h1 className="text-lg font-semibold text-text-primary">New MCQ Set</h1>
-          <Link href="/dashboard" className="btn-secondary">
-            Back to Dashboard
+          <Link href="/mcq" className="btn-secondary">
+            Back to MCQ Sets
           </Link>
         </div>
       </header>
@@ -334,6 +377,30 @@ export default function NewMCQPage() {
                 )}
               </div>
 
+              {/* Generate Lesson Toggle */}
+              <div className="p-4 bg-elevated rounded-lg border border-border">
+                <label className="flex items-start gap-4 cursor-pointer">
+                  <div className="pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={generateLesson}
+                      onChange={(e) => setGenerateLesson(e.target.checked)}
+                      disabled={isProcessing}
+                      className="w-5 h-5 rounded border-border text-accent focus:ring-accent"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <FiBook className="w-5 h-5 text-accent" />
+                      <span className="font-medium text-text-primary">Generate Automatic Lesson</span>
+                    </div>
+                    <p className="text-sm text-text-secondary">
+                      AI will create a comprehensive lesson based on your MCQs. Each question will be linked to its relevant lesson section, displayed in a sidebar while you practice.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
               {/* Error message */}
               {error && (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -383,7 +450,7 @@ export default function NewMCQPage() {
                 ) : (
                   <>
                     <FiUpload className="w-4 h-4" />
-                    Extract MCQs
+                    Extract MCQs {generateLesson && '& Generate Lesson'}
                   </>
                 )}
               </button>

@@ -172,4 +172,109 @@ Be thorough and extract ALL questions visible on the page.`,
   }
 }
 
+export interface LessonSection {
+  id: string
+  title: string
+  content: string
+  questionIds: string[]
+}
+
+export interface GeneratedLesson {
+  title: string
+  introduction: string
+  sections: LessonSection[]
+  conclusion: string
+}
+
+export interface QuestionForLesson {
+  id: string
+  question: string
+  options: Array<{ label: string; text: string }>
+  correctOption: string
+  explanation?: string
+}
+
+/**
+ * Generate a structured lesson from MCQ questions using GPT-4o
+ * Each section covers concepts needed to answer specific questions
+ * @param questions - Array of MCQ questions
+ * @param setName - Name of the MCQ set for context
+ * @returns Generated lesson with sections linked to questions
+ */
+export async function generateLessonFromMcqs(
+  questions: QuestionForLesson[],
+  setName: string
+): Promise<GeneratedLesson> {
+  const openai = getOpenAI()
+  
+  // Prepare questions summary for the prompt
+  const questionsSummary = questions.map((q, i) => ({
+    id: q.id,
+    index: i + 1,
+    question: q.question,
+    correctAnswer: q.options.find(o => o.label === q.correctOption)?.text || '',
+    explanation: q.explanation || ''
+  }))
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'system',
+        content: `You are an expert educational content creator. Your task is to create a comprehensive lesson that teaches the concepts needed to answer a set of multiple choice questions.
+
+The lesson should:
+1. Be structured with clear sections
+2. Each section should cover the concepts needed to answer specific questions
+3. Use clear, educational language
+4. Include examples and explanations
+5. Be engaging and easy to understand
+
+IMPORTANT: Each section MUST specify which question IDs it helps answer. Group related questions together in sections.`
+      },
+      {
+        role: 'user',
+        content: `Create a lesson for "${setName}" based on these ${questions.length} MCQ questions:
+
+${JSON.stringify(questionsSummary, null, 2)}
+
+Return a JSON object with this exact structure:
+{
+  "title": "Lesson title",
+  "introduction": "Brief introduction to the topic (2-3 sentences)",
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "Section Title",
+      "content": "Detailed educational content explaining the concepts. Use markdown formatting for better readability. Include key points, definitions, and examples.",
+      "questionIds": ["id1", "id2"]
+    }
+  ],
+  "conclusion": "Brief summary of key takeaways (2-3 sentences)"
+}
+
+Make sure EVERY question ID is included in at least one section's questionIds array.
+Create 3-6 sections depending on how many distinct topics the questions cover.
+Each section's content should be 150-300 words.`
+      }
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: 8192,
+    temperature: 0.7,
+  })
+
+  const content = response.choices[0]?.message?.content
+  if (!content) {
+    throw new Error('Failed to generate lesson content')
+  }
+
+  try {
+    const parsed = JSON.parse(content) as GeneratedLesson
+    return parsed
+  } catch (error) {
+    console.error('Failed to parse lesson generation response:', error)
+    throw new Error('Failed to parse generated lesson')
+  }
+}
+
 export default getOpenAI
