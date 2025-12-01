@@ -2,18 +2,22 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiUpload, FiFile, FiX, FiLoader, FiCheck, FiEdit2, FiBook, FiCheckCircle, FiZap } from 'react-icons/fi'
+import { FiUpload, FiFile, FiX, FiLoader, FiCheck, FiEdit2, FiBook, FiCheckCircle, FiZap, FiFileText } from 'react-icons/fi'
 import Link from 'next/link'
 import MCQViewer, { MCQQuestion, Lesson } from '@/components/MCQViewer'
 import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
+type InputMode = 'pdf' | 'text'
+
 export default function NewMCQPage() {
   const [user, setUser] = useState<any>(null)
+  const [inputMode, setInputMode] = useState<InputMode>('pdf')
   const [file, setFile] = useState<File | null>(null)
+  const [textContent, setTextContent] = useState('')
   const [name, setName] = useState('')
   const [generateLesson, setGenerateLesson] = useState(false)
-  const [generateLessonCards, setGenerateLessonCards] = useState(true) // Default on
-  const [autoCorrect, setAutoCorrect] = useState(true) // Default on
+  const [generateLessonCards, setGenerateLessonCards] = useState(true)
+  const [autoCorrect, setAutoCorrect] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStep, setProcessingStep] = useState('')
   const [currentPage, setCurrentPage] = useState(0)
@@ -51,41 +55,82 @@ export default function NewMCQPage() {
       }
       setFile(selectedFile)
       setError(null)
-      // Auto-fill name from filename if not set
       if (!name) {
         setName(selectedFile.name.replace('.pdf', ''))
       }
     }
   }
 
+  const handleModeSwitch = (mode: InputMode) => {
+    setInputMode(mode)
+    setError(null)
+    // Clear the other input when switching
+    if (mode === 'pdf') {
+      setTextContent('')
+    } else {
+      setFile(null)
+    }
+  }
+
+  // Split text into chunks of approximately maxChars characters at sentence boundaries
+  const splitTextIntoChunks = (text: string, maxChars: number = 15000): string[] => {
+    const chunks: string[] = []
+    let remaining = text.trim()
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxChars) {
+        chunks.push(remaining)
+        break
+      }
+
+      // Find a good split point (end of sentence) near maxChars
+      let splitIndex = maxChars
+      
+      // Look for sentence endings (.?!) followed by space or newline
+      const searchStart = Math.max(0, maxChars - 2000)
+      const searchSection = remaining.substring(searchStart, maxChars + 500)
+      
+      // Find the last sentence ending in the search section
+      const sentenceEndRegex = /[.?!]\s+/g
+      let lastMatch = null
+      let match
+      while ((match = sentenceEndRegex.exec(searchSection)) !== null) {
+        if (searchStart + match.index + match[0].length <= maxChars) {
+          lastMatch = match
+        }
+      }
+      
+      if (lastMatch) {
+        splitIndex = searchStart + lastMatch.index + lastMatch[0].length
+      } else {
+        // If no sentence ending found, try to split at a newline
+        const newlineIndex = remaining.lastIndexOf('\n', maxChars)
+        if (newlineIndex > maxChars * 0.5) {
+          splitIndex = newlineIndex + 1
+        }
+      }
+
+      chunks.push(remaining.substring(0, splitIndex).trim())
+      remaining = remaining.substring(splitIndex).trim()
+    }
+
+    return chunks
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!file) {
-      setError('Please select a PDF file')
+    const hasInput = inputMode === 'pdf' ? !!file : textContent.trim().length > 0
+    
+    if (!hasInput) {
+      setError(inputMode === 'pdf' ? 'Please select a PDF file' : 'Please enter some text')
       return
     }
 
     setIsProcessing(true)
     setError(null)
-    setProcessingStep('Converting PDF to images...')
 
     try {
-      // Convert PDF to images on client side
-      const pageImages = await convertPdfToImagesClient(file, 1.5)
-      console.log(`Converted ${pageImages.length} pages`)
-
-      if (pageImages.length === 0) {
-        throw new Error('No pages found in PDF')
-      }
-
-      if (pageImages.length > 40) {
-        throw new Error(`PDF has ${pageImages.length} pages, which exceeds the maximum limit of 40 pages`)
-      }
-
-      setTotalPages(pageImages.length)
-
-      // Get auth session
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
 
@@ -95,68 +140,157 @@ export default function NewMCQPage() {
         return
       }
 
-      // Step 1: Create MCQ set
-      setProcessingStep('Creating MCQ set...')
-      const createResponse = await fetch('/api/mcq', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: name || file.name.replace('.pdf', ''),
-          sourcePdfName: file.name,
-          totalPages: pageImages.length,
-        }),
-      })
-
-      const createData = await createResponse.json()
-
-      if (!createResponse.ok) {
-        throw new Error(createData.error || 'Failed to create MCQ set')
-      }
-
-      const mcqSetId = createData.set.id
+      let mcqSetId: string
       let allQuestions: MCQQuestion[] = []
+      let finalSetName = name
 
-      // Step 2: Upload and process each page one by one
-      for (let i = 0; i < pageImages.length; i++) {
-        const pageImage = pageImages[i]
-        setCurrentPage(i + 1)
-        setProcessingStep(`Extracting MCQs from page ${i + 1} of ${pageImages.length}...`)
+      if (inputMode === 'pdf') {
+        // PDF processing flow
+        setProcessingStep('Converting PDF to images...')
+        
+        const pageImages = await convertPdfToImagesClient(file!, 1.5)
+        console.log(`Converted ${pageImages.length} pages`)
 
-        try {
-          const pageResponse = await fetch(`/api/mcq/${mcqSetId}/page`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              pageNumber: pageImage.pageNumber,
-              dataUrl: pageImage.dataUrl,
-            }),
-          })
+        if (pageImages.length === 0) {
+          throw new Error('No pages found in PDF')
+        }
 
-          const pageData = await pageResponse.json()
+        if (pageImages.length > 40) {
+          throw new Error(`PDF has ${pageImages.length} pages, which exceeds the maximum limit of 40 pages`)
+        }
 
-          if (!pageResponse.ok) {
-            console.error(`Error processing page ${i + 1}:`, pageData.error)
-            continue
+        setTotalPages(pageImages.length)
+
+        // Create MCQ set
+        setProcessingStep('Creating MCQ set...')
+        const createResponse = await fetch('/api/mcq', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: name || file!.name.replace('.pdf', ''),
+            sourcePdfName: file!.name,
+            totalPages: pageImages.length,
+          }),
+        })
+
+        const createData = await createResponse.json()
+        if (!createResponse.ok) {
+          throw new Error(createData.error || 'Failed to create MCQ set')
+        }
+
+        mcqSetId = createData.set.id
+        finalSetName = createData.set.name
+
+        // Process each page
+        for (let i = 0; i < pageImages.length; i++) {
+          const pageImage = pageImages[i]
+          setCurrentPage(i + 1)
+          setProcessingStep(`Extracting MCQs from page ${i + 1} of ${pageImages.length}...`)
+
+          try {
+            const pageResponse = await fetch(`/api/mcq/${mcqSetId}/page`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                pageNumber: pageImage.pageNumber,
+                dataUrl: pageImage.dataUrl,
+              }),
+            })
+
+            const pageData = await pageResponse.json()
+
+            if (!pageResponse.ok) {
+              console.error(`Error processing page ${i + 1}:`, pageData.error)
+              continue
+            }
+
+            if (pageData.questions && pageData.questions.length > 0) {
+              allQuestions.push(...pageData.questions)
+            }
+
+            console.log(`Page ${i + 1}: extracted ${pageData.extractedQuestionCount} questions`)
+          } catch (pageError) {
+            console.error(`Error processing page ${i + 1}:`, pageError)
           }
+        }
+      } else {
+        // Text processing flow
+        setProcessingStep('Preparing text for processing...')
+        
+        const textChunks = splitTextIntoChunks(textContent)
+        console.log(`Split text into ${textChunks.length} chunks`)
+        
+        setTotalPages(textChunks.length)
 
-          // Collect questions from this page
-          if (pageData.questions && pageData.questions.length > 0) {
-            allQuestions.push(...pageData.questions)
+        // Create MCQ set
+        setProcessingStep('Creating MCQ set...')
+        const createResponse = await fetch('/api/mcq', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: name || 'Pasted MCQ Set',
+            sourcePdfName: null,
+            totalPages: textChunks.length,
+          }),
+        })
+
+        const createData = await createResponse.json()
+        if (!createResponse.ok) {
+          throw new Error(createData.error || 'Failed to create MCQ set')
+        }
+
+        mcqSetId = createData.set.id
+        finalSetName = createData.set.name
+
+        // Process each text chunk
+        for (let i = 0; i < textChunks.length; i++) {
+          const chunk = textChunks[i]
+          setCurrentPage(i + 1)
+          setProcessingStep(`Extracting MCQs from chunk ${i + 1} of ${textChunks.length}...`)
+
+          try {
+            const textResponse = await fetch(`/api/mcq/${mcqSetId}/text`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                text: chunk,
+                chunkIndex: i,
+              }),
+            })
+
+            const textData = await textResponse.json()
+
+            if (!textResponse.ok) {
+              console.error(`Error processing chunk ${i + 1}:`, textData.error)
+              continue
+            }
+
+            if (textData.questions && textData.questions.length > 0) {
+              allQuestions.push(...textData.questions)
+            }
+
+            console.log(`Chunk ${i + 1}: extracted ${textData.extractedQuestionCount} questions`)
+          } catch (chunkError) {
+            console.error(`Error processing chunk ${i + 1}:`, chunkError)
           }
-
-          console.log(`Page ${i + 1}: extracted ${pageData.extractedQuestionCount} questions`)
-        } catch (pageError) {
-          console.error(`Error processing page ${i + 1}:`, pageError)
         }
       }
 
-      // Step 3: Auto-correct questions if enabled
+      // Common post-processing steps
+      
+      // Auto-correct if enabled
       if (autoCorrect && allQuestions.length > 0) {
         setProcessingStep('AI is verifying and correcting questions...')
         setCurrentPage(0)
@@ -181,7 +315,7 @@ export default function NewMCQPage() {
         }
       }
 
-      // Step 4: Generate lesson cards if enabled
+      // Generate lesson cards if enabled
       if (generateLessonCards && allQuestions.length > 0) {
         setProcessingStep('Generating individual lesson cards...')
         setCurrentPage(0)
@@ -206,7 +340,7 @@ export default function NewMCQPage() {
         }
       }
 
-      // Step 5: Generate section-based lesson if enabled
+      // Generate section-based lesson if enabled
       let lesson: Lesson | null = null
       if (generateLesson && allQuestions.length > 0) {
         setProcessingStep('Generating lesson content with AI...')
@@ -252,17 +386,17 @@ export default function NewMCQPage() {
       setResult({
         set: {
           id: mcqSetId,
-          name: createData.set.name,
-          total_pages: pageImages.length,
+          name: finalSetName,
+          total_pages: totalPages,
           total_questions: allQuestions.length,
         },
         questions: allQuestions,
         lesson,
-        message: `Successfully extracted ${allQuestions.length} questions from ${pageImages.length} pages`
+        message: `Successfully extracted ${allQuestions.length} questions`
       })
     } catch (err: any) {
-      console.error('Upload error:', err)
-      setError(err.message || 'Failed to process PDF')
+      console.error('Processing error:', err)
+      setError(err.message || 'Failed to process input')
     } finally {
       setIsProcessing(false)
       setProcessingStep('')
@@ -272,6 +406,7 @@ export default function NewMCQPage() {
 
   const handleReset = () => {
     setFile(null)
+    setTextContent('')
     setName('')
     setGenerateLesson(false)
     setGenerateLessonCards(true)
@@ -294,7 +429,6 @@ export default function NewMCQPage() {
   if (result) {
     return (
       <div className="min-h-screen bg-background">
-        {/* Header */}
         <header className="h-14 border-b border-border flex items-center px-8 bg-sidebar">
           <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
             <div>
@@ -310,7 +444,7 @@ export default function NewMCQPage() {
                 Edit Questions
               </Link>
               <button onClick={handleReset} className="btn-secondary">
-                Upload Another
+                Create Another
               </button>
               <Link href="/mcq" className="btn-secondary">
                 All MCQ Sets
@@ -319,7 +453,6 @@ export default function NewMCQPage() {
           </div>
         </header>
 
-        {/* Content */}
         <main className="p-8">
           <div className="max-w-7xl mx-auto">
             {result.questions.length > 0 ? (
@@ -327,10 +460,10 @@ export default function NewMCQPage() {
             ) : (
               <div className="card p-8 text-center">
                 <p className="text-text-secondary mb-4">
-                  No MCQ questions were found in the uploaded PDF.
+                  No MCQ questions were found in the input.
                 </p>
                 <button onClick={handleReset} className="btn-primary">
-                  Try Another PDF
+                  Try Again
                 </button>
               </div>
             )}
@@ -343,7 +476,6 @@ export default function NewMCQPage() {
   // Show upload form
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="h-14 border-b border-border flex items-center px-8 bg-sidebar">
         <div className="flex items-center justify-between w-full max-w-4xl mx-auto">
           <h1 className="text-lg font-semibold text-text-primary">New MCQ Set</h1>
@@ -353,16 +485,15 @@ export default function NewMCQPage() {
         </div>
       </header>
 
-      {/* Content */}
       <main className="p-8">
         <div className="max-w-2xl mx-auto">
           <div className="card p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-semibold text-text-primary mb-2">
-                Upload MCQ PDF
+                Create MCQ Set
               </h2>
               <p className="text-text-secondary">
-                Upload a PDF containing multiple choice questions. Our AI will extract, verify, and format them into an interactive quiz.
+                Upload a PDF or paste text containing multiple choice questions. Our AI will extract, verify, and format them into an interactive quiz.
               </p>
             </div>
 
@@ -383,56 +514,137 @@ export default function NewMCQPage() {
                 />
               </div>
 
-              {/* File upload */}
+              {/* Input Mode Toggle */}
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-2">
-                  PDF File
+                  Input Method
                 </label>
-                
-                {!file ? (
-                  <label className="block w-full cursor-pointer">
-                    <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-accent hover:bg-accent-muted transition-colors">
-                      <FiUpload className="w-12 h-12 text-text-tertiary mx-auto mb-4" />
-                      <p className="text-text-primary font-medium mb-1">
-                        Click to upload or drag and drop
-                      </p>
-                      <p className="text-sm text-text-secondary">
-                        PDF file (max 50MB, up to 40 pages)
-                      </p>
-                    </div>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      disabled={isProcessing}
-                    />
+                <div className="flex rounded-lg overflow-hidden border border-border">
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('pdf')}
+                    disabled={isProcessing}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                      inputMode === 'pdf'
+                        ? 'bg-accent text-white'
+                        : 'bg-elevated text-text-secondary hover:bg-border'
+                    }`}
+                  >
+                    <FiUpload className="w-4 h-4" />
+                    Upload PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('text')}
+                    disabled={isProcessing}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                      inputMode === 'text'
+                        ? 'bg-accent text-white'
+                        : 'bg-elevated text-text-secondary hover:bg-border'
+                    }`}
+                  >
+                    <FiFileText className="w-4 h-4" />
+                    Paste Text
+                  </button>
+                </div>
+              </div>
+
+              {/* PDF Upload */}
+              {inputMode === 'pdf' && (
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    PDF File
                   </label>
-                ) : (
-                  <div className="border-2 border-accent rounded-lg p-4 bg-accent-muted">
-                    <div className="flex items-center gap-3">
-                      <FiFile className="w-10 h-10 text-accent flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-text-primary truncate">
-                          {file.name}
+                  
+                  {!file ? (
+                    <label className="block w-full cursor-pointer">
+                      <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-accent hover:bg-accent-muted transition-colors">
+                        <FiUpload className="w-12 h-12 text-text-tertiary mx-auto mb-4" />
+                        <p className="text-text-primary font-medium mb-1">
+                          Click to upload or drag and drop
                         </p>
                         <p className="text-sm text-text-secondary">
-                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                          PDF file (max 50MB, up to 40 pages)
                         </p>
                       </div>
-                      {!isProcessing && (
-                        <button
-                          type="button"
-                          onClick={() => setFile(null)}
-                          className="p-2 hover:bg-background rounded-lg transition-colors"
-                        >
-                          <FiX className="w-5 h-5 text-text-tertiary" />
-                        </button>
-                      )}
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        disabled={isProcessing}
+                      />
+                    </label>
+                  ) : (
+                    <div className="border-2 border-accent rounded-lg p-4 bg-accent-muted">
+                      <div className="flex items-center gap-3">
+                        <FiFile className="w-10 h-10 text-accent flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-text-primary truncate">
+                            {file.name}
+                          </p>
+                          <p className="text-sm text-text-secondary">
+                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                        {!isProcessing && (
+                          <button
+                            type="button"
+                            onClick={() => setFile(null)}
+                            className="p-2 hover:bg-background rounded-lg transition-colors"
+                          >
+                            <FiX className="w-5 h-5 text-text-tertiary" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
+
+              {/* Text Input */}
+              {inputMode === 'text' && (
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-2">
+                    MCQ Text
+                  </label>
+                  <textarea
+                    value={textContent}
+                    onChange={(e) => setTextContent(e.target.value)}
+                    placeholder={`Paste your MCQ questions here. Example format:
+
+1. What is the capital of France?
+A) London
+B) Paris
+C) Berlin
+D) Madrid
+Answer: B
+
+2. Which planet is closest to the Sun?
+A) Venus
+B) Earth
+C) Mercury
+D) Mars
+Correct: C
+
+You can paste as much text as you want - there's no character limit!`}
+                    className="w-full px-4 py-3 bg-elevated border border-border rounded-lg text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent resize-y min-h-[300px] font-mono text-sm"
+                    disabled={isProcessing}
+                  />
+                  <p className="mt-2 text-xs text-text-tertiary">
+                    {textContent.length > 0 && (
+                      <>
+                        {textContent.length.toLocaleString()} characters
+                        {textContent.length > 15000 && (
+                          <span className="ml-2">
+                            (will be processed in {Math.ceil(textContent.length / 15000)} chunks)
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
 
               {/* AI Enhancement Options */}
               <div className="space-y-3">
@@ -459,7 +671,7 @@ export default function NewMCQPage() {
                         <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full">Recommended</span>
                       </div>
                       <p className="text-sm text-text-secondary">
-                        AI will verify each question, fix OCR errors, and ensure correct answers are accurate.
+                        AI will verify each question, fix errors, and ensure correct answers are accurate.
                       </p>
                     </div>
                   </label>
@@ -536,7 +748,7 @@ export default function NewMCQPage() {
                   {totalPages > 0 && currentPage > 0 && (
                     <div>
                       <div className="flex justify-between text-xs text-blue-700 mb-1">
-                        <span>Page {currentPage} of {totalPages}</span>
+                        <span>{inputMode === 'pdf' ? 'Page' : 'Chunk'} {currentPage} of {totalPages}</span>
                         <span>{Math.round((currentPage / totalPages) * 100)}%</span>
                       </div>
                       <div className="w-full bg-blue-200 rounded-full h-2">
@@ -553,7 +765,7 @@ export default function NewMCQPage() {
               {/* Submit button */}
               <button
                 type="submit"
-                disabled={!file || isProcessing}
+                disabled={(inputMode === 'pdf' ? !file : textContent.trim().length === 0) || isProcessing}
                 className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isProcessing ? (
@@ -563,7 +775,7 @@ export default function NewMCQPage() {
                   </>
                 ) : (
                   <>
-                    <FiUpload className="w-4 h-4" />
+                    <FiCheck className="w-4 h-4" />
                     Extract MCQs
                   </>
                 )}
