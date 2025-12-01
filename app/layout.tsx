@@ -5,11 +5,8 @@ export const metadata: Metadata = {
   title: 'Studyz - Smart Study Assistant',
   description: 'Study smarter with AI-powered document analysis and conversational assistance',
   icons: {
-    icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/favicon.ico', sizes: 'any' },
-    ],
-    apple: '/apple-touch-icon.png',
+    icon: '/favicon.png',
+    apple: '/favicon.png',
   },
 }
 
