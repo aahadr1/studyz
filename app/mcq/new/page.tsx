@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiUpload, FiFile, FiX, FiLoader, FiCheck, FiEdit2, FiBook } from 'react-icons/fi'
+import { FiUpload, FiFile, FiX, FiLoader, FiCheck, FiEdit2, FiBook, FiCheckCircle, FiZap } from 'react-icons/fi'
 import Link from 'next/link'
 import MCQViewer, { MCQQuestion, Lesson } from '@/components/MCQViewer'
 import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
@@ -12,6 +12,8 @@ export default function NewMCQPage() {
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
   const [generateLesson, setGenerateLesson] = useState(false)
+  const [generateLessonCards, setGenerateLessonCards] = useState(true) // Default on
+  const [autoCorrect, setAutoCorrect] = useState(true) // Default on
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingStep, setProcessingStep] = useState('')
   const [currentPage, setCurrentPage] = useState(0)
@@ -115,7 +117,7 @@ export default function NewMCQPage() {
       }
 
       const mcqSetId = createData.set.id
-      const allQuestions: MCQQuestion[] = []
+      let allQuestions: MCQQuestion[] = []
 
       // Step 2: Upload and process each page one by one
       for (let i = 0; i < pageImages.length; i++) {
@@ -148,13 +150,63 @@ export default function NewMCQPage() {
             allQuestions.push(...pageData.questions)
           }
 
-          console.log(`Page ${i + 1}: extracted ${pageData.questionsExtracted} questions`)
+          console.log(`Page ${i + 1}: extracted ${pageData.extractedQuestionCount} questions`)
         } catch (pageError) {
           console.error(`Error processing page ${i + 1}:`, pageError)
         }
       }
 
-      // Step 3: Generate lesson if requested
+      // Step 3: Auto-correct questions if enabled
+      if (autoCorrect && allQuestions.length > 0) {
+        setProcessingStep('AI is verifying and correcting questions...')
+        setCurrentPage(0)
+        
+        try {
+          const correctResponse = await fetch(`/api/mcq/${mcqSetId}/auto-correct`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          })
+
+          const correctData = await correctResponse.json()
+
+          if (correctResponse.ok) {
+            console.log(`Auto-correction: ${correctData.summary?.questionsModified || 0} questions modified`)
+          } else {
+            console.error('Auto-correction failed:', correctData.error)
+          }
+        } catch (correctError) {
+          console.error('Error during auto-correction:', correctError)
+        }
+      }
+
+      // Step 4: Generate lesson cards if enabled
+      if (generateLessonCards && allQuestions.length > 0) {
+        setProcessingStep('Generating individual lesson cards...')
+        setCurrentPage(0)
+        
+        try {
+          const cardsResponse = await fetch(`/api/mcq/${mcqSetId}/generate-lesson-cards`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          })
+
+          const cardsData = await cardsResponse.json()
+
+          if (cardsResponse.ok) {
+            console.log(`Generated ${cardsData.cardsGenerated} lesson cards`)
+          } else {
+            console.error('Lesson card generation failed:', cardsData.error)
+          }
+        } catch (cardsError) {
+          console.error('Error generating lesson cards:', cardsError)
+        }
+      }
+
+      // Step 5: Generate section-based lesson if enabled
       let lesson: Lesson | null = null
       if (generateLesson && allQuestions.length > 0) {
         setProcessingStep('Generating lesson content with AI...')
@@ -173,24 +225,27 @@ export default function NewMCQPage() {
           if (lessonResponse.ok && lessonData.lesson) {
             lesson = lessonData.lesson
             console.log(`Generated lesson with ${lessonData.lesson.sections.length} sections`)
-
-            // Refetch questions to get updated section_ids
-            const questionsResponse = await fetch(`/api/mcq/${mcqSetId}`, {
-              headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-              },
-            })
-            
-            if (questionsResponse.ok) {
-              const questionsData = await questionsResponse.json()
-              allQuestions.length = 0
-              allQuestions.push(...questionsData.questions)
-            }
           } else {
             console.error('Failed to generate lesson:', lessonData.error)
           }
         } catch (lessonError) {
           console.error('Error generating lesson:', lessonError)
+        }
+      }
+
+      // Final step: Refetch all questions with updated data
+      setProcessingStep('Finalizing...')
+      const questionsResponse = await fetch(`/api/mcq/${mcqSetId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+      
+      if (questionsResponse.ok) {
+        const questionsData = await questionsResponse.json()
+        allQuestions = questionsData.questions || []
+        if (questionsData.set.lesson_content) {
+          lesson = questionsData.set.lesson_content
         }
       }
 
@@ -219,6 +274,8 @@ export default function NewMCQPage() {
     setFile(null)
     setName('')
     setGenerateLesson(false)
+    setGenerateLessonCards(true)
+    setAutoCorrect(true)
     setError(null)
     setResult(null)
     setCurrentPage(0)
@@ -305,7 +362,7 @@ export default function NewMCQPage() {
                 Upload MCQ PDF
               </h2>
               <p className="text-text-secondary">
-                Upload a PDF containing multiple choice questions. Our AI will extract and format them into an interactive quiz.
+                Upload a PDF containing multiple choice questions. Our AI will extract, verify, and format them into an interactive quiz.
               </p>
             </div>
 
@@ -377,28 +434,85 @@ export default function NewMCQPage() {
                 )}
               </div>
 
-              {/* Generate Lesson Toggle */}
-              <div className="p-4 bg-elevated rounded-lg border border-border">
-                <label className="flex items-start gap-4 cursor-pointer">
-                  <div className="pt-0.5">
-                    <input
-                      type="checkbox"
-                      checked={generateLesson}
-                      onChange={(e) => setGenerateLesson(e.target.checked)}
-                      disabled={isProcessing}
-                      className="w-5 h-5 rounded border-border text-accent focus:ring-accent"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <FiBook className="w-5 h-5 text-accent" />
-                      <span className="font-medium text-text-primary">Generate Automatic Lesson</span>
-                    </div>
-                    <p className="text-sm text-text-secondary">
-                      AI will create a comprehensive lesson based on your MCQs. Each question will be linked to its relevant lesson section, displayed in a sidebar while you practice.
-                    </p>
-                  </div>
+              {/* AI Enhancement Options */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  AI Enhancements
                 </label>
+
+                {/* Auto-Correct Toggle */}
+                <div className="p-4 bg-elevated rounded-lg border border-border">
+                  <label className="flex items-start gap-4 cursor-pointer">
+                    <div className="pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={autoCorrect}
+                        onChange={(e) => setAutoCorrect(e.target.checked)}
+                        disabled={isProcessing}
+                        className="w-5 h-5 rounded border-border text-accent focus:ring-accent"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FiCheckCircle className="w-5 h-5 text-green-500" />
+                        <span className="font-medium text-text-primary">Auto-Correct Questions</span>
+                        <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full">Recommended</span>
+                      </div>
+                      <p className="text-sm text-text-secondary">
+                        AI will verify each question, fix OCR errors, and ensure correct answers are accurate.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Generate Lesson Cards Toggle */}
+                <div className="p-4 bg-elevated rounded-lg border border-border">
+                  <label className="flex items-start gap-4 cursor-pointer">
+                    <div className="pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={generateLessonCards}
+                        onChange={(e) => setGenerateLessonCards(e.target.checked)}
+                        disabled={isProcessing}
+                        className="w-5 h-5 rounded border-border text-accent focus:ring-accent"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FiZap className="w-5 h-5 text-yellow-500" />
+                        <span className="font-medium text-text-primary">Generate Lesson Cards</span>
+                        <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full">Recommended</span>
+                      </div>
+                      <p className="text-sm text-text-secondary">
+                        Each question gets a dedicated lesson card with explanations, key points, and memory hooks.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Generate Section Lesson Toggle */}
+                <div className="p-4 bg-elevated rounded-lg border border-border">
+                  <label className="flex items-start gap-4 cursor-pointer">
+                    <div className="pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={generateLesson}
+                        onChange={(e) => setGenerateLesson(e.target.checked)}
+                        disabled={isProcessing}
+                        className="w-5 h-5 rounded border-border text-accent focus:ring-accent"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FiBook className="w-5 h-5 text-blue-500" />
+                        <span className="font-medium text-text-primary">Generate Full Lesson</span>
+                      </div>
+                      <p className="text-sm text-text-secondary">
+                        AI will create a comprehensive structured lesson based on all MCQs, organized into topic sections.
+                      </p>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               {/* Error message */}
@@ -450,7 +564,7 @@ export default function NewMCQPage() {
                 ) : (
                   <>
                     <FiUpload className="w-4 h-4" />
-                    Extract MCQs {generateLesson && '& Generate Lesson'}
+                    Extract MCQs
                   </>
                 )}
               </button>
