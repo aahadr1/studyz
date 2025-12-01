@@ -10,6 +10,9 @@ The MCQ (Multiple Choice Questions) feature allows users to upload PDF documents
 
 ## Architecture
 
+### ⚡ Vercel-Compatible Design
+This implementation uses **client-side PDF processing** to avoid native dependency issues on Vercel's serverless platform. The browser handles PDF-to-image conversion using PDF.js, then sends the images to the API for AI processing and storage.
+
 ### Database Schema
 
 #### mcq_sets
@@ -56,15 +59,25 @@ Stores individual MCQ questions:
 ### API Endpoints
 
 #### POST /api/mcq
-Creates a new MCQ set from uploaded PDF.
+Creates a new MCQ set from client-converted PDF images.
 
 **Request:**
 - Method: `POST`
-- Content-Type: `multipart/form-data`
+- Content-Type: `application/json`
 - Headers: `Authorization: Bearer {token}`
 - Body:
-  - `file`: PDF file (required)
-  - `name`: Set name (optional)
+  ```json
+  {
+    "name": "Optional set name",
+    "sourcePdfName": "original.pdf",
+    "pageImages": [
+      {
+        "pageNumber": 1,
+        "dataUrl": "data:image/png;base64,..."
+      }
+    ]
+  }
+  ```
 
 **Response:**
 ```json
@@ -86,11 +99,10 @@ Creates a new MCQ set from uploaded PDF.
 - Timeout: 300 seconds
 
 **Processing Flow:**
-1. Validate auth and file
-2. Convert PDF to images (1.5x scale)
+1. Validate auth
+2. Receive pre-converted images from client (base64 data URLs)
 3. Create mcq_sets record
-4. Upload PDF to storage
-5. For each page sequentially:
+4. For each page sequentially:
    - Upload page image to storage
    - Get public URL
    - Create mcq_pages record
@@ -175,8 +187,10 @@ All tables have policies ensuring:
 ## Performance Considerations
 
 ### Image Processing
+- **Client-side PDF conversion** using PDF.js in the browser (Vercel-compatible)
+- No server-side canvas dependencies required
 - PDF conversion at 1.5x scale (balance quality/size)
-- Estimated ~500KB per page
+- Images sent as base64 data URLs to API
 - Sequential processing to manage memory
 
 ### OpenAI Rate Limits
@@ -193,16 +207,26 @@ All tables have policies ensuring:
 
 ### Creating an MCQ Set
 ```typescript
-const formData = new FormData()
-formData.append('file', pdfFile)
-formData.append('name', 'Biology Quiz')
+// 1. Convert PDF to images on client side
+import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
+const pageImages = await convertPdfToImagesClient(pdfFile, 1.5)
+
+// 2. Send to API
 const response = await fetch('/api/mcq', {
   method: 'POST',
   headers: {
-    'Authorization': `Bearer ${token}`
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
   },
-  body: formData
+  body: JSON.stringify({
+    name: 'Biology Quiz',
+    sourcePdfName: pdfFile.name,
+    pageImages: pageImages.map(p => ({
+      pageNumber: p.pageNumber,
+      dataUrl: p.dataUrl,
+    })),
+  }),
 })
 
 const data = await response.json()
@@ -236,7 +260,9 @@ Potential improvements:
 
 ### PDF Conversion Fails
 - Ensure PDF is valid and not corrupted
-- Check if PDF has proper fonts embedded
+- Try a different browser (Chrome/Firefox recommended)
+- Check browser console for errors
+- Ensure PDF.js worker is loading correctly
 - Try reducing file size or page count
 
 ### No Questions Extracted
