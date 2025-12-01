@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { FiArrowRight } from 'react-icons/fi'
+import Logo from '@/components/Logo'
 
 export default function Home() {
   const router = useRouter()
@@ -19,7 +20,7 @@ export default function Home() {
       <nav className="border-b border-border">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex justify-between items-center h-14">
-            <span className="text-sm font-semibold text-text-primary tracking-wider">STUDYZ</span>
+            <Logo size="md" href="/" />
             <div className="flex items-center gap-4">
               <button
                 onClick={() => router.push('/login')}
@@ -115,7 +116,7 @@ export default function Home() {
       <footer className="border-t border-border">
         <div className="max-w-6xl mx-auto px-6 py-6">
           <div className="flex justify-between items-center">
-            <span className="text-xs font-medium text-text-secondary tracking-wider">STUDYZ</span>
+            <Logo size="sm" />
             <span className="text-xs text-text-tertiary mono">
               © 2025
             </span>

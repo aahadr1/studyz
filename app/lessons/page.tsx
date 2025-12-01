@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { FiPlus, FiBook, FiTrash2, FiArrowLeft, FiArrowRight, FiLogOut, FiHome, FiCheckSquare } from 'react-icons/fi'
 import Link from 'next/link'
 import type { Lesson } from '@/types/db'
+import Logo from '@/components/Logo'
 
 export default function LessonsPage() {
   const [user, setUser] = useState<any>(null)
@@ -93,7 +94,7 @@ export default function LessonsPage() {
       {/* Sidebar */}
       <aside className="w-60 sidebar flex flex-col">
         <div className="h-14 flex items-center px-4 border-b border-border">
-          <span className="text-sm font-semibold text-text-primary tracking-wider">STUDYZ</span>
+          <Logo size="md" href="/dashboard" />
         </div>
 
         <nav className="flex-1 py-4">

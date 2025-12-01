@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
   FiChevronLeft, 
+  FiChevronRight,
   FiCheck, 
   FiX, 
   FiArrowRight,
@@ -16,8 +17,7 @@ import {
   FiClock,
   FiAward,
   FiTrendingUp,
-  FiChevronDown,
-  FiChevronUp
+  FiInfo
 } from 'react-icons/fi'
 
 interface MCQQuestion {
@@ -30,6 +30,9 @@ interface MCQQuestion {
     title: string
     conceptOverview: string
     keyPoints?: string[]
+    detailedExplanation?: string
+    examples?: string[]
+    commonMistakes?: string[]
   }
 }
 
@@ -62,10 +65,12 @@ export default function MobileMCQViewerPage() {
   // Challenge mode
   const [challengeTimeLeft, setChallengeTimeLeft] = useState(30)
   
-  // Lesson card state
-  const [showLessonCard, setShowLessonCard] = useState(false)
+  // UI state
+  const [showLessonSheet, setShowLessonSheet] = useState(false)
+  const [showExplanationSheet, setShowExplanationSheet] = useState(false)
+  const [showModeSelector, setShowModeSelector] = useState(false)
 
-  // Touch handling for swipe
+  // Touch handling
   const touchStartX = useRef<number>(0)
   const touchStartY = useRef<number>(0)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -98,7 +103,6 @@ export default function MobileMCQViewerPage() {
     }
   }, [mode, hasChecked])
 
-  // Reset challenge timer on new question
   useEffect(() => {
     if (mode === 'challenge') {
       setChallengeTimeLeft(30)
@@ -143,7 +147,11 @@ export default function MobileMCQViewerPage() {
   const activeQuestions = getActiveQuestions()
   const currentQuestion = activeQuestions[currentIndex]
   const isCorrect = selectedOption === currentQuestion?.correctOption
-  const progress = ((currentIndex + 1) / activeQuestions.length) * 100
+  const progress = activeQuestions.length > 0 ? ((currentIndex + 1) / activeQuestions.length) * 100 : 0
+  const accuracy = (correctAnswers + incorrectAnswers) > 0 
+    ? Math.round((correctAnswers / (correctAnswers + incorrectAnswers)) * 100) 
+    : 0
+  const hasLessonCard = currentQuestion?.lesson_card
 
   const handleCheck = () => {
     if (!selectedOption || !currentQuestion) return
@@ -169,7 +177,8 @@ export default function MobileMCQViewerPage() {
       setCurrentIndex(currentIndex + 1)
       setSelectedOption(null)
       setHasChecked(false)
-      setShowLessonCard(false)
+      setShowLessonSheet(false)
+      setShowExplanationSheet(false)
     } else {
       setIsComplete(true)
     }
@@ -180,7 +189,8 @@ export default function MobileMCQViewerPage() {
       setCurrentIndex(currentIndex - 1)
       setSelectedOption(null)
       setHasChecked(false)
-      setShowLessonCard(false)
+      setShowLessonSheet(false)
+      setShowExplanationSheet(false)
     }
   }
 
@@ -190,7 +200,9 @@ export default function MobileMCQViewerPage() {
     setSelectedOption(null)
     setHasChecked(false)
     setIsComplete(false)
-    setShowLessonCard(false)
+    setShowModeSelector(false)
+    setShowLessonSheet(false)
+    setShowExplanationSheet(false)
   }
 
   const handleRestart = () => {
@@ -202,10 +214,10 @@ export default function MobileMCQViewerPage() {
     setTotalTimeSeconds(0)
     setAnsweredQuestions(new Set())
     setIsComplete(false)
-    setShowLessonCard(false)
+    setShowLessonSheet(false)
+    setShowExplanationSheet(false)
   }
 
-  // Swipe handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.targetTouches[0].clientX
     touchStartY.current = e.targetTouches[0].clientY
@@ -217,15 +229,9 @@ export default function MobileMCQViewerPage() {
     const diffX = touchStartX.current - touchEndX
     const diffY = touchStartY.current - touchEndY
     
-    // Only handle horizontal swipes
     if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
-      if (diffX > 0 && hasChecked) {
-        // Swipe left - next
-        handleNext()
-      } else if (diffX < 0) {
-        // Swipe right - previous
-        handlePrevious()
-      }
+      if (diffX > 0 && hasChecked) handleNext()
+      else if (diffX < 0) handlePrevious()
     }
   }
 
@@ -235,9 +241,23 @@ export default function MobileMCQViewerPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  const accuracy = (correctAnswers + incorrectAnswers) > 0 
-    ? Math.round((correctAnswers / (correctAnswers + incorrectAnswers)) * 100) 
-    : 0
+  const getModeColor = (m: MCQMode) => {
+    switch (m) {
+      case 'study': return 'var(--color-mode-study)'
+      case 'test': return 'var(--color-mode-test)'
+      case 'challenge': return 'var(--color-mode-challenge)'
+      case 'review': return 'var(--color-mode-review)'
+    }
+  }
+
+  const getModeLabel = (m: MCQMode) => {
+    switch (m) {
+      case 'study': return 'Study'
+      case 'test': return 'Test'
+      case 'challenge': return 'Challenge'
+      case 'review': return 'Review'
+    }
+  }
 
   if (loading) {
     return (
@@ -253,8 +273,35 @@ export default function MobileMCQViewerPage() {
         <div className="text-center">
           <p className="text-[var(--color-text-secondary)] mb-4">No questions found</p>
           <button onClick={() => router.push('/m/mcq')} className="btn-mobile btn-primary-mobile">
-            Back to Quizzes
+            Back
           </button>
+        </div>
+      </div>
+    )
+  }
+
+  // No questions in review mode
+  if (activeQuestions.length === 0 && mode === 'review') {
+    return (
+      <div className="mobile-app">
+        <header className="mobile-header">
+          <button onClick={() => router.push('/m/mcq')} className="mobile-header-action">
+            <FiChevronLeft className="w-5 h-5" strokeWidth={1.5} />
+          </button>
+          <h1 className="mobile-header-title">{mcqSet.name}</h1>
+          <div className="w-12" />
+        </header>
+        <div className="mobile-content flex items-center justify-center">
+          <div className="text-center p-6">
+            <div className="w-16 h-16 border border-[var(--color-border)] flex items-center justify-center mx-auto mb-4">
+              <FiCheck className="w-8 h-8 text-[var(--color-success)]" strokeWidth={1.5} />
+            </div>
+            <h3 className="font-medium mb-2">No mistakes to review</h3>
+            <p className="text-sm text-[var(--color-text-secondary)] mb-6">Great job! You haven't missed any questions.</p>
+            <button onClick={() => handleModeChange('test')} className="btn-mobile btn-primary-mobile">
+              Back to Test Mode
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -262,74 +309,77 @@ export default function MobileMCQViewerPage() {
 
   // Results Screen
   if (isComplete) {
+    const getAccuracyColor = () => {
+      if (accuracy >= 80) return 'var(--color-success)'
+      if (accuracy >= 60) return 'var(--color-warning)'
+      return 'var(--color-error)'
+    }
+
     return (
       <div className="mobile-app">
         <header className="mobile-header">
           <button onClick={() => router.push('/m/mcq')} className="mobile-header-action">
-            <FiChevronLeft className="w-6 h-6" />
+            <FiChevronLeft className="w-5 h-5" strokeWidth={1.5} />
           </button>
           <h1 className="mobile-header-title">Results</h1>
           <div className="w-12" />
         </header>
 
-        <div className="mobile-content-full flex flex-col items-center justify-center px-6 py-8" style={{ paddingTop: 'calc(var(--nav-height) + var(--safe-area-top) + 24px)' }}>
-          {/* Trophy */}
-          <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 ${
-            accuracy >= 80 ? 'bg-[var(--color-success-soft)]' : 
-            accuracy >= 60 ? 'bg-[var(--color-warning-soft)]' : 
-            'bg-[var(--color-error-soft)]'
-          }`}>
-            <FiAward className={`w-12 h-12 ${
-              accuracy >= 80 ? 'text-[var(--color-success)]' : 
-              accuracy >= 60 ? 'text-[var(--color-warning)]' : 
-              'text-[var(--color-error)]'
-            }`} />
+        <div className="mobile-content px-4 py-8" style={{ paddingTop: 'calc(var(--nav-height) + var(--safe-area-top) + 32px)' }}>
+          {/* Score Display */}
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 border-2 mx-auto mb-4 flex items-center justify-center" style={{ borderColor: getAccuracyColor() }}>
+              <span className="text-3xl font-semibold mono" style={{ color: getAccuracyColor() }}>{accuracy}%</span>
+            </div>
+            <h2 className="text-xl font-semibold mb-1">
+              {accuracy >= 80 ? 'Excellent!' : accuracy >= 60 ? 'Good job!' : 'Keep practicing'}
+            </h2>
+            <p className="text-xs text-[var(--color-text-secondary)] mono uppercase tracking-wider">
+              Completed in {formatTime(totalTimeSeconds)}
+            </p>
           </div>
 
-          <h2 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
-            {accuracy >= 80 ? 'Excellent!' : accuracy >= 60 ? 'Good job!' : 'Keep practicing!'}
-          </h2>
-          
-          <p className="text-[var(--color-text-secondary)] text-center mb-8">
-            You completed the quiz in {formatTime(totalTimeSeconds)}
-          </p>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-3 gap-3 w-full mb-8">
-            <div className="mcq-stat correct">
-              <span className="mcq-stat-value">{correctAnswers}</span>
-              <span className="mcq-stat-label">Correct</span>
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-px bg-[var(--color-border)] mb-8">
+            <div className="bg-[var(--color-bg)] p-4 text-center">
+              <span className="block text-2xl font-semibold mono text-[var(--color-success)]">{correctAnswers}</span>
+              <span className="text-[9px] text-[var(--color-text-secondary)] uppercase tracking-wider">Correct</span>
             </div>
-            <div className="mcq-stat incorrect">
-              <span className="mcq-stat-value">{incorrectAnswers}</span>
-              <span className="mcq-stat-label">Wrong</span>
+            <div className="bg-[var(--color-bg)] p-4 text-center">
+              <span className="block text-2xl font-semibold mono text-[var(--color-error)]">{incorrectAnswers}</span>
+              <span className="text-[9px] text-[var(--color-text-secondary)] uppercase tracking-wider">Wrong</span>
             </div>
-            <div className={`mcq-stat ${accuracy >= 80 ? 'correct' : accuracy >= 60 ? 'time' : 'incorrect'}`}>
-              <span className="mcq-stat-value">{accuracy}%</span>
-              <span className="mcq-stat-label">Score</span>
+            <div className="bg-[var(--color-bg)] p-4 text-center">
+              <span className="block text-2xl font-semibold mono">{activeQuestions.length}</span>
+              <span className="text-[9px] text-[var(--color-text-secondary)] uppercase tracking-wider">Total</span>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="w-full space-y-3">
+          <div className="space-y-3">
             <button onClick={handleRestart} className="btn-mobile btn-primary-mobile w-full">
-              <FiRotateCcw className="w-5 h-5" />
+              <FiRotateCcw className="w-4 h-4" strokeWidth={1.5} />
               Try Again
             </button>
             
             {incorrectQuestionIds.size > 0 && mode !== 'review' && (
               <button 
                 onClick={() => handleModeChange('review')}
-                className="btn-mobile btn-secondary-mobile w-full"
+                className="btn-mobile w-full flex items-center justify-center gap-2 py-3.5"
+                style={{ 
+                  background: 'var(--color-mode-review-soft)', 
+                  color: 'var(--color-mode-review)',
+                  border: '1px solid var(--color-mode-review)'
+                }}
               >
-                <FiBook className="w-5 h-5" />
+                <FiRotateCcw className="w-4 h-4" strokeWidth={1.5} />
                 Review Mistakes ({incorrectQuestionIds.size})
               </button>
             )}
             
             <button 
               onClick={() => router.push('/m/mcq')}
-              className="btn-mobile btn-ghost-mobile w-full"
+              className="btn-mobile btn-secondary-mobile w-full"
             >
               Back to Quizzes
             </button>
@@ -341,25 +391,26 @@ export default function MobileMCQViewerPage() {
 
   // Quiz Screen
   return (
-    <div 
-      className="mobile-app"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="mobile-app" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       {/* Header */}
       <header className="mobile-header">
         <button onClick={() => router.push('/m/mcq')} className="mobile-header-action">
-          <FiChevronLeft className="w-6 h-6" />
+          <FiChevronLeft className="w-5 h-5" strokeWidth={1.5} />
         </button>
         <div className="flex-1 text-center min-w-0">
-          <h1 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">
-            {mcqSet.name}
-          </h1>
+          <h1 className="text-xs font-medium uppercase tracking-wider truncate">{mcqSet.name}</h1>
         </div>
-        <div className="flex items-center gap-1 text-xs font-medium text-[var(--color-text-secondary)]">
-          <FiClock className="w-3.5 h-3.5" />
-          {formatTime(totalTimeSeconds)}
-        </div>
+        <button 
+          onClick={() => setShowModeSelector(true)}
+          className="px-2 py-1 text-[10px] uppercase tracking-wider border"
+          style={{ 
+            color: getModeColor(mode),
+            borderColor: getModeColor(mode),
+            background: `${getModeColor(mode)}15`
+          }}
+        >
+          {getModeLabel(mode)}
+        </button>
       </header>
 
       {/* Content */}
@@ -367,241 +418,461 @@ export default function MobileMCQViewerPage() {
         className="mobile-content-full flex flex-col"
         style={{ paddingTop: 'calc(var(--nav-height) + var(--safe-area-top))' }}
       >
-        {/* Progress Section */}
-        <div className="mcq-progress">
-          <div className="mcq-progress-bar">
+        {/* Progress & Stats Bar */}
+        <div className="px-4 py-3 border-b border-[var(--color-border)]">
+          {/* Progress Bar */}
+          <div className="h-1 bg-[var(--color-border)] mb-3">
             <div 
-              className="mcq-progress-fill" 
-              style={{ width: `${progress}%` }}
+              className="h-full transition-all duration-300"
+              style={{ 
+                width: `${progress}%`,
+                background: getModeColor(mode)
+              }}
             />
           </div>
-          <div className="mcq-progress-text">
-            <span>Question {currentIndex + 1} of {activeQuestions.length}</span>
-            <div className="flex items-center gap-3">
+          
+          {/* Stats Row */}
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider">
+            <span className="text-[var(--color-text-secondary)] mono">
+              {currentIndex + 1} / {activeQuestions.length}
+            </span>
+            <div className="flex items-center gap-4">
               <span className="flex items-center gap-1 text-[var(--color-success)]">
-                <FiCheck className="w-3.5 h-3.5" />
+                <FiCheck className="w-3 h-3" strokeWidth={2} />
                 {correctAnswers}
               </span>
               <span className="flex items-center gap-1 text-[var(--color-error)]">
-                <FiX className="w-3.5 h-3.5" />
+                <FiX className="w-3 h-3" strokeWidth={2} />
                 {incorrectAnswers}
+              </span>
+              {(correctAnswers + incorrectAnswers) > 0 && (
+                <span className="flex items-center gap-1" style={{ color: accuracy >= 70 ? 'var(--color-success)' : 'var(--color-error)' }}>
+                  <FiTrendingUp className="w-3 h-3" strokeWidth={1.5} />
+                  {accuracy}%
+                </span>
+              )}
+              <span className="flex items-center gap-1 text-[var(--color-text-tertiary)]">
+                <FiClock className="w-3 h-3" strokeWidth={1.5} />
+                {formatTime(totalTimeSeconds)}
               </span>
             </div>
           </div>
-        </div>
-
-        {/* Mode Selector */}
-        <div className="mcq-mode-selector">
-          {[
-            { id: 'study' as MCQMode, label: 'Study', icon: FiBook, color: 'study' },
-            { id: 'test' as MCQMode, label: 'Test', icon: FiEdit3, color: 'test' },
-            { id: 'challenge' as MCQMode, label: 'Challenge', icon: FiZap, color: 'challenge' },
-            { id: 'review' as MCQMode, label: 'Review', icon: FiRotateCcw, color: 'review', disabled: incorrectQuestionIds.size === 0 },
-          ].map((m) => {
-            const Icon = m.icon
-            return (
-              <button
-                key={m.id}
-                onClick={() => !m.disabled && handleModeChange(m.id)}
-                disabled={m.disabled}
-                className={`mcq-mode-pill ${m.color} ${mode === m.id ? 'active' : ''} ${m.disabled ? 'opacity-40' : ''}`}
-              >
-                <Icon className="w-4 h-4" />
-                {m.label}
-              </button>
-            )
-          })}
         </div>
 
         {/* Challenge Timer */}
         {mode === 'challenge' && !hasChecked && (
-          <div className="px-4 pb-2">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-[var(--color-text-secondary)]">Time left</span>
-              <span className={`font-bold ${challengeTimeLeft <= 10 ? 'text-[var(--color-error)]' : 'text-[var(--color-text-primary)]'}`}>
+          <div className="px-4 py-3 border-b" style={{ borderColor: challengeTimeLeft <= 10 ? 'var(--color-error)' : 'var(--color-mode-challenge)', background: challengeTimeLeft <= 10 ? 'var(--color-error-soft)' : 'var(--color-mode-challenge-soft)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] uppercase tracking-wider" style={{ color: challengeTimeLeft <= 10 ? 'var(--color-error)' : 'var(--color-mode-challenge)' }}>Time Remaining</span>
+              <span className="text-xl font-semibold mono" style={{ color: challengeTimeLeft <= 10 ? 'var(--color-error)' : 'var(--color-mode-challenge)' }}>
                 {challengeTimeLeft}s
               </span>
             </div>
-            <div className="h-2 bg-[var(--color-surface)] rounded-full overflow-hidden">
+            <div className="h-1 bg-[var(--color-border)]">
               <div
-                className={`h-full rounded-full transition-all duration-1000 ${challengeTimeLeft <= 10 ? 'bg-[var(--color-error)]' : 'bg-[var(--color-accent)]'}`}
-                style={{ width: `${(challengeTimeLeft / 30) * 100}%` }}
+                className="h-full transition-all duration-1000"
+                style={{ 
+                  width: `${(challengeTimeLeft / 30) * 100}%`,
+                  background: challengeTimeLeft <= 10 ? 'var(--color-error)' : 'var(--color-mode-challenge)'
+                }}
               />
             </div>
           </div>
         )}
 
-        {/* Study Mode: Lesson Card Before */}
-        {mode === 'study' && !hasChecked && currentQuestion?.lesson_card && (
-          <div className="px-4 mb-3">
-            <div className="p-4 bg-[rgba(59,130,246,0.1)] rounded-xl border border-[rgba(59,130,246,0.2)]">
-              <div className="flex items-center gap-2 mb-2">
-                <FiBook className="w-4 h-4 text-blue-400" />
-                <span className="text-sm font-medium text-blue-400">Study first:</span>
+        {/* Study Mode: Lesson Card Preview */}
+        {mode === 'study' && !hasChecked && hasLessonCard && (
+          <button
+            onClick={() => setShowLessonSheet(true)}
+            className="mx-4 mt-4 p-4 border text-left"
+            style={{ borderColor: 'var(--color-mode-study)', background: 'var(--color-mode-study-soft)' }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <FiBook className="w-4 h-4" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
+                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: 'var(--color-mode-study)' }}>Study First</span>
               </div>
-              <h4 className="font-semibold text-[var(--color-text-primary)] text-sm mb-1">
-                {currentQuestion.lesson_card.title}
-              </h4>
-              <p className="text-xs text-[var(--color-text-secondary)]">
-                {currentQuestion.lesson_card.conceptOverview}
-              </p>
+              <FiChevronRight className="w-4 h-4" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
             </div>
-          </div>
+            <h4 className="font-medium text-sm text-[var(--color-text)]">{currentQuestion.lesson_card?.title}</h4>
+            <p className="text-xs text-[var(--color-text-secondary)] mt-1 line-clamp-2">
+              {currentQuestion.lesson_card?.conceptOverview}
+            </p>
+          </button>
         )}
 
-        {/* Question Card */}
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
-          <div className="mcq-question-card animate-scale-in">
-            <h2 className="mcq-question-text">{currentQuestion?.question}</h2>
+        {/* Question */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          <h2 className="text-base font-medium text-[var(--color-text)] mb-6 leading-relaxed">
+            {currentQuestion?.question}
+          </h2>
 
-            {/* Options */}
-            <div className="space-y-3">
-              {currentQuestion?.options.map((option) => {
-                const isSelected = selectedOption === option.label
-                const showResult = hasChecked
-                const isCorrectOption = option.label === currentQuestion.correctOption
+          {/* Options */}
+          <div className="space-y-2">
+            {currentQuestion?.options.map((option, index) => {
+              const isSelected = selectedOption === option.label
+              const showResult = hasChecked
+              const isCorrectOption = option.label === currentQuestion.correctOption
 
-                let optionClass = 'mcq-option'
-                if (showResult) {
-                  if (isCorrectOption) optionClass += ' correct'
-                  else if (isSelected) optionClass += ' incorrect'
+              let borderColor = 'var(--color-border)'
+              let bgColor = 'transparent'
+              let textColor = 'var(--color-text)'
+
+              if (showResult) {
+                if (isCorrectOption) {
+                  borderColor = 'var(--color-success)'
+                  bgColor = 'var(--color-success-soft)'
+                  textColor = 'var(--color-success)'
                 } else if (isSelected) {
-                  optionClass += ' selected'
+                  borderColor = 'var(--color-error)'
+                  bgColor = 'var(--color-error-soft)'
+                  textColor = 'var(--color-text-secondary)'
                 }
+              } else if (isSelected) {
+                borderColor = 'var(--color-text)'
+                bgColor = 'var(--color-surface)'
+              }
 
-                return (
-                  <button
-                    key={option.label}
-                    onClick={() => !hasChecked && setSelectedOption(option.label)}
-                    disabled={hasChecked}
-                    className={optionClass}
+              return (
+                <button
+                  key={option.label}
+                  onClick={() => !hasChecked && setSelectedOption(option.label)}
+                  disabled={hasChecked}
+                  className="w-full flex items-start gap-3 p-4 text-left transition-colors"
+                  style={{ border: `1px solid ${borderColor}`, background: bgColor }}
+                >
+                  <span 
+                    className="w-6 h-6 flex items-center justify-center text-xs font-medium mono flex-shrink-0"
+                    style={{ 
+                      border: `1px solid ${showResult && isCorrectOption ? 'var(--color-success)' : showResult && isSelected ? 'var(--color-error)' : borderColor}`,
+                      background: showResult && isCorrectOption ? 'var(--color-success)' : showResult && isSelected ? 'var(--color-error)' : isSelected ? 'var(--color-text)' : 'transparent',
+                      color: showResult && (isCorrectOption || isSelected) ? 'var(--color-bg)' : isSelected ? 'var(--color-bg)' : textColor
+                    }}
                   >
-                    <span className="mcq-option-label">
-                      {showResult && isCorrectOption ? (
-                        <FiCheck className="w-4 h-4" />
-                      ) : showResult && isSelected && !isCorrect ? (
-                        <FiX className="w-4 h-4" />
-                      ) : (
-                        option.label
-                      )}
-                    </span>
-                    <span className="flex-1">{option.text}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Feedback */}
-            {hasChecked && (
-              <div className={`mt-4 p-4 rounded-xl ${isCorrect ? 'bg-[var(--color-success-soft)]' : 'bg-[var(--color-error-soft)]'} animate-slide-up`}>
-                <div className="flex items-start gap-3">
-                  {isCorrect ? (
-                    <FiCheck className="w-5 h-5 text-[var(--color-success)] flex-shrink-0 mt-0.5" />
-                  ) : (
-                    <FiX className="w-5 h-5 text-[var(--color-error)] flex-shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <p className={`font-semibold text-sm ${isCorrect ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'}`}>
-                      {isCorrect ? 'Correct!' : 'Incorrect'}
-                    </p>
-                    {!isCorrect && (
-                      <p className="text-xs text-[var(--color-error)] mt-0.5">
-                        Correct answer: {currentQuestion?.correctOption}
-                      </p>
-                    )}
-                    {currentQuestion?.explanation && (
-                      <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-                        {currentQuestion.explanation}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Lesson Card After (Test mode) */}
-            {hasChecked && currentQuestion?.lesson_card && mode === 'test' && (
-              <button
-                onClick={() => setShowLessonCard(!showLessonCard)}
-                className="w-full mt-3 p-3 bg-[var(--color-surface)] rounded-xl flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  <FiBook className="w-4 h-4 text-[var(--color-accent)]" />
-                  <span className="text-sm font-medium text-[var(--color-text-primary)]">Learn more</span>
-                </div>
-                {showLessonCard ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
-              </button>
-            )}
-
-            {showLessonCard && currentQuestion?.lesson_card && (
-              <div className="mt-2 p-4 bg-[var(--color-accent-soft)] rounded-xl animate-slide-down">
-                <h4 className="font-semibold text-[var(--color-text-primary)] text-sm mb-2">
-                  {currentQuestion.lesson_card.title}
-                </h4>
-                <p className="text-xs text-[var(--color-text-secondary)] mb-3">
-                  {currentQuestion.lesson_card.conceptOverview}
-                </p>
-                {currentQuestion.lesson_card.keyPoints && (
-                  <ul className="space-y-1">
-                    {currentQuestion.lesson_card.keyPoints.slice(0, 3).map((point, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-[var(--color-text-secondary)]">
-                        <FiCheck className="w-3 h-3 text-[var(--color-success)] flex-shrink-0 mt-0.5" />
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+                    {showResult && isCorrectOption ? <FiCheck className="w-3 h-3" strokeWidth={2.5} /> : 
+                     showResult && isSelected && !isCorrect ? <FiX className="w-3 h-3" strokeWidth={2.5} /> : 
+                     option.label}
+                  </span>
+                  <span className="flex-1 text-sm" style={{ color: textColor }}>{option.text}</span>
+                  <span className="text-[10px] mono" style={{ color: 'var(--color-text-tertiary)' }}>{index + 1}</span>
+                </button>
+              )
+            })}
           </div>
+
+          {/* Feedback */}
+          {hasChecked && (
+            <div 
+              className="mt-4 p-4 border"
+              style={{ 
+                borderColor: isCorrect ? 'var(--color-success)' : 'var(--color-error)',
+                background: isCorrect ? 'var(--color-success-soft)' : 'var(--color-error-soft)'
+              }}
+            >
+              <div className="flex items-start gap-3">
+                {isCorrect ? (
+                  <FiCheck className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--color-success)' }} strokeWidth={2} />
+                ) : (
+                  <FiX className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--color-error)' }} strokeWidth={2} />
+                )}
+                <div className="flex-1">
+                  <p className="font-medium text-sm" style={{ color: isCorrect ? 'var(--color-success)' : 'var(--color-error)' }}>
+                    {isCorrect ? 'Correct!' : 'Incorrect'}
+                  </p>
+                  {!isCorrect && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-error)' }}>
+                      Correct: <span className="font-medium">{currentQuestion?.correctOption}</span>
+                    </p>
+                  )}
+                  {currentQuestion?.explanation && (
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-2">
+                      {currentQuestion.explanation}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Learn More Button */}
+          {hasChecked && hasLessonCard && (
+            <button
+              onClick={() => setShowExplanationSheet(true)}
+              className="w-full mt-3 p-4 border flex items-center justify-between"
+              style={{ borderColor: 'var(--color-mode-study)', background: 'var(--color-mode-study-soft)' }}
+            >
+              <div className="flex items-center gap-2">
+                <FiBook className="w-4 h-4" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
+                <span className="text-sm font-medium" style={{ color: 'var(--color-mode-study)' }}>Learn More</span>
+              </div>
+              <FiChevronRight className="w-4 h-4" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
+            </button>
+          )}
         </div>
 
         {/* Bottom Actions */}
-        <div className="p-4 pb-6 bg-[var(--color-bg-glass)] backdrop-blur-xl border-t border-[var(--color-border)]">
+        <div className="p-4 border-t border-[var(--color-border)] bg-[var(--color-bg)]">
           <div className="flex gap-3">
             <button
               onClick={handlePrevious}
               disabled={currentIndex === 0}
-              className="btn-mobile btn-secondary-mobile flex-1 disabled:opacity-30"
+              className="w-12 h-12 border border-[var(--color-border)] flex items-center justify-center disabled:opacity-30 active:bg-[var(--color-surface)]"
             >
-              <FiArrowLeft className="w-5 h-5" />
+              <FiArrowLeft className="w-5 h-5" strokeWidth={1.5} />
             </button>
 
             {!hasChecked ? (
               <button
                 onClick={handleCheck}
                 disabled={!selectedOption}
-                className="btn-mobile btn-primary-mobile flex-[2] disabled:opacity-30"
+                className="flex-1 h-12 bg-[var(--color-text)] text-[var(--color-bg)] font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-30"
               >
-                <FiCheck className="w-5 h-5" />
+                <FiCheck className="w-4 h-4" strokeWidth={1.5} />
                 Check
               </button>
             ) : (
               <button
                 onClick={handleNext}
-                className="btn-mobile btn-primary-mobile flex-[2]"
+                className="flex-1 h-12 bg-[var(--color-text)] text-[var(--color-bg)] font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2"
               >
                 {currentIndex < activeQuestions.length - 1 ? (
-                  <>
-                    Next
-                    <FiArrowRight className="w-5 h-5" />
-                  </>
+                  <>Next <FiArrowRight className="w-4 h-4" strokeWidth={1.5} /></>
                 ) : (
-                  <>
-                    Finish
-                    <FiAward className="w-5 h-5" />
-                  </>
+                  <>Finish <FiAward className="w-4 h-4" strokeWidth={1.5} /></>
                 )}
               </button>
             )}
           </div>
-          
-          <p className="text-center text-xs text-[var(--color-text-tertiary)] mt-3">
-            Swipe left/right to navigate
-          </p>
         </div>
       </div>
+
+      {/* Mode Selector Sheet */}
+      {showModeSelector && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setShowModeSelector(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-bg)] border-t border-[var(--color-border)]">
+            <div className="w-8 h-1 bg-[var(--color-border)] mx-auto mt-3 mb-4" />
+            <div className="px-4 pb-2">
+              <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-tertiary)]">Select Mode</span>
+            </div>
+            <div className="p-4 space-y-2">
+              {[
+                { id: 'study' as MCQMode, label: 'Study', desc: 'See lesson before answering', icon: FiBook },
+                { id: 'test' as MCQMode, label: 'Test', desc: 'Answer first, see lesson after', icon: FiEdit3 },
+                { id: 'challenge' as MCQMode, label: 'Challenge', desc: '30 seconds per question', icon: FiZap },
+                { id: 'review' as MCQMode, label: 'Review', desc: 'Focus on missed questions', icon: FiRotateCcw, disabled: incorrectQuestionIds.size === 0 },
+              ].map((m) => {
+                const Icon = m.icon
+                const isActive = mode === m.id
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => !m.disabled && handleModeChange(m.id)}
+                    disabled={m.disabled}
+                    className={`w-full p-4 border text-left flex items-center gap-4 ${m.disabled ? 'opacity-40' : 'active:opacity-80'}`}
+                    style={{ 
+                      borderColor: isActive ? getModeColor(m.id) : 'var(--color-border)',
+                      background: isActive ? `${getModeColor(m.id)}15` : 'transparent'
+                    }}
+                  >
+                    <div 
+                      className="w-10 h-10 border flex items-center justify-center"
+                      style={{ borderColor: getModeColor(m.id), color: getModeColor(m.id) }}
+                    >
+                      <Icon className="w-5 h-5" strokeWidth={1.5} />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-medium text-sm" style={{ color: isActive ? getModeColor(m.id) : 'var(--color-text)' }}>{m.label}</h4>
+                      <p className="text-xs text-[var(--color-text-secondary)]">{m.desc}</p>
+                    </div>
+                    {isActive && <FiCheck className="w-5 h-5" style={{ color: getModeColor(m.id) }} strokeWidth={2} />}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="h-safe-bottom" />
+          </div>
+        </div>
+      )}
+
+      {/* Lesson Card Sheet (Study Mode - Before Answer) */}
+      {showLessonSheet && hasLessonCard && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setShowLessonSheet(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-bg)] border-t border-[var(--color-border)] max-h-[85vh] flex flex-col">
+            <div className="w-8 h-1 bg-[var(--color-border)] mx-auto mt-3 flex-shrink-0" />
+            <div className="p-4 border-b border-[var(--color-border)] flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FiBook className="w-5 h-5" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
+                <span className="text-xs uppercase tracking-wider font-medium" style={{ color: 'var(--color-mode-study)' }}>Study Material</span>
+              </div>
+              <button onClick={() => setShowLessonSheet(false)} className="p-2">
+                <FiX className="w-5 h-5" strokeWidth={1.5} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">{currentQuestion.lesson_card?.title}</h3>
+                <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                  {currentQuestion.lesson_card?.conceptOverview}
+                </p>
+              </div>
+              
+              {currentQuestion.lesson_card?.keyPoints && currentQuestion.lesson_card.keyPoints.length > 0 && (
+                <div>
+                  <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Key Points</h4>
+                  <div className="space-y-2">
+                    {currentQuestion.lesson_card.keyPoints.map((point, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 border border-[var(--color-border)]">
+                        <FiCheck className="w-4 h-4 text-[var(--color-success)] flex-shrink-0 mt-0.5" strokeWidth={2} />
+                        <p className="text-sm text-[var(--color-text-secondary)]">{point}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {currentQuestion.lesson_card?.detailedExplanation && (
+                <div>
+                  <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Detailed Explanation</h4>
+                  <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                    {currentQuestion.lesson_card.detailedExplanation}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-[var(--color-border)] flex-shrink-0">
+              <button 
+                onClick={() => setShowLessonSheet(false)}
+                className="w-full h-12 font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2"
+                style={{ background: 'var(--color-mode-study)', color: 'white' }}
+              >
+                <FiCheck className="w-4 h-4" strokeWidth={1.5} />
+                Got It - Answer Question
+              </button>
+            </div>
+            <div className="h-safe-bottom bg-[var(--color-bg)]" />
+          </div>
+        </div>
+      )}
+
+      {/* Full Explanation Sheet (After Answer) */}
+      {showExplanationSheet && hasLessonCard && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setShowExplanationSheet(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-bg)] border-t border-[var(--color-border)] max-h-[90vh] flex flex-col">
+            <div className="w-8 h-1 bg-[var(--color-border)] mx-auto mt-3 flex-shrink-0" />
+            <div className="p-4 border-b border-[var(--color-border)] flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FiBook className="w-5 h-5" style={{ color: 'var(--color-mode-study)' }} strokeWidth={1.5} />
+                <span className="text-xs uppercase tracking-wider font-medium" style={{ color: 'var(--color-mode-study)' }}>Learn More</span>
+              </div>
+              <button onClick={() => setShowExplanationSheet(false)} className="p-2">
+                <FiX className="w-5 h-5" strokeWidth={1.5} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Title & Overview */}
+              <div>
+                <h3 className="text-lg font-semibold mb-2">{currentQuestion.lesson_card?.title}</h3>
+                <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                  {currentQuestion.lesson_card?.conceptOverview}
+                </p>
+              </div>
+              
+              {/* Your Answer Result */}
+              <div className="p-4 border" style={{ borderColor: isCorrect ? 'var(--color-success)' : 'var(--color-error)', background: isCorrect ? 'var(--color-success-soft)' : 'var(--color-error-soft)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  {isCorrect ? <FiCheck className="w-4 h-4" style={{ color: 'var(--color-success)' }} strokeWidth={2} /> : <FiX className="w-4 h-4" style={{ color: 'var(--color-error)' }} strokeWidth={2} />}
+                  <span className="text-xs uppercase tracking-wider font-medium" style={{ color: isCorrect ? 'var(--color-success)' : 'var(--color-error)' }}>
+                    Your Answer: {selectedOption}
+                  </span>
+                </div>
+                {!isCorrect && <p className="text-sm">Correct answer: <strong>{currentQuestion.correctOption}</strong></p>}
+              </div>
+
+              {/* Explanation */}
+              {currentQuestion.explanation && (
+                <div>
+                  <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Explanation</h4>
+                  <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                    {currentQuestion.explanation}
+                  </p>
+                </div>
+              )}
+              
+              {/* Key Points */}
+              {currentQuestion.lesson_card?.keyPoints && currentQuestion.lesson_card.keyPoints.length > 0 && (
+                <div>
+                  <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Key Points</h4>
+                  <div className="space-y-2">
+                    {currentQuestion.lesson_card.keyPoints.map((point, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 border border-[var(--color-border)]">
+                        <span className="w-5 h-5 border border-[var(--color-success)] text-[var(--color-success)] flex items-center justify-center text-[10px] font-medium mono flex-shrink-0">{i + 1}</span>
+                        <p className="text-sm text-[var(--color-text-secondary)]">{point}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Detailed Explanation */}
+              {currentQuestion.lesson_card?.detailedExplanation && (
+                <div>
+                  <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">In Depth</h4>
+                  <div className="p-4 border border-[var(--color-border)] bg-[var(--color-surface)]">
+                    <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-line">
+                      {currentQuestion.lesson_card.detailedExplanation}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Examples */}
+              {currentQuestion.lesson_card?.examples && currentQuestion.lesson_card.examples.length > 0 && (
+                <div>
+                  <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Examples</h4>
+                  <div className="space-y-2">
+                    {currentQuestion.lesson_card.examples.map((example, i) => (
+                      <div key={i} className="p-3 border border-[var(--color-border)] bg-[var(--color-surface)]">
+                        <p className="text-sm text-[var(--color-text-secondary)]">{example}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Common Mistakes */}
+              {currentQuestion.lesson_card?.commonMistakes && currentQuestion.lesson_card.commonMistakes.length > 0 && (
+                <div>
+                  <h4 className="text-xs uppercase tracking-wider text-[var(--color-text-tertiary)] mb-3">Common Mistakes</h4>
+                  <div className="space-y-2">
+                    {currentQuestion.lesson_card.commonMistakes.map((mistake, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 border border-[var(--color-error)]" style={{ background: 'var(--color-error-soft)' }}>
+                        <FiInfo className="w-4 h-4 text-[var(--color-error)] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+                        <p className="text-sm text-[var(--color-text-secondary)]">{mistake}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-[var(--color-border)] flex-shrink-0">
+              <button 
+                onClick={() => { setShowExplanationSheet(false); handleNext() }}
+                className="w-full h-12 bg-[var(--color-text)] text-[var(--color-bg)] font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2"
+              >
+                {currentIndex < activeQuestions.length - 1 ? (
+                  <>Continue <FiArrowRight className="w-4 h-4" strokeWidth={1.5} /></>
+                ) : (
+                  <>Finish Quiz <FiAward className="w-4 h-4" strokeWidth={1.5} /></>
+                )}
+              </button>
+            </div>
+            <div className="h-safe-bottom bg-[var(--color-bg)]" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-

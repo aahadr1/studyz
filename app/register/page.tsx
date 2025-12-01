@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { FiArrowRight, FiEye, FiEyeOff, FiCheck } from 'react-icons/fi'
+import Logo from '@/components/Logo'
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState('')
@@ -50,9 +51,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-background flex">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 border-r border-border flex-col justify-between p-12">
-        <a href="/" className="text-sm font-semibold text-text-primary tracking-wider">
-          STUDYZ
-        </a>
+        <Logo size="lg" href="/" />
         <div>
           <h1 className="text-4xl font-semibold text-text-primary mb-4 tracking-tight">
             Start learning<br />smarter today
@@ -68,9 +67,9 @@ export default function RegisterPage() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           {/* Mobile Logo */}
-          <a href="/" className="lg:hidden text-sm font-semibold text-text-primary tracking-wider block mb-12">
-            STUDYZ
-          </a>
+          <div className="lg:hidden mb-12">
+            <Logo size="lg" href="/" />
+          </div>
 
           <div className="mb-10">
             <h2 className="text-2xl font-semibold text-text-primary mb-2">Create Account</h2>

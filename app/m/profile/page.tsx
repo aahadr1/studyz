@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import MobileLayout, { MobileHeader, BottomSheet } from '@/components/mobile/MobileLayout'
@@ -154,9 +155,12 @@ export default function MobileProfilePage() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-[9px] text-[var(--color-text-tertiary)] py-6 uppercase tracking-widest">
-          Studyz © 2025
-        </p>
+        <div className="flex flex-col items-center py-6 gap-2">
+          <Image src="/favicon.png" alt="Studyz" width={24} height={24} />
+          <p className="text-[9px] text-[var(--color-text-tertiary)] uppercase tracking-widest">
+            Studyz © 2025
+          </p>
+        </div>
       </div>
 
       <BottomSheet

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import MobileLayout, { 
@@ -106,11 +107,14 @@ export default function MobileHomePage() {
     <MobileLayout>
       {/* Minimal Header */}
       <header className="mobile-header">
-        <div className="flex-1">
-          <p className="text-[10px] uppercase tracking-[0.15em] text-[var(--color-text-tertiary)] mb-1 mono">
-            {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-          </p>
-          <h1 className="text-base font-semibold text-[var(--color-text)]">{firstName}</h1>
+        <div className="flex items-center gap-3 flex-1">
+          <Image src="/favicon.png" alt="Studyz" width={28} height={28} priority />
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.15em] text-[var(--color-text-tertiary)] mono">
+              {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </p>
+            <h1 className="text-sm font-semibold text-[var(--color-text)]">{firstName}</h1>
+          </div>
         </div>
         <Link href="/m/profile" className="mobile-header-action">
           <div className="w-8 h-8 border border-[var(--color-border)] flex items-center justify-center text-xs font-semibold mono">

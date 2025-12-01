@@ -42,10 +42,23 @@
   --color-border: var(--color-gray-800);
   --color-border-light: var(--color-gray-700);
   
-  /* Status colors - muted, monochrome-friendly */
-  --color-success: var(--color-white);
-  --color-error: var(--color-white);
-  --color-warning: var(--color-white);
+  /* Status colors - functional */
+  --color-success: #22c55e;
+  --color-success-soft: rgba(34, 197, 94, 0.15);
+  --color-error: #ef4444;
+  --color-error-soft: rgba(239, 68, 68, 0.15);
+  --color-warning: #eab308;
+  --color-warning-soft: rgba(234, 179, 8, 0.15);
+  
+  /* Mode colors */
+  --color-mode-study: #3b82f6;
+  --color-mode-study-soft: rgba(59, 130, 246, 0.15);
+  --color-mode-test: #8b5cf6;
+  --color-mode-test-soft: rgba(139, 92, 246, 0.15);
+  --color-mode-challenge: #f97316;
+  --color-mode-challenge-soft: rgba(249, 115, 22, 0.15);
+  --color-mode-review: #06b6d4;
+  --color-mode-review-soft: rgba(6, 182, 212, 0.15);
   
   /* Spacing */
   --safe-area-top: env(safe-area-inset-top, 0px);
@@ -634,10 +647,28 @@ body {
     opacity: 0.7;
   }
   
-  .mcq-mode-pill.active {
-    background: var(--color-text);
-    border-color: var(--color-text);
-    color: var(--color-bg);
+  .mcq-mode-pill.study.active {
+    background: var(--color-mode-study-soft);
+    border-color: var(--color-mode-study);
+    color: var(--color-mode-study);
+  }
+  
+  .mcq-mode-pill.test.active {
+    background: var(--color-mode-test-soft);
+    border-color: var(--color-mode-test);
+    color: var(--color-mode-test);
+  }
+  
+  .mcq-mode-pill.challenge.active {
+    background: var(--color-mode-challenge-soft);
+    border-color: var(--color-mode-challenge);
+    color: var(--color-mode-challenge);
+  }
+  
+  .mcq-mode-pill.review.active {
+    background: var(--color-mode-review-soft);
+    border-color: var(--color-mode-review);
+    color: var(--color-mode-review);
   }
 }
 

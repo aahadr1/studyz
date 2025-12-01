@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { FiArrowRight, FiEye, FiEyeOff, FiCheck } from 'react-icons/fi'
@@ -54,8 +55,9 @@ export default function MobileRegisterPage() {
       <div className="mobile-content-full flex flex-col px-6 pt-12 pb-8 overflow-auto">
         {/* Header */}
         <div className="mb-10">
-          <Link href="/m/welcome" className="text-xs uppercase tracking-[0.15em] text-[var(--color-text-tertiary)] mb-8 block">
-            ← Back
+          <Link href="/m/welcome" className="flex items-center gap-3 mb-8">
+            <Image src="/favicon.png" alt="Studyz" width={32} height={32} priority />
+            <span className="text-xs uppercase tracking-[0.15em] text-[var(--color-text-tertiary)]">← Back</span>
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Create Account</h1>
           <p className="text-sm text-[var(--color-text-secondary)]">Start your learning journey</p>

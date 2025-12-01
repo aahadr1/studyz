@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { FiArrowRight } from 'react-icons/fi'
@@ -44,9 +45,14 @@ export default function MobileWelcomePage() {
         <div className="flex-1 flex flex-col justify-center px-6 py-12">
           {/* Logo */}
           <div className="mb-12">
-            <div className="w-12 h-12 border border-[var(--color-border)] flex items-center justify-center mb-6">
-              <span className="text-lg font-semibold mono">S</span>
-            </div>
+            <Image 
+              src="/favicon.png" 
+              alt="Studyz" 
+              width={56} 
+              height={56}
+              className="mb-6"
+              priority
+            />
             <h1 className="text-3xl font-semibold tracking-tight mb-2">Studyz</h1>
             <p className="text-[var(--color-text-secondary)]">Learn smarter with AI</p>
           </div>

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { FiLogOut, FiHome, FiBook, FiPlus, FiArrowRight, FiCheckSquare } from 'react-icons/fi'
 import Link from 'next/link'
 import type { Lesson } from '@/types/db'
+import Logo from '@/components/Logo'
 
 interface McqSet {
   id: string
@@ -81,7 +82,7 @@ export default function DashboardPage() {
       {/* Sidebar */}
       <aside className="w-60 sidebar flex flex-col">
         <div className="h-14 flex items-center px-4 border-b border-border">
-          <span className="text-sm font-semibold text-text-primary tracking-wider">STUDYZ</span>
+          <Logo size="md" href="/dashboard" />
         </div>
 
         <nav className="flex-1 py-4">
