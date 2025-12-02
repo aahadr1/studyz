@@ -281,19 +281,28 @@ export default function ChatAssistant(props: ChatAssistantProps) {
                   
                   {/* Message bubble */}
                   <div className="relative">
-                    <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                      isUser 
-                        ? 'bg-slate-50 text-slate-900 border border-slate-300 shadow-sm rounded-br-md' 
-                        : message.isError
-                          ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-bl-md'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-bl-md'
-                    }`}>
+                    <div 
+                      className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                        isUser 
+                          ? 'rounded-br-md shadow-md' 
+                          : message.isError
+                            ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-bl-md'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-bl-md'
+                      }`}
+                      style={isUser ? {
+                        backgroundColor: '#f1f5f9',
+                        color: '#0f172a',
+                        border: '2px solid #94a3b8'
+                      } : undefined}
+                    >
                       {isUser && message.pageContext && (
-                        <p className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide">
+                        <p className="mb-1 font-medium uppercase tracking-wide" style={{ fontSize: '10px', color: '#64748b' }}>
                           Page {message.pageContext}
                         </p>
                       )}
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      <p className="whitespace-pre-wrap" style={isUser ? { color: '#0f172a' } : undefined}>
+                        {message.content}
+                      </p>
                       
                       {message.isError && (
                         <button
