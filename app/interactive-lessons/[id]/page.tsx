@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiX } from 'react-icons/fi'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { AssistantPanel } from '@/components/assistant'
+import MCQInterface from '@/components/MCQInterface'
 import type { InteractiveLesson, InteractiveLessonDocument, LessonMessage } from '@/types/db'
 
 interface PageImage {
@@ -25,12 +26,14 @@ interface InteractiveLessonData {
 
 export default function InteractiveLessonViewerPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const lessonId = params.id as string
+  const initialPage = parseInt(searchParams.get('page') || '1')
 
   const [lessonData, setLessonData] = useState<InteractiveLessonData | null>(null)
   const [pageImages, setPageImages] = useState<PageImage[]>([])
   const [messages, setMessages] = useState<LessonMessage[]>([])
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(initialPage)
   const [loading, setLoading] = useState(true)
   const [imageLoading, setImageLoading] = useState(true)
   const [showAssistant, setShowAssistant] = useState(true)
@@ -209,12 +212,11 @@ export default function InteractiveLessonViewerPage() {
             )}
           </div>
 
-          {/* MCQ Interface Placeholder */}
-          <div className="h-16 border-t border-border flex items-center justify-center bg-surface">
-            <p className="text-sm text-text-tertiary">
-              MCQ interface will appear here
-            </p>
-          </div>
+          {/* MCQ Interface */}
+          <MCQInterface
+            lessonId={lessonId}
+            currentPage={currentPage}
+          />
         </div>
 
         {/* AI Assistant Panel - Right Side */}

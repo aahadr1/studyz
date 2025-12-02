@@ -138,6 +138,10 @@ export interface InteractiveLesson {
   processing_total?: number
   processing_message?: string
   processing_percent?: number
+  mcq_status?: 'none' | 'generating' | 'ready' | 'error'
+  mcq_generation_progress?: number
+  mcq_total_count?: number
+  mcq_error_message?: string
   created_at: string
   updated_at: string
 }
@@ -200,4 +204,32 @@ export interface InteractiveLessonProgress {
   completed_at?: string
   created_at: string
   updated_at: string
+}
+
+// Page-based MCQ Types for Interactive Lessons
+
+export interface PageMCQ {
+  id: string
+  interactive_lesson_id: string
+  page_number: number
+  question: string
+  choices: string[] // ["A. ...", "B. ...", "C. ...", "D. ..."]
+  correct_index: number
+  explanation?: string
+  source_type: 'uploaded_doc' | 'uploaded_text' | 'ai_generated'
+  question_order: number
+  created_at: string
+}
+
+export interface PageMCQProgress {
+  id: string
+  user_id: string
+  mcq_id: string
+  is_correct: boolean
+  selected_index: number
+  answered_at: string
+}
+
+export interface PageMCQWithProgress extends PageMCQ {
+  progress?: PageMCQProgress
 }
