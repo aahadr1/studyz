@@ -143,12 +143,34 @@ export async function GET(
     // Generate signed URL for image if exists
     let imageUrl = null
     if (pageImage?.image_path) {
-      const { data: signedUrl } = await getSupabaseAdmin().storage
-        .from('interactive-lessons')
-        .createSignedUrl(pageImage.image_path, 3600) // 1 hour
-      
-      imageUrl = signedUrl?.signedUrl
+      // Check if it's already a full URL (from regular lessons) or a storage path
+      if (pageImage.image_path.startsWith('http://') || pageImage.image_path.startsWith('https://')) {
+        // Already a full URL, use it directly
+        imageUrl = pageImage.image_path
+      } else {
+        // It's a storage path, generate signed URL
+        const { data: signedUrl } = await getSupabaseAdmin().storage
+          .from('interactive-lessons')
+          .createSignedUrl(pageImage.image_path, 3600) // 1 hour
+        
+        imageUrl = signedUrl?.signedUrl
+      }
     }
+    
+    // Also get all page images for this document to return allPages
+    const { data: allPageImages } = await getSupabaseAdmin()
+      .from('interactive_lesson_page_images')
+      .select('id, document_id, page_number, image_path')
+      .eq('document_id', currentDoc.id)
+      .order('page_number', { ascending: true })
+    
+    // Process all pages to add correct URLs
+    const allPages = (allPageImages || []).map((p: any) => ({
+      ...p,
+      image_path: p.image_path.startsWith('http://') || p.image_path.startsWith('https://') 
+        ? p.image_path 
+        : p.image_path // For storage paths, the frontend will need to handle differently
+    }))
 
     // Get checkpoint that contains this page
     const { data: checkpoints } = await getSupabaseAdmin()
@@ -235,7 +257,8 @@ export async function GET(
         isAtEnd: isAtCheckpointEnd,
         progress: checkpointProgress
       } : null,
-      allCheckpointsOnPage: checkpoints || []
+      allCheckpointsOnPage: checkpoints || [],
+      allPages: allPages || []
     })
 
   } catch (error: any) {
