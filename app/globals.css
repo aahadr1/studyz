@@ -4,6 +4,7 @@
    ============================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css');
 
 @tailwind base;
 @tailwind components;
@@ -414,3 +415,144 @@ body {
 .stagger-children > *:nth-child(3) { animation-delay: 60ms; }
 .stagger-children > *:nth-child(4) { animation-delay: 90ms; }
 .stagger-children > *:nth-child(5) { animation-delay: 120ms; }
+
+/* ============================================
+   AI Assistant Styles
+   ============================================ */
+
+/* Prose overrides for assistant messages */
+.prose-invert {
+  --tw-prose-body: theme('colors.text-secondary');
+  --tw-prose-headings: theme('colors.text-primary');
+  --tw-prose-links: theme('colors.mode.study');
+  --tw-prose-bold: theme('colors.text-primary');
+  --tw-prose-code: theme('colors.text-primary');
+  --tw-prose-pre-bg: theme('colors.background');
+}
+
+.prose-invert p {
+  @apply text-text-secondary text-sm leading-relaxed mb-3;
+}
+
+.prose-invert p:last-child {
+  @apply mb-0;
+}
+
+.prose-invert h1, .prose-invert h2, .prose-invert h3, .prose-invert h4 {
+  @apply text-text-primary font-semibold mt-4 mb-2;
+}
+
+.prose-invert h1 { @apply text-lg; }
+.prose-invert h2 { @apply text-base; }
+.prose-invert h3 { @apply text-sm; }
+
+.prose-invert strong {
+  @apply text-text-primary font-semibold;
+}
+
+.prose-invert em {
+  @apply text-text-secondary italic;
+}
+
+.prose-invert ul, .prose-invert ol {
+  @apply my-2 pl-4 text-sm text-text-secondary;
+}
+
+.prose-invert li {
+  @apply mb-1;
+}
+
+.prose-invert ul {
+  @apply list-disc;
+}
+
+.prose-invert ol {
+  @apply list-decimal;
+}
+
+/* Code blocks in assistant */
+.prose-invert pre {
+  @apply bg-background border border-border p-3 overflow-x-auto my-3 text-sm;
+}
+
+.prose-invert code {
+  @apply font-mono text-xs;
+}
+
+.prose-invert :not(pre) > code {
+  @apply bg-background px-1.5 py-0.5 text-text-primary;
+}
+
+/* KaTeX overrides for dark theme */
+.katex {
+  @apply text-text-primary;
+}
+
+.katex-display {
+  @apply my-3 overflow-x-auto;
+}
+
+/* Syntax highlighting - dark theme */
+.hljs {
+  @apply bg-background text-text-secondary;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal {
+  @apply text-mode-test;
+}
+
+.hljs-string,
+.hljs-title,
+.hljs-section,
+.hljs-attribute,
+.hljs-template-variable,
+.hljs-variable {
+  @apply text-success;
+}
+
+.hljs-comment,
+.hljs-quote {
+  @apply text-text-tertiary italic;
+}
+
+.hljs-number,
+.hljs-regexp,
+.hljs-tag .hljs-attr {
+  @apply text-mode-challenge;
+}
+
+.hljs-function,
+.hljs-title.function_ {
+  @apply text-mode-study;
+}
+
+.hljs-type,
+.hljs-built_in {
+  @apply text-mode-review;
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Animate in */
+.animate-in {
+  animation: slideIn 0.15s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

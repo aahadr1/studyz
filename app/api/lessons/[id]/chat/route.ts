@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { chatWithPageContext, ChatMessage } from '@/lib/openai'
+import OpenAI from 'openai'
 
 // Create a Supabase client with service role for server-side operations
 function createServerClient() {
@@ -16,7 +16,18 @@ function createServerClient() {
   )
 }
 
-// POST /api/lessons/[id]/chat - Send a message to the AI assistant
+// Lazy initialization of OpenAI client
+let _openai: OpenAI | null = null
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return _openai
+}
+
+// POST /api/lessons/[id]/chat - Send a message to the AI assistant (with streaming support)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -39,7 +50,7 @@ export async function POST(
     }
 
     // Parse request body
-    const { message, currentPage } = await request.json()
+    const { message, currentPage, stream = false } = await request.json()
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
@@ -80,10 +91,50 @@ export async function POST(
       .order('created_at', { ascending: true })
       .limit(10)
 
-    const chatHistory: ChatMessage[] = (previousMessages || []).map(m => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }))
+    // Build messages array for OpenAI
+    const systemPrompt = `You are Studyz, an expert AI study assistant helping students understand their course materials. You're currently helping with page ${currentPage} of "${lesson.name}".
+
+Your capabilities:
+- You can see and analyze the current page (if an image is provided)
+- Explain complex concepts in simple terms
+- Break down formulas and equations
+- Create study aids like flashcards and practice questions
+- Summarize content clearly
+
+Guidelines:
+- Be concise but thorough
+- Use markdown formatting for clarity (headings, lists, bold, code blocks)
+- For math, use LaTeX notation: $inline$ or $$block$$
+- When explaining, start with the key insight
+- If asked to create flashcards or questions, format them clearly
+- Be encouraging and supportive`
+
+    const messages: any[] = [
+      { role: 'system', content: systemPrompt }
+    ]
+
+    // Add previous conversation context
+    if (previousMessages && previousMessages.length > 0) {
+      for (const msg of previousMessages) {
+        messages.push({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        })
+      }
+    }
+
+    // Add current message with optional image context
+    if (pageImageUrl) {
+      messages.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: message },
+          { type: 'image_url', image_url: { url: pageImageUrl, detail: 'high' } },
+        ],
+      })
+    } else {
+      messages.push({ role: 'user', content: message })
+    }
 
     // Save user message
     await supabase.from('lesson_messages').insert({
@@ -93,12 +144,66 @@ export async function POST(
       page_context: currentPage || null,
     })
 
-    // Call OpenAI with the page image context
-    const assistantResponse = await chatWithPageContext(
-      chatHistory,
-      message,
-      pageImageUrl
-    )
+    // Streaming response
+    if (stream) {
+      const encoder = new TextEncoder()
+      
+      const streamResponse = await getOpenAI().chat.completions.create({
+        model: pageImageUrl ? 'gpt-4o' : 'gpt-4o-mini',
+        messages,
+        max_tokens: 2000,
+        temperature: 0.7,
+        stream: true,
+      })
+
+      let fullContent = ''
+
+      const readableStream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of streamResponse) {
+              const content = chunk.choices[0]?.delta?.content || ''
+              if (content) {
+                fullContent += content
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`))
+              }
+            }
+            
+            // Save the complete assistant message
+            await supabase.from('lesson_messages').insert({
+              lesson_id: id,
+              role: 'assistant',
+              content: fullContent,
+              page_context: currentPage || null,
+            })
+
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+            controller.close()
+          } catch (error) {
+            console.error('Stream error:', error)
+            controller.error(error)
+          }
+        },
+      })
+
+      return new Response(readableStream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      })
+    }
+
+    // Non-streaming response (fallback)
+    const completion = await getOpenAI().chat.completions.create({
+      model: pageImageUrl ? 'gpt-4o' : 'gpt-4o-mini',
+      messages,
+      max_tokens: 2000,
+      temperature: 0.7,
+    })
+
+    const assistantResponse = completion.choices[0]?.message?.content || 'I apologize, but I could not generate a response.'
 
     // Save assistant message
     await supabase.from('lesson_messages').insert({
@@ -117,4 +222,3 @@ export async function POST(
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

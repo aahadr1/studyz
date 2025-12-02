@@ -18,3 +18,4 @@
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('lesson-documents', 'lesson-documents', false);
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('lesson-pages', 'lesson-pages', true);
 
+

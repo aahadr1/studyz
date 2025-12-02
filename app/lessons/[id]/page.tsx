@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiSend, FiMessageSquare } from 'react-icons/fi'
+import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiX } from 'react-icons/fi'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { AssistantPanel } from '@/components/assistant'
 import type { Lesson, LessonPage, LessonMessage } from '@/types/db'
 
 export default function LessonViewerPage() {
@@ -16,21 +17,13 @@ export default function LessonViewerPage() {
   const [messages, setMessages] = useState<LessonMessage[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
-  const [inputMessage, setInputMessage] = useState('')
   const [imageLoading, setImageLoading] = useState(true)
-  
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [showAssistant, setShowAssistant] = useState(true)
+  const [authToken, setAuthToken] = useState<string | null>(null)
 
   useEffect(() => {
     loadLesson()
   }, [lessonId])
-
-  useEffect(() => {
-    // Scroll to bottom when messages change
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
 
   const loadLesson = async () => {
     const supabase = createClient()
@@ -41,6 +34,8 @@ export default function LessonViewerPage() {
         window.location.href = '/login'
         return
       }
+
+      setAuthToken(session.access_token)
 
       const response = await fetch(`/api/lessons/${lessonId}`, {
         headers: {
@@ -60,76 +55,6 @@ export default function LessonViewerPage() {
       console.error('Error loading lesson:', error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim() || sending) return
-
-    const userMessage = inputMessage.trim()
-    setInputMessage('')
-    setSending(true)
-
-    // Optimistically add user message
-    const tempUserMessage: LessonMessage = {
-      id: `temp-${Date.now()}`,
-      lesson_id: lessonId,
-      role: 'user',
-      content: userMessage,
-      page_context: currentPage,
-      created_at: new Date().toISOString(),
-    }
-    setMessages(prev => [...prev, tempUserMessage])
-
-    try {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) return
-
-      const response = await fetch(`/api/lessons/${lessonId}/chat`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: userMessage,
-          currentPage,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        // Add assistant response
-        const assistantMessage: LessonMessage = {
-          id: `assistant-${Date.now()}`,
-          lesson_id: lessonId,
-          role: 'assistant',
-          content: data.response,
-          page_context: data.pageContext,
-          created_at: new Date().toISOString(),
-        }
-        setMessages(prev => [...prev, assistantMessage])
-      } else {
-        // Remove optimistic message on error
-        setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id))
-        console.error('Chat error:', data.error)
-      }
-    } catch (error) {
-      console.error('Error sending message:', error)
-      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id))
-    } finally {
-      setSending(false)
-      inputRef.current?.focus()
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
     }
   }
 
@@ -168,8 +93,20 @@ export default function LessonViewerPage() {
         <h1 className="text-lg font-semibold text-text-primary truncate flex-1">
           {lesson.name}
         </h1>
-        <div className="text-sm text-text-tertiary">
-          Page {currentPage} of {lesson.total_pages}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-text-tertiary mono">
+            {currentPage} / {lesson.total_pages}
+          </span>
+          {!showAssistant && (
+            <button
+              onClick={() => setShowAssistant(true)}
+              className="btn-ghost flex items-center gap-2"
+              title="Open AI Assistant"
+            >
+              <FiMessageSquare className="w-4 h-4" />
+              <span className="text-sm">Assistant</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -185,7 +122,7 @@ export default function LessonViewerPage() {
               className="btn-ghost disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <FiChevronLeft className="w-5 h-5" />
-              Previous
+              <span className="hidden sm:inline">Previous</span>
             </button>
             <div className="flex items-center gap-2">
               <input
@@ -194,7 +131,7 @@ export default function LessonViewerPage() {
                 max={lesson.total_pages}
                 value={currentPage}
                 onChange={(e) => goToPage(parseInt(e.target.value) || 1)}
-                className="w-16 px-2 py-1 bg-surface border border-border rounded text-center text-sm"
+                className="w-16 px-2 py-1 bg-surface border border-border text-center text-sm mono"
               />
               <span className="text-text-tertiary text-sm">/ {lesson.total_pages}</span>
             </div>
@@ -203,7 +140,7 @@ export default function LessonViewerPage() {
               disabled={currentPage >= lesson.total_pages}
               className="btn-ghost disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              Next
+              <span className="hidden sm:inline">Next</span>
               <FiChevronRight className="w-5 h-5" />
             </button>
           </div>
@@ -220,7 +157,7 @@ export default function LessonViewerPage() {
                 <img
                   src={currentPageData.image_url}
                   alt={`Page ${currentPage}`}
-                  className="max-w-full h-auto shadow-lg rounded"
+                  className="max-w-full h-auto border border-border"
                   onLoad={() => setImageLoading(false)}
                   style={{ maxHeight: 'calc(100vh - 180px)' }}
                 />
@@ -233,92 +170,20 @@ export default function LessonViewerPage() {
           </div>
         </div>
 
-        {/* Chat Sidebar - Right Side */}
-        <div className="w-96 border-l border-border flex flex-col bg-surface">
-          {/* Chat Header */}
-          <div className="h-12 border-b border-border flex items-center px-4 gap-2 flex-shrink-0">
-            <FiMessageSquare className="w-4 h-4 text-accent" />
-            <span className="font-medium text-text-primary">AI Assistant</span>
+        {/* AI Assistant Panel - Right Side */}
+        {showAssistant && (
+          <div className="w-[420px] flex-shrink-0">
+            <AssistantPanel
+              lessonId={lessonId}
+              lessonName={lesson.name}
+              currentPage={currentPage}
+              totalPages={lesson.total_pages}
+              pageImageUrl={currentPageData?.image_url}
+              initialMessages={messages}
+              onClose={() => setShowAssistant(false)}
+            />
           </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-auto p-4 space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 bg-accent-muted rounded-full flex items-center justify-center mx-auto mb-3">
-                  <FiMessageSquare className="w-6 h-6 text-accent" />
-                </div>
-                <p className="text-text-secondary text-sm">
-                  Ask me anything about the content on this page!
-                </p>
-                <p className="text-text-tertiary text-xs mt-1">
-                  I can see the current page and help explain concepts.
-                </p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-lg px-3 py-2 ${
-                      message.role === 'user'
-                        ? 'bg-accent text-white'
-                        : 'bg-elevated text-text-primary'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                    {message.page_context && (
-                      <p className={`text-xs mt-1 ${
-                        message.role === 'user' ? 'text-white/70' : 'text-text-tertiary'
-                      }`}>
-                        Page {message.page_context}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-            {sending && (
-              <div className="flex justify-start">
-                <div className="bg-elevated rounded-lg px-3 py-2">
-                  <div className="flex items-center gap-2 text-text-tertiary">
-                    <div className="spinner w-4 h-4" />
-                    <span className="text-sm">Thinking...</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Area */}
-          <div className="border-t border-border p-4">
-            <div className="flex gap-2">
-              <textarea
-                ref={inputRef}
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about this page..."
-                rows={2}
-                className="input flex-1 resize-none"
-                disabled={sending}
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={!inputMessage.trim() || sending}
-                className="btn-primary px-3 self-end disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <FiSend className="w-4 h-4" />
-              </button>
-            </div>
-            <p className="text-xs text-text-tertiary mt-2">
-              Currently viewing page {currentPage}. Press Enter to send.
-            </p>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )
