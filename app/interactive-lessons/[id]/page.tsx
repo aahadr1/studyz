@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare } from 'react-icons/fi'
+import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiZoomIn, FiZoomOut, FiMaximize2 } from 'react-icons/fi'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { AssistantPanel } from '@/components/assistant'
 import MCQInterface from '@/components/MCQInterface'
 import LessonSectionDisplay, { LessonSectionSkeleton, LessonSectionEmpty } from '@/components/LessonSectionDisplay'
+import { ResizableHandle, usePanelSizes } from '@/components/ResizablePanel'
 import type { InteractiveLesson, InteractiveLessonDocument, LessonMessage, InteractiveLessonPageSection } from '@/types/db'
 
 interface PageImage {
@@ -29,6 +30,20 @@ interface SectionWithAudio extends InteractiveLessonPageSection {
   audio_url?: string | null
 }
 
+// Default panel sizes
+const DEFAULT_SIZES = {
+  sidebar: 420,
+  bottomPanel: 200,
+  docScale: 100,
+}
+
+// Min/max constraints
+const CONSTRAINTS = {
+  sidebar: { min: 280, max: 600 },
+  bottomPanel: { min: 100, max: 500 },
+  docScale: { min: 50, max: 200 },
+}
+
 export default function InteractiveLessonViewerPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -42,12 +57,19 @@ export default function InteractiveLessonViewerPage() {
   const [loading, setLoading] = useState(true)
   const [imageLoading, setImageLoading] = useState(true)
   const [showAssistant, setShowAssistant] = useState(true)
+  const [showMCQ, setShowMCQ] = useState(true)
   const [authToken, setAuthToken] = useState<string | null>(null)
 
   // Section state
   const [currentSection, setCurrentSection] = useState<SectionWithAudio | null>(null)
   const [sectionLoading, setSectionLoading] = useState(false)
   const [lessonStatus, setLessonStatus] = useState<string>('none')
+
+  // Resizable panel sizes
+  const { sizes, updateSize, loaded: sizesLoaded } = usePanelSizes(
+    `interactive-lesson-${lessonId}-sizes`,
+    DEFAULT_SIZES
+  )
 
   useEffect(() => {
     loadLesson()
@@ -156,7 +178,40 @@ export default function InteractiveLessonViewerPage() {
     return null
   }
 
-  if (loading) {
+  // Handle sidebar resize
+  const handleSidebarResize = useCallback((delta: number) => {
+    const newSize = Math.max(
+      CONSTRAINTS.sidebar.min,
+      Math.min(CONSTRAINTS.sidebar.max, sizes.sidebar - delta)
+    )
+    updateSize('sidebar', newSize)
+  }, [sizes.sidebar, updateSize])
+
+  // Handle bottom panel resize
+  const handleBottomPanelResize = useCallback((delta: number) => {
+    const newSize = Math.max(
+      CONSTRAINTS.bottomPanel.min,
+      Math.min(CONSTRAINTS.bottomPanel.max, sizes.bottomPanel - delta)
+    )
+    updateSize('bottomPanel', newSize)
+  }, [sizes.bottomPanel, updateSize])
+
+  // Handle doc scale
+  const handleZoomIn = () => {
+    const newScale = Math.min(CONSTRAINTS.docScale.max, sizes.docScale + 10)
+    updateSize('docScale', newScale)
+  }
+
+  const handleZoomOut = () => {
+    const newScale = Math.max(CONSTRAINTS.docScale.min, sizes.docScale - 10)
+    updateSize('docScale', newScale)
+  }
+
+  const handleResetZoom = () => {
+    updateSize('docScale', 100)
+  }
+
+  if (loading || !sizesLoaded) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="spinner" />
@@ -187,9 +242,45 @@ export default function InteractiveLessonViewerPage() {
           {lesson.name}
         </h1>
         <div className="flex items-center gap-2">
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-1 border border-border rounded px-1">
+            <button
+              onClick={handleZoomOut}
+              className="p-1.5 text-text-tertiary hover:text-text-primary transition-colors"
+              title="Zoom out"
+            >
+              <FiZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleResetZoom}
+              className="px-2 py-1 text-xs mono text-text-secondary hover:text-text-primary transition-colors min-w-[48px]"
+              title="Reset zoom"
+            >
+              {sizes.docScale}%
+            </button>
+            <button
+              onClick={handleZoomIn}
+              className="p-1.5 text-text-tertiary hover:text-text-primary transition-colors"
+              title="Zoom in"
+            >
+              <FiZoomIn className="w-4 h-4" />
+            </button>
+          </div>
+
           <span className="text-sm text-text-tertiary mono">
             {currentPage} / {totalPages}
           </span>
+          
+          {/* Toggle MCQ Panel */}
+          <button
+            onClick={() => setShowMCQ(!showMCQ)}
+            className={`btn-ghost text-sm ${showMCQ ? 'text-mode-study' : ''}`}
+            title={showMCQ ? 'Hide MCQ' : 'Show MCQ'}
+          >
+            MCQ
+          </button>
+
+          {/* Toggle Assistant */}
           {!showAssistant && (
             <button
               onClick={() => setShowAssistant(true)}
@@ -206,7 +297,7 @@ export default function InteractiveLessonViewerPage() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Document Viewer - Left Side */}
-        <div className="flex-1 flex flex-col bg-elevated">
+        <div className="flex-1 flex flex-col bg-elevated min-w-0">
           {/* Page Navigation */}
           <div className="h-12 border-b border-border flex items-center justify-center gap-4 flex-shrink-0">
             <button
@@ -240,7 +331,7 @@ export default function InteractiveLessonViewerPage() {
 
           {/* Scrollable Content Area */}
           <div className="flex-1 overflow-auto p-4">
-            <div className="max-w-4xl mx-auto">
+            <div className="mx-auto" style={{ maxWidth: `${Math.max(400, 800 * (sizes.docScale / 100))}px` }}>
               {/* Section Display - Above PDF */}
               {sectionLoading ? (
                 <LessonSectionSkeleton />
@@ -267,9 +358,12 @@ export default function InteractiveLessonViewerPage() {
                     <img
                       src={currentPageImageUrl}
                       alt={`Page ${currentPage}`}
-                      className="max-w-full h-auto border border-border"
+                      className="h-auto border border-border transition-all"
                       onLoad={() => setImageLoading(false)}
-                      style={{ maxHeight: 'calc(100vh - 320px)' }}
+                      style={{ 
+                        width: `${sizes.docScale}%`,
+                        maxWidth: 'none',
+                      }}
                     />
                   </div>
                 ) : (
@@ -281,16 +375,40 @@ export default function InteractiveLessonViewerPage() {
             </div>
           </div>
 
-          {/* MCQ Interface */}
-          <MCQInterface
-            lessonId={lessonId}
-            currentPage={currentPage}
-          />
+          {/* Resizable Bottom Panel - MCQ Interface */}
+          {showMCQ && (
+            <>
+              <ResizableHandle 
+                direction="vertical" 
+                onResize={handleBottomPanelResize}
+              />
+              <div 
+                className="flex-shrink-0 overflow-hidden"
+                style={{ height: sizes.bottomPanel }}
+              >
+                <MCQInterface
+                  lessonId={lessonId}
+                  currentPage={currentPage}
+                />
+              </div>
+            </>
+          )}
         </div>
+
+        {/* Resizable Sidebar Handle */}
+        {showAssistant && (
+          <ResizableHandle 
+            direction="horizontal" 
+            onResize={handleSidebarResize}
+          />
+        )}
 
         {/* AI Assistant Panel - Right Side */}
         {showAssistant && (
-          <div className="w-[420px] flex-shrink-0">
+          <div 
+            className="flex-shrink-0 overflow-hidden"
+            style={{ width: sizes.sidebar }}
+          >
             <AssistantPanel
               lessonId={lessonId}
               lessonName={lesson.name}
