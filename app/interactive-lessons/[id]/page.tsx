@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiX } from 'react-icons/fi'
+import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare } from 'react-icons/fi'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { AssistantPanel } from '@/components/assistant'
 import MCQInterface from '@/components/MCQInterface'
-import type { InteractiveLesson, InteractiveLessonDocument, LessonMessage } from '@/types/db'
+import LessonSectionDisplay, { LessonSectionSkeleton, LessonSectionEmpty } from '@/components/LessonSectionDisplay'
+import type { InteractiveLesson, InteractiveLessonDocument, LessonMessage, InteractiveLessonPageSection } from '@/types/db'
 
 interface PageImage {
   id: string
@@ -22,6 +23,10 @@ interface InteractiveLessonData {
   }
   documentUrls: Record<string, string>
   totalPages: number
+}
+
+interface SectionWithAudio extends InteractiveLessonPageSection {
+  audio_url?: string | null
 }
 
 export default function InteractiveLessonViewerPage() {
@@ -39,9 +44,21 @@ export default function InteractiveLessonViewerPage() {
   const [showAssistant, setShowAssistant] = useState(true)
   const [authToken, setAuthToken] = useState<string | null>(null)
 
+  // Section state
+  const [currentSection, setCurrentSection] = useState<SectionWithAudio | null>(null)
+  const [sectionLoading, setSectionLoading] = useState(false)
+  const [lessonStatus, setLessonStatus] = useState<string>('none')
+
   useEffect(() => {
     loadLesson()
   }, [lessonId])
+
+  // Fetch section when page changes
+  useEffect(() => {
+    if (authToken && lessonId) {
+      fetchSection(currentPage)
+    }
+  }, [currentPage, authToken, lessonId])
 
   const loadLesson = async () => {
     const supabase = createClient()
@@ -65,6 +82,7 @@ export default function InteractiveLessonViewerPage() {
       if (response.ok) {
         const data = await response.json()
         setLessonData(data)
+        setLessonStatus(data.lesson?.lesson_status || 'none')
         
         // Fetch page images
         const pagesResponse = await fetch(`/api/interactive-lessons/${lessonId}/page/1`, {
@@ -79,6 +97,9 @@ export default function InteractiveLessonViewerPage() {
             setPageImages(pagesData.allPages)
           }
         }
+
+        // Fetch initial section
+        await fetchSection(initialPage, session.access_token)
       } else {
         window.location.href = '/interactive-lessons'
       }
@@ -88,6 +109,35 @@ export default function InteractiveLessonViewerPage() {
       setLoading(false)
     }
   }
+
+  const fetchSection = useCallback(async (pageNumber: number, token?: string) => {
+    const accessToken = token || authToken
+    if (!accessToken) return
+
+    setSectionLoading(true)
+    try {
+      const response = await fetch(`/api/interactive-lessons/${lessonId}/sections/${pageNumber}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setCurrentSection(data.section)
+        if (data.lesson_status) {
+          setLessonStatus(data.lesson_status)
+        }
+      } else {
+        setCurrentSection(null)
+      }
+    } catch (error) {
+      console.error('Error fetching section:', error)
+      setCurrentSection(null)
+    } finally {
+      setSectionLoading(false)
+    }
+  }, [lessonId, authToken])
 
   const goToPage = (page: number) => {
     const totalPages = lessonData?.totalPages || 1
@@ -188,28 +238,47 @@ export default function InteractiveLessonViewerPage() {
             </button>
           </div>
 
-          {/* Page Image */}
-          <div className="flex-1 overflow-auto p-4 flex items-start justify-center">
-            {currentPageImageUrl ? (
-              <div className="relative">
-                {imageLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-surface">
-                    <div className="spinner" />
+          {/* Scrollable Content Area */}
+          <div className="flex-1 overflow-auto p-4">
+            <div className="max-w-4xl mx-auto">
+              {/* Section Display - Above PDF */}
+              {sectionLoading ? (
+                <LessonSectionSkeleton />
+              ) : currentSection ? (
+                <LessonSectionDisplay
+                  title={currentSection.section_title}
+                  content={currentSection.section_content}
+                  audioUrl={currentSection.audio_url}
+                  pageNumber={currentPage}
+                />
+              ) : lessonStatus === 'ready' ? (
+                <LessonSectionEmpty pageNumber={currentPage} />
+              ) : null}
+
+              {/* Page Image */}
+              <div className="flex justify-center">
+                {currentPageImageUrl ? (
+                  <div className="relative">
+                    {imageLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-surface">
+                        <div className="spinner" />
+                      </div>
+                    )}
+                    <img
+                      src={currentPageImageUrl}
+                      alt={`Page ${currentPage}`}
+                      className="max-w-full h-auto border border-border"
+                      onLoad={() => setImageLoading(false)}
+                      style={{ maxHeight: 'calc(100vh - 320px)' }}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-64 text-text-tertiary">
+                    Page not available
                   </div>
                 )}
-                <img
-                  src={currentPageImageUrl}
-                  alt={`Page ${currentPage}`}
-                  className="max-w-full h-auto border border-border"
-                  onLoad={() => setImageLoading(false)}
-                  style={{ maxHeight: 'calc(100vh - 240px)' }}
-                />
               </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-text-tertiary">
-                Page not available
-              </div>
-            )}
+            </div>
           </div>
 
           {/* MCQ Interface */}
@@ -238,4 +307,3 @@ export default function InteractiveLessonViewerPage() {
     </div>
   )
 }
-

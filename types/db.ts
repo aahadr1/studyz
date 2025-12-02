@@ -233,3 +233,49 @@ export interface PageMCQProgress {
 export interface PageMCQWithProgress extends PageMCQ {
   progress?: PageMCQProgress
 }
+
+// Page Transcription and Section Types for Interactive Lessons
+
+export interface InteractiveLessonPageTranscription {
+  id: string
+  interactive_lesson_id: string
+  page_number: number
+  transcription: string
+  created_at: string
+}
+
+export interface InteractiveLessonPageSection {
+  id: string
+  interactive_lesson_id: string
+  page_number: number
+  section_title: string
+  section_content: string
+  audio_path?: string
+  audio_duration_seconds?: number
+  created_at: string
+}
+
+// Extended InteractiveLesson with lesson generation status
+export interface InteractiveLessonWithStatus extends InteractiveLesson {
+  lesson_status?: 'none' | 'processing' | 'ready' | 'error'
+  lesson_generation_step?: string
+  lesson_generation_progress?: number
+  lesson_generation_total?: number
+  lesson_error_message?: string
+}
+
+// Processing step types for progress tracking
+export type ProcessingStep = 
+  | 'converting'
+  | 'uploading'
+  | 'transcribing'
+  | 'generating'
+  | 'audio'
+
+export interface ProcessingProgress {
+  step: ProcessingStep
+  stepLabel: string
+  currentItem: number
+  totalItems: number
+  overallPercent: number
+}

@@ -122,7 +122,7 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { name, subject, level, language, mode, status } = body
+    const { name, subject, level, language, mode, status, lesson_status } = body
 
     const updates: Record<string, any> = { updated_at: new Date().toISOString() }
     if (name !== undefined) updates.name = name.trim()
@@ -131,6 +131,7 @@ export async function PATCH(
     if (language !== undefined) updates.language = language
     if (mode !== undefined) updates.mode = mode
     if (status !== undefined) updates.status = status
+    if (lesson_status !== undefined) updates.lesson_status = lesson_status
 
     const { data: lesson, error } = await supabase
       .from('interactive_lessons')

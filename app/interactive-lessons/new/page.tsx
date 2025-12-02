@@ -2,10 +2,30 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiArrowLeft, FiUpload, FiFile, FiX } from 'react-icons/fi'
+import { FiArrowLeft, FiUpload, FiFile, FiX, FiCheck } from 'react-icons/fi'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
+
+// Processing steps with weights for overall progress calculation
+const STEPS = [
+  { id: 'converting', label: 'Converting PDF', weight: 10 },
+  { id: 'uploading', label: 'Uploading pages', weight: 15 },
+  { id: 'transcribing', label: 'Transcribing content', weight: 35 },
+  { id: 'generating', label: 'Creating lesson', weight: 15 },
+  { id: 'audio', label: 'Generating audio', weight: 25 },
+] as const
+
+type StepId = typeof STEPS[number]['id']
+
+interface ProcessingState {
+  currentStep: StepId | null
+  currentStepIndex: number
+  currentItem: number
+  totalItems: number
+  overallPercent: number
+  completedSteps: StepId[]
+}
 
 export default function NewInteractiveLessonPage() {
   const router = useRouter()
@@ -13,9 +33,16 @@ export default function NewInteractiveLessonPage() {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
-  const [progress, setProgress] = useState('')
-  const [currentPage, setCurrentPage] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
+  
+  // Detailed processing state
+  const [processing, setProcessing] = useState<ProcessingState>({
+    currentStep: null,
+    currentStepIndex: 0,
+    currentItem: 0,
+    totalItems: 0,
+    overallPercent: 0,
+    completedSteps: []
+  })
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -38,6 +65,44 @@ export default function NewInteractiveLessonPage() {
     }
   }
 
+  // Calculate overall progress percentage
+  const calculateOverallPercent = (stepId: StepId, itemProgress: number) => {
+    const stepIndex = STEPS.findIndex(s => s.id === stepId)
+    let percent = 0
+    
+    // Add completed steps
+    for (let i = 0; i < stepIndex; i++) {
+      percent += STEPS[i].weight
+    }
+    
+    // Add current step progress
+    const currentStepWeight = STEPS[stepIndex]?.weight || 0
+    percent += (itemProgress / 100) * currentStepWeight
+    
+    return Math.min(100, Math.round(percent))
+  }
+
+  // Update processing state helper
+  const updateProcessing = (
+    stepId: StepId, 
+    currentItem: number, 
+    totalItems: number,
+    completedSteps?: StepId[]
+  ) => {
+    const stepIndex = STEPS.findIndex(s => s.id === stepId)
+    const itemPercent = totalItems > 0 ? (currentItem / totalItems) * 100 : 0
+    const overallPercent = calculateOverallPercent(stepId, itemPercent)
+    
+    setProcessing(prev => ({
+      currentStep: stepId,
+      currentStepIndex: stepIndex,
+      currentItem,
+      totalItems,
+      overallPercent,
+      completedSteps: completedSteps || prev.completedSteps
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -52,7 +117,14 @@ export default function NewInteractiveLessonPage() {
 
     setUploading(true)
     setError('')
-    setProgress('Creating interactive lesson...')
+    setProcessing({
+      currentStep: 'converting',
+      currentStepIndex: 0,
+      currentItem: 0,
+      totalItems: 0,
+      overallPercent: 0,
+      completedSteps: []
+    })
 
     try {
       const supabase = createClient()
@@ -63,6 +135,20 @@ export default function NewInteractiveLessonPage() {
         return
       }
 
+      // STEP 1: Convert PDF to images
+      updateProcessing('converting', 0, 1)
+      const pageImages = await convertPdfToImagesClient(file, 1.5)
+      
+      if (pageImages.length === 0) {
+        throw new Error('No pages found in PDF')
+      }
+      if (pageImages.length > 200) {
+        throw new Error(`PDF has ${pageImages.length} pages, which exceeds the maximum limit of 200 pages`)
+      }
+
+      const totalPages = pageImages.length
+      updateProcessing('converting', 1, 1, ['converting'])
+
       // Create interactive lesson record
       const createResponse = await fetch('/api/interactive-lessons', {
         method: 'POST',
@@ -70,9 +156,7 @@ export default function NewInteractiveLessonPage() {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: name.trim(),
-        }),
+        body: JSON.stringify({ name: name.trim() }),
       })
 
       const createData = await createResponse.json()
@@ -82,8 +166,7 @@ export default function NewInteractiveLessonPage() {
 
       const lessonId = createData.lesson.id
 
-      // Get upload URL
-      setProgress('Preparing upload...')
+      // Get upload URL for document
       const uploadUrlResponse = await fetch(`/api/interactive-lessons/${lessonId}/upload-url`, {
         method: 'POST',
         headers: {
@@ -102,23 +185,15 @@ export default function NewInteractiveLessonPage() {
         throw new Error(uploadUrlData.error || 'Failed to get upload URL')
       }
 
-      // Upload file
-      setProgress('Uploading PDF...')
-      const uploadResponse = await fetch(uploadUrlData.signedUrl, {
+      // Upload original PDF
+      await fetch(uploadUrlData.signedUrl, {
         method: 'PUT',
-        headers: {
-          'Content-Type': file.type,
-        },
+        headers: { 'Content-Type': file.type },
         body: file,
       })
 
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload file')
-      }
-
       // Confirm upload
-      setProgress('Processing document...')
-      const confirmResponse = await fetch(`/api/interactive-lessons/${lessonId}/confirm-upload`, {
+      await fetch(`/api/interactive-lessons/${lessonId}/confirm-upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -130,12 +205,113 @@ export default function NewInteractiveLessonPage() {
         }),
       })
 
-      if (!confirmResponse.ok) {
-        const confirmData = await confirmResponse.json()
-        throw new Error(confirmData.error || 'Failed to confirm upload')
+      // STEP 2: Upload page images
+      for (let i = 0; i < pageImages.length; i++) {
+        updateProcessing('uploading', i + 1, totalPages)
+        
+        const pageImage = pageImages[i]
+        await fetch(`/api/interactive-lessons/${lessonId}/page`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pageNumber: pageImage.pageNumber,
+            dataUrl: pageImage.dataUrl,
+            width: pageImage.width,
+            height: pageImage.height,
+          }),
+        })
+      }
+      updateProcessing('uploading', totalPages, totalPages, ['converting', 'uploading'])
+
+      // STEP 3: Transcribe each page
+      for (let i = 0; i < totalPages; i++) {
+        updateProcessing('transcribing', i + 1, totalPages)
+        
+        const transcribeResponse = await fetch(`/api/interactive-lessons/${lessonId}/process`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'transcribe',
+            page_number: i + 1,
+            total_pages: totalPages,
+          }),
+        })
+
+        if (!transcribeResponse.ok) {
+          const errorData = await transcribeResponse.json()
+          console.warn(`Failed to transcribe page ${i + 1}:`, errorData.error)
+          // Continue with other pages
+        }
+      }
+      updateProcessing('transcribing', totalPages, totalPages, ['converting', 'uploading', 'transcribing'])
+
+      // STEP 4: Generate lesson sections
+      updateProcessing('generating', 0, 1)
+      
+      const generateResponse = await fetch(`/api/interactive-lessons/${lessonId}/process`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generate_lesson',
+          total_pages: totalPages,
+        }),
+      })
+
+      if (!generateResponse.ok) {
+        const errorData = await generateResponse.json()
+        throw new Error(errorData.error || 'Failed to generate lesson sections')
+      }
+      updateProcessing('generating', 1, 1, ['converting', 'uploading', 'transcribing', 'generating'])
+
+      // STEP 5: Generate audio for each section
+      for (let i = 0; i < totalPages; i++) {
+        updateProcessing('audio', i + 1, totalPages)
+        
+        const audioResponse = await fetch(`/api/interactive-lessons/${lessonId}/sections/generate-audio`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            page_number: i + 1,
+            total_pages: totalPages,
+          }),
+        })
+
+        if (!audioResponse.ok) {
+          const errorData = await audioResponse.json()
+          console.warn(`Failed to generate audio for page ${i + 1}:`, errorData.error)
+          // Continue with other pages - audio is not critical
+        }
       }
 
-      setProgress('Interactive lesson created successfully!')
+      // Mark lesson as ready
+      await fetch(`/api/interactive-lessons/${lessonId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          lesson_status: 'ready',
+          status: 'ready',
+        }),
+      })
+
+      updateProcessing('audio', totalPages, totalPages, ['converting', 'uploading', 'transcribing', 'generating', 'audio'])
+      
+      // Small delay to show completion
+      await new Promise(r => setTimeout(r, 500))
       
       // Redirect to the new interactive lesson
       router.push(`/interactive-lessons/${lessonId}`)
@@ -143,10 +319,21 @@ export default function NewInteractiveLessonPage() {
       console.error('Error creating interactive lesson:', err)
       setError(err.message || 'Failed to create interactive lesson')
       setUploading(false)
-      setProgress('')
-      setCurrentPage(0)
-      setTotalPages(0)
+      setProcessing({
+        currentStep: null,
+        currentStepIndex: 0,
+        currentItem: 0,
+        totalItems: 0,
+        overallPercent: 0,
+        completedSteps: []
+      })
     }
+  }
+
+  const getCurrentStepLabel = () => {
+    if (!processing.currentStep) return ''
+    const step = STEPS.find(s => s.id === processing.currentStep)
+    return step?.label || ''
   }
 
   return (
@@ -232,21 +419,85 @@ export default function NewInteractiveLessonPage() {
               </div>
             )}
 
-            {/* Progress Message */}
-            {progress && (
-              <div className="p-3 bg-accent-muted rounded-lg text-sm text-accent">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="spinner w-4 h-4" />
-                  {progress}
-                </div>
-                {totalPages > 0 && currentPage > 0 && (
-                  <div className="w-full bg-accent/20 rounded-full h-2">
+            {/* Detailed Progress */}
+            {uploading && processing.currentStep && (
+              <div className="space-y-4">
+                {/* Overall Progress */}
+                <div className="p-4 bg-surface border border-border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-text-primary">
+                      Overall Progress
+                    </span>
+                    <span className="text-sm text-accent mono">
+                      {processing.overallPercent}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-elevated rounded-full h-2 mb-3">
                     <div 
                       className="bg-accent h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(currentPage / totalPages) * 100}%` }}
+                      style={{ width: `${processing.overallPercent}%` }}
                     />
                   </div>
-                )}
+                  
+                  {/* Current Step Detail */}
+                  <div className="text-xs text-text-secondary">
+                    {getCurrentStepLabel()}
+                    {processing.totalItems > 1 && (
+                      <span className="text-text-tertiary">
+                        {' '}(page {processing.currentItem} of {processing.totalItems})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Step List */}
+                <div className="space-y-2">
+                  {STEPS.map((step, index) => {
+                    const isCompleted = processing.completedSteps.includes(step.id)
+                    const isCurrent = processing.currentStep === step.id
+                    const isPending = !isCompleted && !isCurrent
+                    
+                    return (
+                      <div 
+                        key={step.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                          isCurrent ? 'bg-accent-muted' : 
+                          isCompleted ? 'bg-surface' : 
+                          'bg-elevated opacity-50'
+                        }`}
+                      >
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                          isCompleted ? 'bg-green-500/20 text-green-400' :
+                          isCurrent ? 'bg-accent text-white' :
+                          'bg-elevated text-text-tertiary'
+                        }`}>
+                          {isCompleted ? (
+                            <FiCheck className="w-3.5 h-3.5" />
+                          ) : (
+                            index + 1
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <span className={`text-sm ${
+                            isCurrent ? 'text-accent font-medium' :
+                            isCompleted ? 'text-text-secondary' :
+                            'text-text-tertiary'
+                          }`}>
+                            {step.label}
+                          </span>
+                        </div>
+                        {isCurrent && processing.totalItems > 1 && (
+                          <span className="text-xs text-accent mono">
+                            {processing.currentItem}/{processing.totalItems}
+                          </span>
+                        )}
+                        {isCurrent && (
+                          <div className="spinner w-4 h-4" />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
 
@@ -259,7 +510,7 @@ export default function NewInteractiveLessonPage() {
               {uploading ? (
                 <>
                   <div className="spinner w-4 h-4" />
-                  Creating...
+                  Processing...
                 </>
               ) : (
                 'Create Interactive Lesson'
@@ -271,4 +522,3 @@ export default function NewInteractiveLessonPage() {
     </div>
   )
 }
-
