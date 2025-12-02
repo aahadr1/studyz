@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { FiArrowLeft, FiUpload, FiFile, FiX } from 'react-icons/fi'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
 export default function NewLessonPage() {
   const router = useRouter()
@@ -13,6 +14,8 @@ export default function NewLessonPage() {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [progress, setProgress] = useState('')
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -50,7 +53,7 @@ export default function NewLessonPage() {
 
     setUploading(true)
     setError('')
-    setProgress('Uploading and processing PDF...')
+    setProgress('Converting PDF pages to images...')
 
     try {
       const supabase = createClient()
@@ -61,44 +64,77 @@ export default function NewLessonPage() {
         return
       }
 
-      const formData = new FormData()
-      formData.append('name', name.trim())
-      formData.append('file', file)
+      // Convert PDF to images on the client side
+      const pageImages = await convertPdfToImagesClient(file, 1.5)
+      console.log(`Converted ${pageImages.length} pages`)
 
-      setProgress('Converting PDF pages to images...')
+      if (pageImages.length === 0) {
+        throw new Error('No pages found in PDF')
+      }
 
-      const response = await fetch('/api/lessons', {
+      if (pageImages.length > 200) {
+        throw new Error(`PDF has ${pageImages.length} pages, which exceeds the maximum limit of 200 pages`)
+      }
+
+      setTotalPages(pageImages.length)
+
+      // Create lesson record
+      setProgress('Creating lesson...')
+      const createResponse = await fetch('/api/lessons', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
         },
-        body: formData,
+        body: JSON.stringify({
+          name: name.trim(),
+          totalPages: pageImages.length,
+        }),
       })
 
-      let data
-      try {
-        data = await response.json()
-      } catch (parseError) {
-        // If response isn't JSON (e.g., HTML error page), create a generic error
-        if (response.status === 413) {
-          throw new Error('File is too large. Please try a smaller PDF file (under 50MB).')
-        }
-        throw new Error(`Server error (${response.status}). Please try again.`)
+      const createData = await createResponse.json()
+      if (!createResponse.ok) {
+        throw new Error(createData.error || 'Failed to create lesson')
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create lesson')
+      const lessonId = createData.lesson.id
+
+      // Upload each page
+      for (let i = 0; i < pageImages.length; i++) {
+        const pageImage = pageImages[i]
+        setCurrentPage(i + 1)
+        setProgress(`Uploading page ${i + 1} of ${pageImages.length}...`)
+
+        const pageResponse = await fetch(`/api/lessons/${lessonId}/page`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pageNumber: pageImage.pageNumber,
+            dataUrl: pageImage.dataUrl,
+          }),
+        })
+
+        if (!pageResponse.ok) {
+          const pageData = await pageResponse.json()
+          console.error(`Error uploading page ${i + 1}:`, pageData.error)
+          // Continue uploading other pages
+        }
       }
 
       setProgress('Lesson created successfully!')
       
       // Redirect to the new lesson
-      router.push(`/lessons/${data.lesson.id}`)
+      router.push(`/lessons/${lessonId}`)
     } catch (err: any) {
       console.error('Error creating lesson:', err)
       setError(err.message || 'Failed to create lesson')
       setUploading(false)
       setProgress('')
+      setCurrentPage(0)
+      setTotalPages(0)
     }
   }
 
@@ -187,9 +223,19 @@ export default function NewLessonPage() {
 
             {/* Progress Message */}
             {progress && (
-              <div className="p-3 bg-accent-muted rounded-lg text-sm text-accent flex items-center gap-2">
-                <div className="spinner w-4 h-4" />
-                {progress}
+              <div className="p-3 bg-accent-muted rounded-lg text-sm text-accent">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="spinner w-4 h-4" />
+                  {progress}
+                </div>
+                {totalPages > 0 && currentPage > 0 && (
+                  <div className="w-full bg-accent/20 rounded-full h-2">
+                    <div 
+                      className="bg-accent h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(currentPage / totalPages) * 100}%` }}
+                    />
+                  </div>
+                )}
               </div>
             )}
 

@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import MobileLayout, { MobileHeader, LoadingOverlay } from '@/components/mobile/MobileLayout'
+import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 import { 
   FiUpload, 
   FiFile, 
@@ -59,7 +60,7 @@ export default function MobileNewLessonPage() {
 
     setUploading(true)
     setError('')
-    setProgress('Uploading PDF...')
+    setProgress('Converting PDF...')
 
     try {
       const supabase = createClient()
@@ -70,34 +71,64 @@ export default function MobileNewLessonPage() {
         return
       }
 
-      const formData = new FormData()
-      formData.append('name', name.trim())
-      formData.append('file', file)
+      // Convert PDF to images on the client side
+      const pageImages = await convertPdfToImagesClient(file, 1.5)
+      console.log(`Converted ${pageImages.length} pages`)
 
-      setProgress('Converting pages to images...')
-
-      const response = await fetch('/api/lessons', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
-        body: formData,
-      })
-
-      let data
-      try {
-        data = await response.json()
-      } catch {
-        if (response.status === 413) {
-          throw new Error('File is too large. Try a smaller PDF.')
-        }
-        throw new Error(`Server error. Please try again.`)
+      if (pageImages.length === 0) {
+        throw new Error('No pages found in PDF')
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create lesson')
+      if (pageImages.length > 200) {
+        throw new Error(`PDF has ${pageImages.length} pages. Maximum is 200.`)
+      }
+
+      // Create lesson record
+      setProgress('Creating lesson...')
+      const createResponse = await fetch('/api/lessons', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          totalPages: pageImages.length,
+        }),
+      })
+
+      const createData = await createResponse.json()
+      if (!createResponse.ok) {
+        throw new Error(createData.error || 'Failed to create lesson')
+      }
+
+      const lessonId = createData.lesson.id
+
+      // Upload each page
+      for (let i = 0; i < pageImages.length; i++) {
+        const pageImage = pageImages[i]
+        setProgress(`Uploading page ${i + 1}/${pageImages.length}...`)
+
+        const pageResponse = await fetch(`/api/lessons/${lessonId}/page`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pageNumber: pageImage.pageNumber,
+            dataUrl: pageImage.dataUrl,
+          }),
+        })
+
+        if (!pageResponse.ok) {
+          const pageData = await pageResponse.json()
+          console.error(`Error uploading page ${i + 1}:`, pageData.error)
+        }
       }
 
       setProgress('Lesson created!')
-      router.push(`/m/lessons/${data.lesson.id}`)
+      router.push(`/m/lessons/${lessonId}`)
     } catch (err: any) {
       console.error('Error:', err)
       setError(err.message || 'Failed to create lesson')
