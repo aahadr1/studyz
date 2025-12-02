@@ -15,6 +15,8 @@ export interface AssistantMessage extends LessonMessage {
   isStreaming?: boolean
   isBookmarked?: boolean
   isError?: boolean
+  /** Audio URL for TTS playback (e.g., from "Explain this page") */
+  audioUrl?: string
 }
 
 interface AssistantPanelProps {
@@ -59,7 +61,6 @@ export default function AssistantPanel({
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  const explainAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -226,12 +227,6 @@ export default function AssistantPanel({
   const handleExplainPage = useCallback(async () => {
     if (isExplaining || isLoading) return
 
-    // Stop any previous audio
-    if (explainAudioRef.current) {
-      explainAudioRef.current.pause()
-      explainAudioRef.current = null
-    }
-
     setIsExplaining(true)
 
     try {
@@ -271,34 +266,16 @@ export default function AssistantPanel({
 
       const data = await response.json()
 
-      // Update the message with the actual explanation
+      // Update the message with the actual explanation and audio URL
       setMessages(prev => prev.map(msg => 
         msg.id === explainMessage.id 
           ? { 
               ...msg, 
-              content: `🎧 **Explication de la page ${currentPage}**\n\n${data.explanation}` 
+              content: `🎧 **Explication de la page ${currentPage}**\n\n${data.explanation}`,
+              audioUrl: data.audioUrl || undefined,
             }
           : msg
       ))
-
-      // Play the audio if available
-      if (data.audioUrl) {
-        const audio = new Audio(data.audioUrl)
-        explainAudioRef.current = audio
-        
-        audio.onended = () => {
-          explainAudioRef.current = null
-        }
-        
-        audio.onerror = (e) => {
-          console.error('Audio playback error:', e)
-          explainAudioRef.current = null
-        }
-
-        audio.play().catch(err => {
-          console.error('Failed to play audio:', err)
-        })
-      }
 
     } catch (error: any) {
       console.error('Explain page error:', error)
@@ -316,16 +293,6 @@ export default function AssistantPanel({
       setIsExplaining(false)
     }
   }, [lessonId, currentPage, isExplaining, isLoading])
-
-  // Cleanup audio on unmount
-  useEffect(() => {
-    return () => {
-      if (explainAudioRef.current) {
-        explainAudioRef.current.pause()
-        explainAudioRef.current = null
-      }
-    }
-  }, [])
 
   const filteredMessages = searchQuery
     ? messages.filter(msg => 
