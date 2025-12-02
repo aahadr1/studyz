@@ -269,11 +269,11 @@ export default function ChatAssistant(props: ChatAssistantProps) {
                   {/* Avatar */}
                   <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
                     isUser 
-                      ? 'bg-slate-200 dark:bg-slate-600' 
+                      ? 'bg-slate-300 border border-slate-400' 
                       : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-md'
                   }`}>
                     {isUser ? (
-                      <FiUser className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
+                      <FiUser className="w-3.5 h-3.5 text-slate-700" />
                     ) : (
                       <FiCpu className="w-3.5 h-3.5 text-white" />
                     )}
@@ -283,13 +283,13 @@ export default function ChatAssistant(props: ChatAssistantProps) {
                   <div className="relative">
                     <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
                       isUser 
-                        ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-600 shadow-sm rounded-br-md' 
+                        ? 'bg-slate-50 text-slate-900 border border-slate-300 shadow-sm rounded-br-md' 
                         : message.isError
                           ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-bl-md'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-bl-md'
                     }`}>
                       {isUser && message.pageContext && (
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-1 font-medium uppercase tracking-wide">
+                        <p className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide">
                           Page {message.pageContext}
                         </p>
                       )}
