@@ -50,19 +50,7 @@ async function createAuthClient() {
 
 // Get PDF page count using simple parsing methods
 async function getPdfPageCount(buffer: Buffer): Promise<number> {
-  // Method 1: Try pdf-parse
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse')
-    const data = await pdfParse(buffer)
-    const count = data.numpages || 0
-    console.log(`pdf-parse detected ${count} pages`)
-    if (count > 0) return count
-  } catch (error) {
-    console.error('pdf-parse failed:', error)
-  }
-
-  // Method 2: Parse PDF header manually to find page count
+  // Method 1: Parse PDF header manually to find page count
   try {
     const text = buffer.toString('binary')
     // Look for /Count N in PDF (indicates page count in page tree)

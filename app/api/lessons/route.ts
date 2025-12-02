@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
     let pageImages: any[] = []
 
     try {
+      console.log('Starting PDF conversion, buffer size:', pdfBuffer.length)
       pageImages = await convertPdfToImages(pdfBuffer, 1.5)
       console.log(`Converted ${pageImages.length} pages`)
 
@@ -120,10 +121,13 @@ export async function POST(request: NextRequest) {
           error: `Estimated image size (${Math.round(estimatedTotalSize / 1024 / 1024)}MB) exceeds the maximum limit of 100MB`
         }, { status: 413 })
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing PDF:', error)
+      console.error('Error stack:', error?.stack)
+      console.error('Error name:', error?.name)
+      console.error('Error message:', error?.message)
       return NextResponse.json({
-        error: 'Failed to process PDF file. Please ensure it\'s a valid PDF document.'
+        error: `Failed to process PDF file: ${error?.message || 'Unknown error'}. Please ensure it's a valid PDF document.`
       }, { status: 400 })
     }
 
