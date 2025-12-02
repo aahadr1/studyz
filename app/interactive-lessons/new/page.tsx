@@ -193,24 +193,31 @@ export default function NewInteractiveLessonPage() {
       })
 
       // Confirm upload
-      await fetch(`/api/interactive-lessons/${lessonId}/confirm-upload`, {
+      const confirmRes = await fetch(`/api/interactive-lessons/${lessonId}/confirm-upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          documentId: uploadUrlData.documentId,
           filePath: uploadUrlData.filePath,
+          fileName: file.name,
+          category: 'lesson',
+          fileType: 'pdf',
         }),
       })
+
+      if (!confirmRes.ok) {
+        const confirmData = await confirmRes.json()
+        throw new Error(confirmData.error || 'Failed to confirm upload')
+      }
 
       // STEP 2: Upload page images
       for (let i = 0; i < pageImages.length; i++) {
         updateProcessing('uploading', i + 1, totalPages)
         
         const pageImage = pageImages[i]
-        await fetch(`/api/interactive-lessons/${lessonId}/page`, {
+        const uploadPageRes = await fetch(`/api/interactive-lessons/${lessonId}/upload-page`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
@@ -223,6 +230,11 @@ export default function NewInteractiveLessonPage() {
             height: pageImage.height,
           }),
         })
+        
+        if (!uploadPageRes.ok) {
+          const errorData = await uploadPageRes.json()
+          console.warn(`Failed to upload page ${i + 1}:`, errorData.error)
+        }
       }
       updateProcessing('uploading', totalPages, totalPages, ['converting', 'uploading'])
 

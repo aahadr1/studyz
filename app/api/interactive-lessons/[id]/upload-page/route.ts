@@ -103,7 +103,7 @@ export async function POST(
       .limit(1)
 
     if (!documents || documents.length === 0) {
-      return NextResponse.json({ error: 'No lesson document found' }, { status: 404 })
+      return NextResponse.json({ error: 'No lesson document found. Please upload the PDF first.' }, { status: 404 })
     }
 
     const documentId = documents[0].id
@@ -188,7 +188,7 @@ export async function POST(
     })
 
   } catch (error: any) {
-    console.error('Error in POST /api/interactive-lessons/[id]/page:', error)
+    console.error('Error in POST /api/interactive-lessons/[id]/upload-page:', error)
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
   }
 }
