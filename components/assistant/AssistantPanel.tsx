@@ -28,6 +28,8 @@ interface AssistantPanelProps {
   className?: string
   /** Custom API endpoint for chat. Defaults to /api/lessons/{lessonId}/chat */
   chatEndpoint?: string
+  /** Enable the "Explique cette page" button (for interactive lessons only) */
+  enableExplainPage?: boolean
 }
 
 export default function AssistantPanel({
@@ -40,6 +42,7 @@ export default function AssistantPanel({
   initialMessages = [],
   className = '',
   chatEndpoint,
+  enableExplainPage = false,
 }: AssistantPanelProps) {
   // Use custom endpoint or default to lessons endpoint
   const apiEndpoint = chatEndpoint || `/api/lessons/${lessonId}/chat`
@@ -52,9 +55,11 @@ export default function AssistantPanel({
   const [searchQuery, setSearchQuery] = useState('')
   const [eli5Mode, setEli5Mode] = useState(false)
   const [autoSpeak, setAutoSpeak] = useState(false)
+  const [isExplaining, setIsExplaining] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const explainAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -217,6 +222,111 @@ export default function AssistantPanel({
     URL.revokeObjectURL(url)
   }, [messages, lessonName])
 
+  // Handle "Explique cette page" button
+  const handleExplainPage = useCallback(async () => {
+    if (isExplaining || isLoading) return
+
+    // Stop any previous audio
+    if (explainAudioRef.current) {
+      explainAudioRef.current.pause()
+      explainAudioRef.current = null
+    }
+
+    setIsExplaining(true)
+
+    try {
+      // Get auth token
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('Not authenticated')
+      }
+
+      // Add a message indicating the AI is explaining
+      const explainMessage: AssistantMessage = {
+        id: `explain-${Date.now()}`,
+        lesson_id: lessonId,
+        role: 'assistant',
+        content: '🎧 *Génération de l\'explication en cours...*',
+        page_context: currentPage,
+        created_at: new Date().toISOString(),
+      }
+      setMessages(prev => [...prev, explainMessage])
+
+      // Call the explain-page API
+      const response = await fetch(`/api/interactive-lessons/${lessonId}/explain-page`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ page_number: currentPage }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to generate explanation')
+      }
+
+      const data = await response.json()
+
+      // Update the message with the actual explanation
+      setMessages(prev => prev.map(msg => 
+        msg.id === explainMessage.id 
+          ? { 
+              ...msg, 
+              content: `🎧 **Explication de la page ${currentPage}**\n\n${data.explanation}` 
+            }
+          : msg
+      ))
+
+      // Play the audio if available
+      if (data.audioUrl) {
+        const audio = new Audio(data.audioUrl)
+        explainAudioRef.current = audio
+        
+        audio.onended = () => {
+          explainAudioRef.current = null
+        }
+        
+        audio.onerror = (e) => {
+          console.error('Audio playback error:', e)
+          explainAudioRef.current = null
+        }
+
+        audio.play().catch(err => {
+          console.error('Failed to play audio:', err)
+        })
+      }
+
+    } catch (error: any) {
+      console.error('Explain page error:', error)
+      const errorMessage: AssistantMessage = {
+        id: `error-${Date.now()}`,
+        lesson_id: lessonId,
+        role: 'assistant',
+        content: `Désolé, une erreur s'est produite: ${error.message}`,
+        page_context: currentPage,
+        created_at: new Date().toISOString(),
+        isError: true,
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsExplaining(false)
+    }
+  }, [lessonId, currentPage, isExplaining, isLoading])
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (explainAudioRef.current) {
+        explainAudioRef.current.pause()
+        explainAudioRef.current = null
+      }
+    }
+  }, [])
+
   const filteredMessages = searchQuery
     ? messages.filter(msg => 
         msg.content.toLowerCase().includes(searchQuery.toLowerCase())
@@ -278,6 +388,8 @@ export default function AssistantPanel({
         onSend={handleSendMessage}
         isLoading={isLoading}
         currentPage={currentPage}
+        onExplainPage={enableExplainPage ? handleExplainPage : undefined}
+        isExplaining={isExplaining}
       />
 
       {/* Conversation Menu */}

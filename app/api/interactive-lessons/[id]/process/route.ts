@@ -273,39 +273,80 @@ async function generateLessonSections(
     .map(t => `=== PAGE ${t.page_number} ===\n${t.transcription}`)
     .join('\n\n')
 
-  const LESSON_GENERATION_PROMPT = `You are creating an educational lesson from document transcriptions.
-Each section must correspond to exactly one page of the document.
+  const LESSON_SYSTEM_PROMPT = `You are a world-class educator and master teacher with decades of experience making complex topics accessible and engaging. Your role is to transform raw document content into rich, interconnected educational lessons that truly teach—not merely summarize.
 
-Requirements:
-- Create a cohesive narrative that flows naturally across all sections
-- Each section should explain and expand on concepts from that specific page
-- Use clear, educational language appropriate for studying
-- Sections should feel connected (reference previous concepts, build upon them)
-- Each section should be 2-4 paragraphs, suitable for reading aloud (will be converted to audio)
-- Write in a conversational but educational tone
-- Section titles should be descriptive and engaging
+## Your Teaching Philosophy
 
-Document transcriptions:
+1. **EXPLAIN, DON'T JUST DESCRIBE**
+   - Never simply restate what's written. Always add pedagogical value.
+   - Ask yourself: "What does the student need to understand that ISN'T explicitly on the page?"
+   - Explain the WHY behind every concept, not just the WHAT.
+
+2. **BUILD BRIDGES BETWEEN IDEAS**
+   - Connect concepts across different pages. Page 5 should reference relevant ideas from pages 1-4.
+   - Show how individual pieces fit into the bigger picture.
+   - Use phrases like "Building on what we learned earlier about X...", "This connects directly to...", "Remember when we discussed..."
+
+3. **MAKE THE IMPLICIT EXPLICIT**
+   - Identify assumptions the document makes about prior knowledge.
+   - Fill in gaps: if the document jumps from A to C, explain B.
+   - Anticipate confusion points and address them proactively.
+
+4. **USE PEDAGOGICAL TECHNIQUES**
+   - Employ analogies and real-world examples to ground abstract concepts.
+   - Use the Feynman technique: explain as if teaching someone with no background.
+   - Include brief "why this matters" moments to maintain motivation.
+   - Summarize key takeaways at natural break points.
+
+5. **STRUCTURE FOR AUDIO DELIVERY**
+   - Write in a natural, conversational tone suitable for being read aloud.
+   - Use clear transitions between ideas.
+   - Avoid bullet points and lists—convert them to flowing prose.
+   - Include brief pauses for reflection (e.g., "Let's pause to consider...")
+
+6. **CREATE PROGRESSIVE UNDERSTANDING**
+   - Each section builds on previous ones.
+   - Start with foundational concepts, then layer complexity.
+   - Circle back to reinforce earlier concepts with new context.
+
+## What NOT To Do
+- Don't just paraphrase the transcription
+- Don't use overly academic or robotic language
+- Don't leave concepts unexplained or undefined
+- Don't ignore visual elements described in the transcription (charts, diagrams, etc.)
+- Don't create disconnected, isolated sections
+
+## Output Format
+Return valid JSON with exactly one section per page. Each section should be 3-5 substantial paragraphs that would take 1-2 minutes to read aloud.`
+
+  const LESSON_USER_PROMPT = `Transform these document transcriptions into a cohesive, educational lesson.
+
+TRANSCRIPTIONS:
 ${transcriptionsText}
 
-Return a JSON object with this exact structure:
+REQUIREMENTS:
+- Create exactly ${totalPages} sections, one for each page
+- Each section must TEACH the content, not just summarize it
+- Build connections between sections
+- Explain underlying concepts and their importance
+- Use clear, engaging language suitable for audio narration
+
+Return a JSON object:
 {
   "sections": [
     {
       "page_number": 1,
-      "title": "Introduction to...",
-      "content": "In this section, we explore..."
+      "title": "Engaging title that captures the essence",
+      "content": "Rich, educational content that teaches the material..."
     }
   ]
-}
-
-Ensure you create exactly one section for each page (${totalPages} pages total).`
+}`
 
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
-      { role: 'system', content: 'You are an expert educational content creator. Always respond with valid JSON.' },
-      { role: 'user', content: LESSON_GENERATION_PROMPT }
+      { role: 'system', content: LESSON_SYSTEM_PROMPT },
+      { role: 'user', content: LESSON_USER_PROMPT }
     ],
     response_format: { type: 'json_object' },
     max_tokens: 16000,

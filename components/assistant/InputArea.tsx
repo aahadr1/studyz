@@ -1,18 +1,22 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { FiSend, FiMic, FiMicOff, FiStopCircle } from 'react-icons/fi'
+import { FiSend, FiMic, FiMicOff, FiStopCircle, FiPlay, FiLoader } from 'react-icons/fi'
 
 interface InputAreaProps {
   onSend: (message: string) => void
   isLoading: boolean
   currentPage: number
+  onExplainPage?: () => void
+  isExplaining?: boolean
 }
 
 export default function InputArea({
   onSend,
   isLoading,
   currentPage,
+  onExplainPage,
+  isExplaining = false,
 }: InputAreaProps) {
   const [input, setInput] = useState('')
   const [isRecording, setIsRecording] = useState(false)
@@ -189,6 +193,28 @@ export default function InputArea({
           <FiSend className="w-5 h-5" />
         </button>
       </form>
+
+      {/* Explain This Page Button */}
+      {onExplainPage && (
+        <button
+          type="button"
+          onClick={onExplainPage}
+          disabled={isLoading || isExplaining}
+          className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-medium rounded-md hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          {isExplaining ? (
+            <>
+              <FiLoader className="w-4 h-4 animate-spin" />
+              <span>Explication en cours...</span>
+            </>
+          ) : (
+            <>
+              <FiPlay className="w-4 h-4" />
+              <span>Explique cette page</span>
+            </>
+          )}
+        </button>
+      )}
 
       {/* Helper text */}
       <div className="flex items-center justify-between mt-2 px-1">

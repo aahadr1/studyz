@@ -19,3 +19,5 @@
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('lesson-pages', 'lesson-pages', true);
 
 
+
+
