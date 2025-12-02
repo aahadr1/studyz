@@ -164,12 +164,19 @@ export async function GET(
       .eq('document_id', currentDoc.id)
       .order('page_number', { ascending: true })
     
-    // Process all pages to add correct URLs
-    const allPages = (allPageImages || []).map((p: any) => ({
-      ...p,
-      image_path: p.image_path.startsWith('http://') || p.image_path.startsWith('https://') 
-        ? p.image_path 
-        : p.image_path // For storage paths, the frontend will need to handle differently
+    // Process all pages to add correct URLs - generate signed URLs for storage paths
+    const allPages = await Promise.all((allPageImages || []).map(async (p: any) => {
+      let finalImagePath = p.image_path
+      if (!p.image_path.startsWith('http://') && !p.image_path.startsWith('https://')) {
+        const { data: signedUrl } = await getSupabaseAdmin().storage
+          .from('interactive-lessons')
+          .createSignedUrl(p.image_path, 3600) // 1 hour
+        finalImagePath = signedUrl?.signedUrl || p.image_path
+      }
+      return {
+        ...p,
+        image_path: finalImagePath
+      }
     }))
 
     // Get checkpoint that contains this page

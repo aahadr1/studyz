@@ -163,20 +163,42 @@ async function transcribePage(
     throw new Error(`Page ${pageNumber} not found`)
   }
 
-  // Get image URL
-  let imageUrl = pageImage.image_path
-  if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
-    const { data: signedUrl } = await supabaseAdmin.storage
-      .from('interactive-lessons')
-      .createSignedUrl(pageImage.image_path, 3600)
-    imageUrl = signedUrl?.signedUrl || ''
+  // Download image and convert to base64 for reliable transmission to OpenAI
+  let imageBase64: string
+  let mimeType = 'image/jpeg'
+  
+  try {
+    if (pageImage.image_path.startsWith('http://') || pageImage.image_path.startsWith('https://')) {
+      // It's already a URL, download it
+      const imageResponse = await fetch(pageImage.image_path)
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to download image: ${imageResponse.status}`)
+      }
+      const arrayBuffer = await imageResponse.arrayBuffer()
+      imageBase64 = Buffer.from(arrayBuffer).toString('base64')
+      mimeType = imageResponse.headers.get('content-type') || 'image/jpeg'
+    } else {
+      // It's a storage path, download from Supabase
+      const { data: imageData, error: downloadError } = await supabaseAdmin.storage
+        .from('interactive-lessons')
+        .download(pageImage.image_path)
+      
+      if (downloadError || !imageData) {
+        throw new Error(`Failed to download image from storage: ${downloadError?.message}`)
+      }
+      
+      const arrayBuffer = await imageData.arrayBuffer()
+      imageBase64 = Buffer.from(arrayBuffer).toString('base64')
+      mimeType = pageImage.image_path.endsWith('.png') ? 'image/png' : 'image/jpeg'
+    }
+  } catch (downloadErr: any) {
+    console.error(`Error downloading image for page ${pageNumber}:`, downloadErr)
+    throw new Error(`Failed to download image for page ${pageNumber}: ${downloadErr.message}`)
   }
 
-  if (!imageUrl) {
-    throw new Error(`No image URL for page ${pageNumber}`)
-  }
-
-  // Transcribe with GPT-4o
+  // Transcribe with GPT-4o using base64 data URL
+  const dataUrl = `data:${mimeType};base64,${imageBase64}`
+  
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
@@ -185,7 +207,7 @@ async function transcribePage(
         role: 'user',
         content: [
           { type: 'text', text: `Transcribe page ${pageNumber} of this lesson document.` },
-          { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
         ]
       }
     ],

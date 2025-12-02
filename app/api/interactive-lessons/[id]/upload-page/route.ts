@@ -135,11 +135,6 @@ export async function POST(
       return NextResponse.json({ error: `Storage error: ${uploadError.message}` }, { status: 500 })
     }
 
-    // Get signed URL for the uploaded image
-    const { data: signedUrl } = await supabaseAdmin.storage
-      .from('interactive-lessons')
-      .createSignedUrl(imagePath, 3600 * 24 * 7) // 1 week
-
     // Delete existing page image record if any
     await supabaseAdmin
       .from('interactive_lesson_page_images')
@@ -147,13 +142,13 @@ export async function POST(
       .eq('document_id', documentId)
       .eq('page_number', pageNumber)
 
-    // Create page image record
+    // Create page image record - store the STORAGE PATH, not the signed URL
     const { error: insertError } = await supabaseAdmin
       .from('interactive_lesson_page_images')
       .insert({
         document_id: documentId,
         page_number: pageNumber,
-        image_path: signedUrl?.signedUrl || imagePath, // Store full URL for convenience
+        image_path: imagePath, // Store storage path, generate signed URL on demand
         width: width || null,
         height: height || null,
       })
