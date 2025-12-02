@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
+export const runtime = 'nodejs'
+export const maxDuration = 60
+
 // Create a Supabase client with service role for server-side operations
 function createServerClient() {
   return createSupabaseClient(
@@ -15,10 +18,20 @@ function createServerClient() {
   )
 }
 
-// Helper to convert data URL to Buffer
-function dataUrlToBuffer(dataUrl: string): Buffer {
-  const base64Data = dataUrl.split(',')[1]
-  return Buffer.from(base64Data, 'base64')
+// Helper to convert data URL to Buffer and get content type
+function parseDataUrl(dataUrl: string): { buffer: Buffer; contentType: string; extension: string } {
+  const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+  if (!matches) {
+    throw new Error('Invalid data URL format')
+  }
+  const contentType = matches[1]
+  const base64Data = matches[2]
+  const extension = contentType === 'image/jpeg' ? 'jpg' : 'png'
+  return {
+    buffer: Buffer.from(base64Data, 'base64'),
+    contentType,
+    extension
+  }
 }
 
 // POST /api/lessons/[id]/page - Upload a page image
@@ -81,16 +94,16 @@ export async function POST(
     }
 
     // Convert data URL to buffer
-    const imageBuffer = dataUrlToBuffer(dataUrl)
-    console.log(`Uploading page ${pageNumber} for lesson ${id}, buffer size: ${imageBuffer.length}`)
+    const { buffer: imageBuffer, contentType, extension } = parseDataUrl(dataUrl)
+    console.log(`Uploading page ${pageNumber} for lesson ${id}, size: ${(imageBuffer.length / 1024).toFixed(1)}KB, type: ${contentType}`)
 
     // Upload to storage
-    const imagePath = `${user.id}/${id}/page-${pageNumber}.png`
+    const imagePath = `${user.id}/${id}/page-${pageNumber}.${extension}`
     
     const { error: uploadError } = await supabase.storage
       .from('lesson-pages')
       .upload(imagePath, imageBuffer, {
-        contentType: 'image/png',
+        contentType,
         upsert: true,
       })
 
