@@ -32,6 +32,8 @@ interface AssistantPanelProps {
   chatEndpoint?: string
   /** Enable the "Explique cette page" button (for interactive lessons only) */
   enableExplainPage?: boolean
+  /** API endpoint for fetching/deleting messages. If provided, enables message persistence */
+  messagesEndpoint?: string
 }
 
 export default function AssistantPanel({
@@ -45,11 +47,13 @@ export default function AssistantPanel({
   className = '',
   chatEndpoint,
   enableExplainPage = false,
+  messagesEndpoint,
 }: AssistantPanelProps) {
   // Use custom endpoint or default to lessons endpoint
   const apiEndpoint = chatEndpoint || `/api/lessons/${lessonId}/chat`
   const [messages, setMessages] = useState<AssistantMessage[]>(initialMessages)
   const [isLoading, setIsLoading] = useState(false)
+  const [messagesLoaded, setMessagesLoaded] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [showContext, setShowContext] = useState(true)
   const [showConversations, setShowConversations] = useState(false)
@@ -61,6 +65,44 @@ export default function AssistantPanel({
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Load persisted messages on mount
+  useEffect(() => {
+    if (messagesEndpoint && !messagesLoaded) {
+      loadMessages()
+    }
+  }, [messagesEndpoint, messagesLoaded])
+
+  const loadMessages = async () => {
+    if (!messagesEndpoint) return
+
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) return
+
+      const response = await fetch(messagesEndpoint, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.messages && data.messages.length > 0) {
+          setMessages(data.messages.map((msg: any) => ({
+            ...msg,
+            lesson_id: lessonId,
+          })))
+        }
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error)
+    } finally {
+      setMessagesLoaded(true)
+    }
+  }
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -203,9 +245,28 @@ export default function AssistantPanel({
     ))
   }, [])
 
-  const handleClearChat = useCallback(() => {
+  const handleClearChat = useCallback(async () => {
     setMessages([])
-  }, [])
+    
+    // Delete messages from database if persistence is enabled
+    if (messagesEndpoint) {
+      try {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (session) {
+          await fetch(messagesEndpoint, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          })
+        }
+      } catch (error) {
+        console.error('Error clearing messages:', error)
+      }
+    }
+  }, [messagesEndpoint])
 
   const handleExportChat = useCallback(() => {
     const markdown = messages.map(msg => {

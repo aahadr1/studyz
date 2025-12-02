@@ -101,9 +101,30 @@ export async function POST(
       }
     }
 
-    // For interactive lessons, we'll store messages in lesson_messages with the interactive lesson id
-    // Or we could create a separate table - for now, let's just not persist messages for interactive lessons
-    // and focus on getting the chat working
+    // Save user message to database
+    const { data: savedUserMsg, error: userMsgError } = await supabase
+      .from('interactive_lesson_messages')
+      .insert({
+        interactive_lesson_id: id,
+        role: 'user',
+        content: message,
+        page_context: currentPage || null,
+      })
+      .select('id')
+      .single()
+
+    if (userMsgError) {
+      console.error('Error saving user message:', userMsgError)
+      // Continue anyway - don't fail the chat if message save fails
+    }
+
+    // Get recent message history for context (last 10 messages)
+    const { data: recentMessages } = await supabase
+      .from('interactive_lesson_messages')
+      .select('role, content')
+      .eq('interactive_lesson_id', id)
+      .order('created_at', { ascending: false })
+      .limit(11) // Get 11 to exclude the current message we just saved
 
     // Build messages array for OpenAI
     const systemPrompt = `You are Studyz, an expert AI study assistant helping students understand their course materials. You're currently helping with page ${currentPage} of "${lesson.name}".
@@ -123,13 +144,22 @@ Guidelines:
 - If asked to create flashcards or questions, format them clearly
 - Be encouraging and supportive`
 
-    const messages: any[] = [
+    const openAiMessages: any[] = [
       { role: 'system', content: systemPrompt }
     ]
 
+    // Add message history for context (excluding the current message)
+    if (recentMessages && recentMessages.length > 1) {
+      // Reverse to get chronological order, skip the first one (current message)
+      const historyMessages = recentMessages.slice(1).reverse()
+      for (const msg of historyMessages) {
+        openAiMessages.push({ role: msg.role, content: msg.content })
+      }
+    }
+
     // Add current message with optional image context
     if (pageImageUrl) {
-      messages.push({
+      openAiMessages.push({
         role: 'user',
         content: [
           { type: 'text', text: message },
@@ -137,7 +167,7 @@ Guidelines:
         ],
       })
     } else {
-      messages.push({ role: 'user', content: message })
+      openAiMessages.push({ role: 'user', content: message })
     }
 
     // Streaming response
@@ -146,13 +176,14 @@ Guidelines:
       
       const streamResponse = await getOpenAI().chat.completions.create({
         model: pageImageUrl ? 'gpt-4o' : 'gpt-4o-mini',
-        messages,
+        messages: openAiMessages,
         max_tokens: 2000,
         temperature: 0.7,
         stream: true,
       })
 
       let fullContent = ''
+      const lessonId = id // Capture for closure
 
       const readableStream = new ReadableStream({
         async start(controller) {
@@ -163,6 +194,18 @@ Guidelines:
                 fullContent += content
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`))
               }
+            }
+
+            // Save assistant message to database after streaming completes
+            if (fullContent) {
+              await supabase
+                .from('interactive_lesson_messages')
+                .insert({
+                  interactive_lesson_id: lessonId,
+                  role: 'assistant',
+                  content: fullContent,
+                  page_context: currentPage || null,
+                })
             }
 
             controller.enqueue(encoder.encode('data: [DONE]\n\n'))
@@ -186,12 +229,22 @@ Guidelines:
     // Non-streaming response (fallback)
     const completion = await getOpenAI().chat.completions.create({
       model: pageImageUrl ? 'gpt-4o' : 'gpt-4o-mini',
-      messages,
+      messages: openAiMessages,
       max_tokens: 2000,
       temperature: 0.7,
     })
 
     const assistantResponse = completion.choices[0]?.message?.content || 'I apologize, but I could not generate a response.'
+
+    // Save assistant message to database
+    await supabase
+      .from('interactive_lesson_messages')
+      .insert({
+        interactive_lesson_id: id,
+        role: 'assistant',
+        content: assistantResponse,
+        page_context: currentPage || null,
+      })
 
     return NextResponse.json({
       response: assistantResponse,

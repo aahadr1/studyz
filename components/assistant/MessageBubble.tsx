@@ -11,9 +11,9 @@ import {
   FiVolumeX,
   FiRefreshCw,
   FiThumbsUp,
-  FiThumbsDown,
-  FiDownload
+  FiThumbsDown
 } from 'react-icons/fi'
+import AudioPlayer from './AudioPlayer'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -247,33 +247,10 @@ export default function MessageBubble({
 
             {/* Audio Player - displayed when audioUrl is present */}
             {message.audioUrl && (
-              <div className="mt-3 pt-3 border-t border-border">
-                <div className="flex items-center gap-2 mb-2">
-                  <FiVolume2 className="w-4 h-4 text-mode-study" />
-                  <span className="text-xs font-medium text-text-secondary">Explication audio</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <audio 
-                    controls 
-                    src={message.audioUrl}
-                    className="flex-1 h-10 audio-player"
-                    style={{ 
-                      borderRadius: '4px',
-                      backgroundColor: 'var(--color-background)',
-                    }}
-                  >
-                    Your browser does not support audio playback.
-                  </audio>
-                  <a
-                    href={message.audioUrl}
-                    download={`explication-page-${message.page_context || 'audio'}.mp3`}
-                    className="p-2 text-text-tertiary hover:text-text-primary hover:bg-elevated transition-colors"
-                    title="Télécharger l'audio"
-                  >
-                    <FiDownload className="w-4 h-4" />
-                  </a>
-                </div>
-              </div>
+              <AudioPlayer
+                src={message.audioUrl}
+                downloadFilename={`explication-page-${message.page_context || 'audio'}.mp3`}
+              />
             )}
           </div>
 

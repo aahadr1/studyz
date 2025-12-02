@@ -331,6 +331,18 @@ export async function POST(
 
     console.log(`[ExplainPage] TTS result:`, audioUrl ? 'success' : 'failed')
 
+    // Save the explanation as a message in the database
+    const messageContent = `🎧 **Explication de la page ${page_number}**\n\n${explanation}`
+    await supabaseAdmin
+      .from('interactive_lesson_messages')
+      .insert({
+        interactive_lesson_id: id,
+        role: 'assistant',
+        content: messageContent,
+        page_context: page_number,
+        audio_url: audioUrl || null,
+      })
+
     return NextResponse.json({
       success: true,
       page_number,

@@ -300,6 +300,7 @@ export default function InteractiveLessonViewerPage() {
               initialMessages={messages}
               onClose={() => setShowAssistant(false)}
               chatEndpoint={`/api/interactive-lessons/${lessonId}/chat`}
+              messagesEndpoint={`/api/interactive-lessons/${lessonId}/messages`}
               enableExplainPage={true}
             />
           </div>
