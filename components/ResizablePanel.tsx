@@ -105,11 +105,11 @@ export function ResizablePanel({
 }
 
 // Hook for managing panel sizes with localStorage persistence
-export function usePanelSizes(
+export function usePanelSizes<T extends Record<string, number>>(
   storageKey: string,
-  defaults: { sidebar: number; bottomPanel: number; docScale: number }
+  defaults: T
 ) {
-  const [sizes, setSizes] = useState(defaults)
+  const [sizes, setSizes] = useState<T>(defaults)
   const [loaded, setLoaded] = useState(false)
 
   // Load from localStorage on mount
@@ -137,7 +137,7 @@ export function usePanelSizes(
     }
   }, [sizes, storageKey, loaded])
 
-  const updateSize = useCallback((key: keyof typeof defaults, value: number) => {
+  const updateSize = useCallback((key: keyof T, value: number) => {
     setSizes(prev => ({ ...prev, [key]: value }))
   }, [])
 

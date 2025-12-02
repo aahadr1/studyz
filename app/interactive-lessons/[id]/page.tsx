@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiZoomIn, FiZoomOut, FiMaximize2 } from 'react-icons/fi'
+import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiZoomIn, FiZoomOut, FiBookOpen, FiEye, FiEyeOff } from 'react-icons/fi'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { AssistantPanel } from '@/components/assistant'
 import MCQInterface from '@/components/MCQInterface'
-import LessonSectionDisplay, { LessonSectionSkeleton, LessonSectionEmpty } from '@/components/LessonSectionDisplay'
 import { ResizableHandle, usePanelSizes } from '@/components/ResizablePanel'
+import AudioPlayer from '@/components/assistant/AudioPlayer'
 import type { InteractiveLesson, InteractiveLessonDocument, LessonMessage, InteractiveLessonPageSection } from '@/types/db'
 
 interface PageImage {
@@ -32,15 +32,17 @@ interface SectionWithAudio extends InteractiveLessonPageSection {
 
 // Default panel sizes
 const DEFAULT_SIZES = {
-  sidebar: 420,
-  bottomPanel: 200,
+  sidebar: 380,
+  sectionPanel: 340,
+  bottomPanel: 180,
   docScale: 100,
 }
 
 // Min/max constraints
 const CONSTRAINTS = {
-  sidebar: { min: 280, max: 600 },
-  bottomPanel: { min: 100, max: 500 },
+  sidebar: { min: 280, max: 500 },
+  sectionPanel: { min: 240, max: 500 },
+  bottomPanel: { min: 100, max: 400 },
   docScale: { min: 50, max: 200 },
 }
 
@@ -57,6 +59,7 @@ export default function InteractiveLessonViewerPage() {
   const [loading, setLoading] = useState(true)
   const [imageLoading, setImageLoading] = useState(true)
   const [showAssistant, setShowAssistant] = useState(true)
+  const [showSection, setShowSection] = useState(true)
   const [showMCQ, setShowMCQ] = useState(true)
   const [authToken, setAuthToken] = useState<string | null>(null)
 
@@ -178,7 +181,7 @@ export default function InteractiveLessonViewerPage() {
     return null
   }
 
-  // Handle sidebar resize
+  // Handle panel resizes
   const handleSidebarResize = useCallback((delta: number) => {
     const newSize = Math.max(
       CONSTRAINTS.sidebar.min,
@@ -187,7 +190,14 @@ export default function InteractiveLessonViewerPage() {
     updateSize('sidebar', newSize)
   }, [sizes.sidebar, updateSize])
 
-  // Handle bottom panel resize
+  const handleSectionPanelResize = useCallback((delta: number) => {
+    const newSize = Math.max(
+      CONSTRAINTS.sectionPanel.min,
+      Math.min(CONSTRAINTS.sectionPanel.max, sizes.sectionPanel + delta)
+    )
+    updateSize('sectionPanel', newSize)
+  }, [sizes.sectionPanel, updateSize])
+
   const handleBottomPanelResize = useCallback((delta: number) => {
     const newSize = Math.max(
       CONSTRAINTS.bottomPanel.min,
@@ -230,6 +240,7 @@ export default function InteractiveLessonViewerPage() {
   const lesson = lessonData.lesson
   const totalPages = lessonData.totalPages || pageImages.length || 1
   const currentPageImageUrl = getCurrentPageImageUrl()
+  const hasSection = currentSection || sectionLoading || lessonStatus === 'ready'
 
   return (
     <div className="h-screen bg-background flex flex-col">
@@ -271,6 +282,18 @@ export default function InteractiveLessonViewerPage() {
             {currentPage} / {totalPages}
           </span>
           
+          {/* Toggle Section Panel */}
+          {hasSection && (
+            <button
+              onClick={() => setShowSection(!showSection)}
+              className={`btn-ghost flex items-center gap-1.5 text-sm ${showSection ? 'text-mode-study' : ''}`}
+              title={showSection ? 'Hide lesson' : 'Show lesson'}
+            >
+              <FiBookOpen className="w-4 h-4" />
+              <span className="hidden md:inline">Cours</span>
+            </button>
+          )}
+          
           {/* Toggle MCQ Panel */}
           <button
             onClick={() => setShowMCQ(!showMCQ)}
@@ -281,22 +304,94 @@ export default function InteractiveLessonViewerPage() {
           </button>
 
           {/* Toggle Assistant */}
-          {!showAssistant && (
-            <button
-              onClick={() => setShowAssistant(true)}
-              className="btn-ghost flex items-center gap-2"
-              title="Open AI Assistant"
-            >
-              <FiMessageSquare className="w-4 h-4" />
-              <span className="text-sm">Assistant</span>
-            </button>
-          )}
+          <button
+            onClick={() => setShowAssistant(!showAssistant)}
+            className={`btn-ghost flex items-center gap-1.5 ${showAssistant ? 'text-mode-study' : ''}`}
+            title={showAssistant ? 'Hide Assistant' : 'Show Assistant'}
+          >
+            <FiMessageSquare className="w-4 h-4" />
+            <span className="hidden md:inline text-sm">Assistant</span>
+          </button>
         </div>
       </header>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Document Viewer - Left Side */}
+        
+        {/* Left: Lesson Section Panel */}
+        {showSection && hasSection && (
+          <>
+            <div 
+              className="flex-shrink-0 bg-background border-r border-border flex flex-col"
+              style={{ width: sizes.sectionPanel }}
+            >
+              {/* Section Header */}
+              <div className="h-12 border-b border-border flex items-center justify-between px-4 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <FiBookOpen className="w-4 h-4 text-mode-study" />
+                  <span className="text-sm font-medium text-text-primary">Page {currentPage}</span>
+                </div>
+                <button
+                  onClick={() => setShowSection(false)}
+                  className="p-1 text-text-tertiary hover:text-text-primary transition-colors"
+                  title="Hide lesson panel"
+                >
+                  <FiEyeOff className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Section Content - Scrollable */}
+              <div className="flex-1 overflow-auto p-4">
+                {sectionLoading ? (
+                  <div className="space-y-4">
+                    <div className="h-6 bg-elevated rounded animate-pulse w-3/4" />
+                    <div className="space-y-2">
+                      <div className="h-4 bg-elevated rounded animate-pulse" />
+                      <div className="h-4 bg-elevated rounded animate-pulse w-5/6" />
+                      <div className="h-4 bg-elevated rounded animate-pulse w-4/5" />
+                    </div>
+                  </div>
+                ) : currentSection ? (
+                  <div className="space-y-4">
+                    <h2 className="text-lg font-semibold text-text-primary leading-tight">
+                      {currentSection.section_title}
+                    </h2>
+                    <div className="prose prose-sm prose-invert max-w-none">
+                      <p className="text-text-secondary whitespace-pre-wrap leading-relaxed">
+                        {currentSection.section_content}
+                      </p>
+                    </div>
+                  </div>
+                ) : lessonStatus === 'ready' ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <FiBookOpen className="w-8 h-8 text-text-tertiary mb-3" />
+                    <p className="text-text-tertiary text-sm">
+                      No lesson section available for this page
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Audio Player - Fixed at bottom */}
+              {currentSection?.audio_url && (
+                <div className="flex-shrink-0 border-t border-border p-3 bg-surface">
+                  <AudioPlayer
+                    src={currentSection.audio_url}
+                    downloadFilename={`cours-page-${currentPage}.mp3`}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Section Panel Resize Handle */}
+            <ResizableHandle 
+              direction="horizontal" 
+              onResize={handleSectionPanelResize}
+            />
+          </>
+        )}
+
+        {/* Center: Document Viewer */}
         <div className="flex-1 flex flex-col bg-elevated min-w-0">
           {/* Page Navigation */}
           <div className="h-12 border-b border-border flex items-center justify-center gap-4 flex-shrink-0">
@@ -329,49 +424,32 @@ export default function InteractiveLessonViewerPage() {
             </button>
           </div>
 
-          {/* Scrollable Content Area */}
+          {/* Document Scrollable Area */}
           <div className="flex-1 overflow-auto p-4">
-            <div className="mx-auto" style={{ maxWidth: `${Math.max(400, 800 * (sizes.docScale / 100))}px` }}>
-              {/* Section Display - Above PDF */}
-              {sectionLoading ? (
-                <LessonSectionSkeleton />
-              ) : currentSection ? (
-                <LessonSectionDisplay
-                  title={currentSection.section_title}
-                  content={currentSection.section_content}
-                  audioUrl={currentSection.audio_url}
-                  pageNumber={currentPage}
-                />
-              ) : lessonStatus === 'ready' ? (
-                <LessonSectionEmpty pageNumber={currentPage} />
-              ) : null}
-
-              {/* Page Image */}
-              <div className="flex justify-center">
-                {currentPageImageUrl ? (
-                  <div className="relative">
-                    {imageLoading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-surface">
-                        <div className="spinner" />
-                      </div>
-                    )}
-                    <img
-                      src={currentPageImageUrl}
-                      alt={`Page ${currentPage}`}
-                      className="h-auto border border-border transition-all"
-                      onLoad={() => setImageLoading(false)}
-                      style={{ 
-                        width: `${sizes.docScale}%`,
-                        maxWidth: 'none',
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-64 text-text-tertiary">
-                    Page not available
-                  </div>
-                )}
-              </div>
+            <div className="flex justify-center">
+              {currentPageImageUrl ? (
+                <div className="relative">
+                  {imageLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-surface">
+                      <div className="spinner" />
+                    </div>
+                  )}
+                  <img
+                    src={currentPageImageUrl}
+                    alt={`Page ${currentPage}`}
+                    className="h-auto border border-border transition-all shadow-lg"
+                    onLoad={() => setImageLoading(false)}
+                    style={{ 
+                      width: `${sizes.docScale}%`,
+                      maxWidth: 'none',
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-64 text-text-tertiary">
+                  Page not available
+                </div>
+              )}
             </div>
           </div>
 
@@ -395,33 +473,31 @@ export default function InteractiveLessonViewerPage() {
           )}
         </div>
 
-        {/* Resizable Sidebar Handle */}
+        {/* Right: AI Assistant Sidebar */}
         {showAssistant && (
-          <ResizableHandle 
-            direction="horizontal" 
-            onResize={handleSidebarResize}
-          />
-        )}
-
-        {/* AI Assistant Panel - Right Side */}
-        {showAssistant && (
-          <div 
-            className="flex-shrink-0 overflow-hidden"
-            style={{ width: sizes.sidebar }}
-          >
-            <AssistantPanel
-              lessonId={lessonId}
-              lessonName={lesson.name}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              pageImageUrl={currentPageImageUrl || undefined}
-              initialMessages={messages}
-              onClose={() => setShowAssistant(false)}
-              chatEndpoint={`/api/interactive-lessons/${lessonId}/chat`}
-              messagesEndpoint={`/api/interactive-lessons/${lessonId}/messages`}
-              enableExplainPage={true}
+          <>
+            <ResizableHandle 
+              direction="horizontal" 
+              onResize={handleSidebarResize}
             />
-          </div>
+            <div 
+              className="flex-shrink-0 overflow-hidden"
+              style={{ width: sizes.sidebar }}
+            >
+              <AssistantPanel
+                lessonId={lessonId}
+                lessonName={lesson.name}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                pageImageUrl={currentPageImageUrl || undefined}
+                initialMessages={messages}
+                onClose={() => setShowAssistant(false)}
+                chatEndpoint={`/api/interactive-lessons/${lessonId}/chat`}
+                messagesEndpoint={`/api/interactive-lessons/${lessonId}/messages`}
+                enableExplainPage={true}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>
