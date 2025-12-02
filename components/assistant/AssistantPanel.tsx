@@ -26,6 +26,8 @@ interface AssistantPanelProps {
   onClose?: () => void
   initialMessages?: LessonMessage[]
   className?: string
+  /** Custom API endpoint for chat. Defaults to /api/lessons/{lessonId}/chat */
+  chatEndpoint?: string
 }
 
 export default function AssistantPanel({
@@ -37,7 +39,10 @@ export default function AssistantPanel({
   onClose,
   initialMessages = [],
   className = '',
+  chatEndpoint,
 }: AssistantPanelProps) {
+  // Use custom endpoint or default to lessons endpoint
+  const apiEndpoint = chatEndpoint || `/api/lessons/${lessonId}/chat`
   const [messages, setMessages] = useState<AssistantMessage[]>(initialMessages)
   const [isLoading, setIsLoading] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
@@ -96,7 +101,7 @@ export default function AssistantPanel({
         throw new Error('Not authenticated')
       }
 
-      const response = await fetch(`/api/lessons/${lessonId}/chat`, {
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -180,7 +185,7 @@ export default function AssistantPanel({
       setIsLoading(false)
       setStreamingContent('')
     }
-  }, [lessonId, currentPage, isLoading, eli5Mode, autoSpeak])
+  }, [lessonId, currentPage, isLoading, eli5Mode, autoSpeak, apiEndpoint])
 
   const handleQuickAction = useCallback((prompt: string) => {
     handleSendMessage(prompt)

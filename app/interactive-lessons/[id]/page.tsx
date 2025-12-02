@@ -228,6 +228,7 @@ export default function InteractiveLessonViewerPage() {
               pageImageUrl={currentPageImageUrl || undefined}
               initialMessages={messages}
               onClose={() => setShowAssistant(false)}
+              chatEndpoint={`/api/interactive-lessons/${lessonId}/chat`}
             />
           </div>
         )}
