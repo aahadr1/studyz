@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 import OpenAI from 'openai'
 
 export const runtime = 'nodejs'
-export const maxDuration = 300 // 5 minutes for processing
+export const maxDuration = 60 // Vercel hobby limit
 
 // Lazy initialization of admin client
 let _supabaseAdmin: any = null
@@ -94,7 +94,7 @@ Return a JSON object with this EXACT structure:
 
 Generate exactly 5 questions. No more, no less.`
 
-// POST: Generate MCQs from lesson pages using AI
+// POST: Generate MCQs for a SINGLE page (call multiple times from frontend)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -122,7 +122,11 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { pages_to_process, mcqs_per_page = 5 } = body
+    const { page_number, mcqs_per_page = 5, total_pages = 1, current_page_index = 0 } = body
+
+    if (!page_number) {
+      return NextResponse.json({ error: 'page_number is required' }, { status: 400 })
+    }
 
     // Get lesson documents
     const { data: documents } = await supabaseAdmin
@@ -135,117 +139,87 @@ export async function POST(
       return NextResponse.json({ error: 'No lesson documents found' }, { status: 400 })
     }
 
-    // Get all page images
+    // Get the page image for this specific page
     const docIds = documents.map((d: any) => d.id)
-    const { data: pageImages } = await supabaseAdmin
+    const { data: pageImage } = await supabaseAdmin
       .from('interactive_lesson_page_images')
       .select('id, document_id, page_number, image_path')
       .in('document_id', docIds)
-      .order('page_number', { ascending: true })
+      .eq('page_number', page_number)
+      .single()
 
-    if (!pageImages || pageImages.length === 0) {
-      return NextResponse.json({ error: 'No page images found' }, { status: 400 })
-    }
-
-    // Filter pages if specific pages requested
-    let pagesToProcess = pageImages as any[]
-    if (pages_to_process && Array.isArray(pages_to_process)) {
-      pagesToProcess = pageImages.filter((p: any) => pages_to_process.includes(p.page_number))
-    }
-
-    if (pagesToProcess.length === 0) {
-      return NextResponse.json({ error: 'No pages to process' }, { status: 400 })
+    if (!pageImage) {
+      return NextResponse.json({ error: `Page ${page_number} not found` }, { status: 404 })
     }
 
     // Update status to generating
+    const progress = Math.round(((current_page_index + 1) / total_pages) * 100)
     await supabaseAdmin
       .from('interactive_lessons')
       .update({ 
         mcq_status: 'generating',
-        mcq_generation_progress: 0
+        mcq_generation_progress: progress
       })
       .eq('id', id)
 
+    // Get image URL
+    let imageUrl = pageImage.image_path
+    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      const { data: signedUrl } = await supabaseAdmin.storage
+        .from('interactive-lessons')
+        .createSignedUrl(pageImage.image_path, 3600)
+      imageUrl = signedUrl?.signedUrl || ''
+    }
+
+    if (!imageUrl) {
+      return NextResponse.json({ error: `No image URL for page ${page_number}` }, { status: 400 })
+    }
+
     const openai = getOpenAI()
-    const allGeneratedMcqs: any[] = []
-    const totalPages = pagesToProcess.length
+    const generatedMcqs: any[] = []
 
     try {
-      for (let i = 0; i < pagesToProcess.length; i++) {
-        const page = pagesToProcess[i]
-        const pageNumber = page.page_number
-
-        // Update progress
-        await supabaseAdmin
-          .from('interactive_lessons')
-          .update({ 
-            mcq_generation_progress: Math.round(((i + 1) / totalPages) * 100)
-          })
-          .eq('id', id)
-
-        // Get image URL
-        let imageUrl = page.image_path
-        if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
-          const { data: signedUrl } = await supabaseAdmin.storage
-            .from('interactive-lessons')
-            .createSignedUrl(page.image_path, 3600)
-          imageUrl = signedUrl?.signedUrl || ''
-        }
-
-        if (!imageUrl) {
-          console.warn(`No image URL for page ${pageNumber}, skipping`)
-          continue
-        }
-
-        try {
-          const response = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [
-              { role: 'system', content: MCQ_GENERATION_PROMPT },
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: MCQ_GENERATION_PROMPT },
+          { 
+            role: 'user', 
+            content: [
               { 
-                role: 'user', 
-                content: [
-                  { 
-                    type: 'text', 
-                    text: `Analyze this lesson page (page ${pageNumber}) and create ${mcqs_per_page} high-quality multiple choice questions based ONLY on what is visible on this page. The student will see this exact page while answering, so questions must be directly answerable from this content.`
-                  },
-                  { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
-                ]
-              }
-            ],
-            response_format: { type: 'json_object' },
-            max_tokens: 4000,
-            temperature: 0.7
-          })
+                type: 'text', 
+                text: `Analyze this lesson page (page ${page_number}) and create ${mcqs_per_page} high-quality multiple choice questions based ONLY on what is visible on this page. The student will see this exact page while answering, so questions must be directly answerable from this content.`
+              },
+              { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
+            ]
+          }
+        ],
+        response_format: { type: 'json_object' },
+        max_tokens: 4000,
+        temperature: 0.7
+      })
 
-          const result = JSON.parse(response.choices[0]?.message?.content || '{"questions":[]}')
-          const questions = result.questions || []
-          
-          questions.forEach((q: any, qIndex: number) => {
-            allGeneratedMcqs.push({
-              interactive_lesson_id: id,
-              page_number: pageNumber,
-              question: q.question,
-              choices: q.choices,
-              correct_index: q.correct_index,
-              explanation: q.explanation || null,
-              source_type: 'ai_generated',
-              question_order: qIndex
-            })
-          })
+      const result = JSON.parse(response.choices[0]?.message?.content || '{"questions":[]}')
+      const questions = result.questions || []
+      
+      questions.forEach((q: any, qIndex: number) => {
+        generatedMcqs.push({
+          interactive_lesson_id: id,
+          page_number: page_number,
+          question: q.question,
+          choices: q.choices,
+          correct_index: q.correct_index,
+          explanation: q.explanation || null,
+          source_type: 'ai_generated',
+          question_order: qIndex
+        })
+      })
 
-          console.log(`Generated ${questions.length} MCQs for page ${pageNumber}`)
-        } catch (pageError: any) {
-          console.error(`Error generating MCQs for page ${pageNumber}:`, pageError)
-          // Continue with other pages
-        }
-      }
-
-      // Insert all generated MCQs
-      if (allGeneratedMcqs.length > 0) {
+      // Insert MCQs for this page
+      if (generatedMcqs.length > 0) {
         const { error: insertError } = await supabaseAdmin
           .from('interactive_lesson_page_mcqs')
-          .insert(allGeneratedMcqs)
+          .insert(generatedMcqs)
 
         if (insertError) {
           console.error('Error inserting MCQs:', insertError)
@@ -253,34 +227,48 @@ export async function POST(
         }
       }
 
-      // Update lesson status
-      await supabaseAdmin
-        .from('interactive_lessons')
-        .update({ 
-          mcq_status: 'ready',
-          mcq_generation_progress: 100,
-          mcq_total_count: allGeneratedMcqs.length
-        })
-        .eq('id', id)
+      // Get updated total count
+      const { count } = await supabaseAdmin
+        .from('interactive_lesson_page_mcqs')
+        .select('*', { count: 'exact', head: true })
+        .eq('interactive_lesson_id', id)
+
+      // If this is the last page, update status to ready
+      if (current_page_index >= total_pages - 1) {
+        await supabaseAdmin
+          .from('interactive_lessons')
+          .update({ 
+            mcq_status: 'ready',
+            mcq_generation_progress: 100,
+            mcq_total_count: count || 0
+          })
+          .eq('id', id)
+      } else {
+        await supabaseAdmin
+          .from('interactive_lessons')
+          .update({ mcq_total_count: count || 0 })
+          .eq('id', id)
+      }
 
       return NextResponse.json({
         success: true,
-        generated: allGeneratedMcqs.length,
-        pages_processed: totalPages,
-        message: `Successfully generated ${allGeneratedMcqs.length} MCQs from ${totalPages} pages`
+        page_number,
+        generated: generatedMcqs.length,
+        total_mcqs: count || 0,
+        progress,
+        is_complete: current_page_index >= total_pages - 1
       })
 
-    } catch (processingError: any) {
-      // Update status to error
-      await supabaseAdmin
-        .from('interactive_lessons')
-        .update({ 
-          mcq_status: 'error',
-          mcq_error_message: processingError.message
-        })
-        .eq('id', id)
-
-      throw processingError
+    } catch (aiError: any) {
+      console.error(`Error generating MCQs for page ${page_number}:`, aiError)
+      
+      // Don't fail the whole process, just report this page failed
+      return NextResponse.json({
+        success: false,
+        page_number,
+        error: aiError.message || 'AI generation failed',
+        generated: 0
+      })
     }
 
   } catch (error: any) {

@@ -32,6 +32,8 @@ export default function GenerateMCQsPage() {
   const [generateProcessing, setGenerateProcessing] = useState(false)
   const [generateProgress, setGenerateProgress] = useState(0)
   const [mcqsPerPage, setMcqsPerPage] = useState(5)
+  const [currentGeneratingPage, setCurrentGeneratingPage] = useState(0)
+  const [generatedCount, setGeneratedCount] = useState(0)
 
   // Result state
   const [result, setResult] = useState<{ success: boolean; message: string; count?: number } | null>(null)
@@ -171,10 +173,12 @@ export default function GenerateMCQsPage() {
   }
 
   const handleGenerateFromLesson = async () => {
-    if (generateProcessing) return
+    if (generateProcessing || totalPages === 0) return
 
     setGenerateProcessing(true)
     setGenerateProgress(0)
+    setCurrentGeneratingPage(0)
+    setGeneratedCount(0)
     setResult(null)
 
     try {
@@ -185,33 +189,64 @@ export default function GenerateMCQsPage() {
         throw new Error('Not authenticated')
       }
 
-      const response = await fetch(`/api/interactive-lessons/${lessonId}/mcqs/generate`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          mcqs_per_page: mcqsPerPage
-        }),
-      })
+      let totalGenerated = 0
+      let failedPages: number[] = []
 
-      const data = await response.json()
+      // Process pages one at a time
+      for (let i = 0; i < totalPages; i++) {
+        const pageNum = i + 1
+        setCurrentGeneratingPage(pageNum)
+        setGenerateProgress(Math.round(((i + 1) / totalPages) * 100))
 
-      if (response.ok) {
+        try {
+          const response = await fetch(`/api/interactive-lessons/${lessonId}/mcqs/generate`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              page_number: pageNum,
+              mcqs_per_page: mcqsPerPage,
+              total_pages: totalPages,
+              current_page_index: i
+            }),
+          })
+
+          const data = await response.json()
+
+          if (data.success) {
+            totalGenerated += data.generated || 0
+            setGeneratedCount(totalGenerated)
+          } else {
+            console.warn(`Failed to generate MCQs for page ${pageNum}:`, data.error)
+            failedPages.push(pageNum)
+          }
+        } catch (pageError) {
+          console.error(`Error processing page ${pageNum}:`, pageError)
+          failedPages.push(pageNum)
+        }
+      }
+
+      if (totalGenerated > 0) {
+        let message = `Generated ${totalGenerated} MCQs from ${totalPages} pages`
+        if (failedPages.length > 0) {
+          message += ` (${failedPages.length} pages failed)`
+        }
         setResult({ 
           success: true, 
-          message: data.message || `Generated ${data.generated} MCQs from ${data.pages_processed} pages`,
-          count: data.generated
+          message,
+          count: totalGenerated
         })
       } else {
-        throw new Error(data.error || 'Failed to generate MCQs')
+        throw new Error('Failed to generate any MCQs')
       }
     } catch (error: any) {
       console.error('Error generating MCQs:', error)
       setResult({ success: false, message: error.message || 'Failed to generate MCQs' })
     } finally {
       setGenerateProcessing(false)
+      setCurrentGeneratingPage(0)
     }
   }
 
@@ -344,6 +379,28 @@ export default function GenerateMCQsPage() {
                   </p>
                 </div>
 
+                {generateProcessing && (
+                  <div className="bg-surface border border-border p-4 rounded mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-text-primary">
+                        Processing page {currentGeneratingPage} of {totalPages}
+                      </span>
+                      <span className="text-sm text-text-tertiary mono">
+                        {generatedCount} MCQs generated
+                      </span>
+                    </div>
+                    <div className="w-full bg-border rounded-full h-2">
+                      <div 
+                        className="bg-accent h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${generateProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-text-tertiary mt-2">
+                      {generateProgress}% complete - Please wait, this may take a few minutes...
+                    </p>
+                  </div>
+                )}
+
                 <button
                   onClick={handleGenerateFromLesson}
                   disabled={generateProcessing || totalPages === 0}
@@ -352,7 +409,7 @@ export default function GenerateMCQsPage() {
                   {generateProcessing ? (
                     <>
                       <div className="spinner w-4 h-4" />
-                      Generating MCQs...
+                      Generating... ({currentGeneratingPage}/{totalPages})
                     </>
                   ) : (
                     <>
