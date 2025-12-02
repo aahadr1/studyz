@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiLogOut, FiHome, FiBook, FiPlus, FiArrowRight, FiCheckSquare } from 'react-icons/fi'
+import { FiLogOut, FiHome, FiBook, FiPlus, FiArrowRight, FiCheckSquare, FiZap } from 'react-icons/fi'
 import Link from 'next/link'
-import type { Lesson } from '@/types/db'
+import type { Lesson, InteractiveLesson } from '@/types/db'
 import Logo from '@/components/Logo'
 
 interface McqSet {
@@ -14,9 +14,15 @@ interface McqSet {
   created_at: string
 }
 
+interface InteractiveLessonWithCounts extends InteractiveLesson {
+  lessonDocCount?: number
+  mcqDocCount?: number
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [recentLessons, setRecentLessons] = useState<Lesson[]>([])
+  const [recentInteractive, setRecentInteractive] = useState<InteractiveLessonWithCounts[]>([])
   const [recentMcqs, setRecentMcqs] = useState<McqSet[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -39,14 +45,19 @@ export default function DashboardPage() {
 
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
-          const [lessonsRes, mcqRes] = await Promise.all([
+          const [lessonsRes, interactiveRes, mcqRes] = await Promise.all([
             fetch('/api/lessons', { headers: { 'Authorization': `Bearer ${session.access_token}` }}),
+            fetch('/api/interactive-lessons', { headers: { 'Authorization': `Bearer ${session.access_token}` }}),
             fetch('/api/mcq/list', { headers: { 'Authorization': `Bearer ${session.access_token}` }}),
           ])
           
           if (lessonsRes.ok) {
             const data = await lessonsRes.json()
             setRecentLessons((data.lessons || []).slice(0, 5))
+          }
+          if (interactiveRes.ok) {
+            const data = await interactiveRes.json()
+            setRecentInteractive((data.lessons || []).slice(0, 5))
           }
           if (mcqRes.ok) {
             const data = await mcqRes.json()
@@ -94,6 +105,10 @@ export default function DashboardPage() {
           <Link href="/lessons" className="sidebar-item">
             <FiBook className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Lessons</span>
+          </Link>
+          <Link href="/interactive-lessons" className="sidebar-item">
+            <FiZap className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-sm">Interactive</span>
           </Link>
           <Link href="/mcq" className="sidebar-item">
             <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
@@ -143,10 +158,14 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 border border-border mb-10">
+          <div className="grid grid-cols-4 border border-border mb-10">
             <div className="p-6 border-r border-border">
               <span className="block text-3xl font-semibold mono">{recentLessons.length}</span>
               <span className="text-xs text-text-secondary uppercase tracking-wider">Lessons</span>
+            </div>
+            <div className="p-6 border-r border-border">
+              <span className="block text-3xl font-semibold mono">{recentInteractive.length}</span>
+              <span className="text-xs text-text-secondary uppercase tracking-wider">Interactive</span>
             </div>
             <div className="p-6 border-r border-border">
               <span className="block text-3xl font-semibold mono">{recentMcqs.length}</span>
@@ -159,15 +178,28 @@ export default function DashboardPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border mb-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-border mb-10">
             <Link href="/lessons/new" className="bg-background p-6 group hover:bg-elevated transition-colors">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="w-10 h-10 border border-border flex items-center justify-center mb-4 group-hover:border-text-primary transition-colors">
                     <FiPlus className="w-5 h-5" strokeWidth={1.5} />
-                </div>
+                  </div>
                   <h3 className="text-lg font-medium text-text-primary mb-1">New Lesson</h3>
                   <p className="text-sm text-text-secondary">Upload PDF and learn with AI</p>
+                </div>
+                <FiArrowRight className="w-4 h-4 text-text-tertiary group-hover:text-text-primary transition-colors" strokeWidth={1.5} />
+              </div>
+            </Link>
+
+            <Link href="/interactive-lessons/new" className="bg-background p-6 group hover:bg-elevated transition-colors">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="w-10 h-10 border border-border flex items-center justify-center mb-4 group-hover:border-text-primary transition-colors">
+                    <FiZap className="w-5 h-5" strokeWidth={1.5} />
+                  </div>
+                  <h3 className="text-lg font-medium text-text-primary mb-1">Interactive Lesson</h3>
+                  <p className="text-sm text-text-secondary">Learn with MCQ checkpoints</p>
                 </div>
                 <FiArrowRight className="w-4 h-4 text-text-tertiary group-hover:text-text-primary transition-colors" strokeWidth={1.5} />
               </div>
@@ -178,7 +210,7 @@ export default function DashboardPage() {
                 <div>
                   <div className="w-10 h-10 border border-border flex items-center justify-center mb-4 group-hover:border-text-primary transition-colors">
                     <FiCheckSquare className="w-5 h-5" strokeWidth={1.5} />
-                </div>
+                  </div>
                   <h3 className="text-lg font-medium text-text-primary mb-1">New Quiz Set</h3>
                   <p className="text-sm text-text-secondary">Extract MCQs from documents</p>
                 </div>
@@ -223,12 +255,59 @@ export default function DashboardPage() {
               <div className="border border-border p-8 text-center">
                 <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
                   <FiBook className="w-5 h-5" strokeWidth={1.5} />
-            </div>
+                </div>
                 <h4 className="font-medium text-text-primary mb-2">No lessons yet</h4>
                 <p className="text-sm text-text-secondary mb-4">Create your first lesson to get started</p>
                 <Link href="/lessons/new" className="btn-primary inline-flex">
                   <FiPlus className="w-4 h-4" strokeWidth={1.5} />
                   Create Lesson
+                </Link>
+              </div>
+            )}
+          </section>
+
+          {/* Recent Interactive Lessons */}
+          <section className="mb-10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-widest">Recent Interactive</h3>
+              <Link href="/interactive-lessons" className="text-xs text-text-secondary hover:text-text-primary transition-colors">
+                View all →
+              </Link>
+            </div>
+            
+            {recentInteractive.length > 0 ? (
+              <div className="border border-border divide-y divide-border">
+                {recentInteractive.map((lesson) => (
+                  <Link
+                    key={lesson.id}
+                    href={`/interactive-lessons/${lesson.id}`}
+                    className="flex items-center justify-between p-4 hover:bg-elevated transition-colors"
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
+                        <FiZap className="w-4 h-4" strokeWidth={1.5} />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-medium text-text-primary truncate">{lesson.name}</h4>
+                        <p className="text-xs text-text-tertiary mono">
+                          {lesson.status}
+                        </p>
+                      </div>
+                    </div>
+                    <FiArrowRight className="w-4 h-4 text-text-tertiary flex-shrink-0" strokeWidth={1.5} />
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="border border-border p-8 text-center">
+                <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
+                  <FiZap className="w-5 h-5" strokeWidth={1.5} />
+                </div>
+                <h4 className="font-medium text-text-primary mb-2">No interactive lessons yet</h4>
+                <p className="text-sm text-text-secondary mb-4">Create one or convert from a lesson</p>
+                <Link href="/interactive-lessons/new" className="btn-primary inline-flex">
+                  <FiPlus className="w-4 h-4" strokeWidth={1.5} />
+                  Create Interactive
                 </Link>
               </div>
             )}

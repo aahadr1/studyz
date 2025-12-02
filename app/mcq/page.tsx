@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiLogOut, FiHome, FiBook, FiCheckSquare, FiPlus, FiArrowRight, FiTrash2, FiEdit2 } from 'react-icons/fi'
+import { FiLogOut, FiHome, FiBook, FiCheckSquare, FiPlus, FiArrowRight, FiTrash2, FiEdit2, FiZap } from 'react-icons/fi'
 import Link from 'next/link'
 import Logo from '@/components/Logo'
 
@@ -108,6 +108,10 @@ export default function MCQSetsPage() {
           <Link href="/lessons" className="sidebar-item">
             <FiBook className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Lessons</span>
+          </Link>
+          <Link href="/interactive-lessons" className="sidebar-item">
+            <FiZap className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-sm">Interactive</span>
           </Link>
           <Link href="/mcq" className="sidebar-item sidebar-item-active">
             <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />

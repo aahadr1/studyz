@@ -2,14 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiPlus, FiBook, FiTrash2, FiArrowLeft, FiArrowRight, FiLogOut, FiHome, FiCheckSquare, FiZap } from 'react-icons/fi'
+import { FiPlus, FiZap, FiTrash2, FiArrowRight, FiLogOut, FiHome, FiBook, FiCheckSquare } from 'react-icons/fi'
 import Link from 'next/link'
-import type { Lesson } from '@/types/db'
+import type { InteractiveLesson } from '@/types/db'
 import Logo from '@/components/Logo'
 
-export default function LessonsPage() {
+interface InteractiveLessonWithCounts extends InteractiveLesson {
+  lessonDocCount?: number
+  mcqDocCount?: number
+}
+
+export default function InteractiveLessonsPage() {
   const [user, setUser] = useState<any>(null)
-  const [lessons, setLessons] = useState<Lesson[]>([])
+  const [lessons, setLessons] = useState<InteractiveLessonWithCounts[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
 
@@ -39,7 +44,7 @@ export default function LessonsPage() {
         return
       }
 
-      const response = await fetch('/api/lessons', {
+      const response = await fetch('/api/interactive-lessons', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
@@ -50,14 +55,14 @@ export default function LessonsPage() {
         setLessons(data.lessons || [])
       }
     } catch (error) {
-      console.error('Error loading lessons:', error)
+      console.error('Error loading interactive lessons:', error)
     } finally {
       setLoading(false)
     }
   }
 
   const handleDelete = async (lessonId: string) => {
-    if (!confirm('Delete this lesson?')) return
+    if (!confirm('Delete this interactive lesson?')) return
 
     setDeleting(lessonId)
     const supabase = createClient()
@@ -66,7 +71,7 @@ export default function LessonsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const response = await fetch(`/api/lessons/${lessonId}`, {
+      const response = await fetch(`/api/interactive-lessons/${lessonId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -77,7 +82,7 @@ export default function LessonsPage() {
         setLessons(lessons.filter(l => l.id !== lessonId))
       }
     } catch (error) {
-      console.error('Error deleting lesson:', error)
+      console.error('Error deleting interactive lesson:', error)
     } finally {
       setDeleting(null)
     }
@@ -87,6 +92,19 @@ export default function LessonsPage() {
     const supabase = createClient()
     await supabase.auth.signOut()
     window.location.href = '/login'
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'ready':
+        return <span className="text-xs px-2 py-0.5 bg-success-muted text-success rounded">Ready</span>
+      case 'processing':
+        return <span className="text-xs px-2 py-0.5 bg-warning-muted text-warning rounded">Processing</span>
+      case 'error':
+        return <span className="text-xs px-2 py-0.5 bg-error-muted text-error rounded">Error</span>
+      default:
+        return <span className="text-xs px-2 py-0.5 bg-surface text-text-tertiary rounded">Draft</span>
+    }
   }
 
   return (
@@ -103,18 +121,18 @@ export default function LessonsPage() {
             <FiHome className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Dashboard</span>
           </Link>
-          <Link href="/lessons" className="sidebar-item sidebar-item-active">
+          <Link href="/lessons" className="sidebar-item">
             <FiBook className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Lessons</span>
           </Link>
-          <Link href="/interactive-lessons" className="sidebar-item">
+          <Link href="/interactive-lessons" className="sidebar-item sidebar-item-active">
             <FiZap className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Interactive</span>
           </Link>
           <Link href="/mcq" className="sidebar-item">
             <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Quiz Sets</span>
-          </Link>
+        </Link>
         </nav>
 
         <div className="border-t border-border p-4">
@@ -144,10 +162,10 @@ export default function LessonsPage() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <header className="h-14 border-b border-border flex items-center justify-between px-8">
-          <h1 className="text-sm font-medium text-text-primary uppercase tracking-wider">Lessons</h1>
-          <Link href="/lessons/new" className="btn-primary">
+          <h1 className="text-sm font-medium text-text-primary uppercase tracking-wider">Interactive Lessons</h1>
+          <Link href="/interactive-lessons/new" className="btn-primary">
             <FiPlus className="w-4 h-4" strokeWidth={1.5} />
-            New Lesson
+            New Interactive
           </Link>
         </header>
 
@@ -159,16 +177,22 @@ export default function LessonsPage() {
         ) : lessons.length === 0 ? (
             <div className="border border-border p-10 text-center">
               <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
-                <FiBook className="w-5 h-5" strokeWidth={1.5} />
+                <FiZap className="w-5 h-5" strokeWidth={1.5} />
             </div>
-              <h3 className="font-medium text-text-primary mb-2">No lessons yet</h3>
+              <h3 className="font-medium text-text-primary mb-2">No interactive lessons yet</h3>
               <p className="text-sm text-text-secondary mb-6 max-w-xs mx-auto">
-              Create your first interactive lesson by uploading a PDF document.
+              Create your first interactive lesson or convert an existing lesson.
             </p>
-            <Link href="/lessons/new" className="btn-primary inline-flex">
-                <FiPlus className="w-4 h-4" strokeWidth={1.5} />
-              Create Lesson
-            </Link>
+            <div className="flex gap-3 justify-center">
+              <Link href="/interactive-lessons/new" className="btn-primary inline-flex">
+                  <FiPlus className="w-4 h-4" strokeWidth={1.5} />
+                Create New
+              </Link>
+              <Link href="/lessons" className="btn-secondary inline-flex">
+                  <FiBook className="w-4 h-4" strokeWidth={1.5} />
+                From Lesson
+              </Link>
+            </div>
           </div>
         ) : (
             <div className="border border-border divide-y divide-border">
@@ -178,16 +202,19 @@ export default function LessonsPage() {
                   className="flex items-center justify-between p-4 hover:bg-elevated transition-colors"
               >
                 <Link
-                  href={`/lessons/${lesson.id}`}
+                  href={`/interactive-lessons/${lesson.id}`}
                     className="flex items-center gap-4 flex-1 min-w-0"
                 >
                     <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
-                      <FiBook className="w-4 h-4" strokeWidth={1.5} />
+                      <FiZap className="w-4 h-4" strokeWidth={1.5} />
                   </div>
-                    <div className="min-w-0">
-                      <h3 className="font-medium text-text-primary truncate">{lesson.name}</h3>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-text-primary truncate">{lesson.name}</h3>
+                        {getStatusBadge(lesson.status)}
+                      </div>
                       <p className="text-xs text-text-tertiary mono">
-                        {lesson.total_pages} pages · {new Date(lesson.created_at).toLocaleDateString()}
+                        {lesson.lessonDocCount || 0} docs · {new Date(lesson.created_at).toLocaleDateString()}
                     </p>
                   </div>
                 </Link>
@@ -204,7 +231,7 @@ export default function LessonsPage() {
                   )}
                 </button>
                     <Link
-                      href={`/lessons/${lesson.id}`}
+                      href={`/interactive-lessons/${lesson.id}`}
                       className="p-2 text-text-tertiary hover:text-text-primary transition-colors"
                     >
                       <FiArrowRight className="w-4 h-4" strokeWidth={1.5} />
@@ -219,3 +246,4 @@ export default function LessonsPage() {
     </div>
   )
 }
+

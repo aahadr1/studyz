@@ -1,27 +1,40 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiX, FiZap } from 'react-icons/fi'
+import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiMessageSquare, FiX } from 'react-icons/fi'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { AssistantPanel } from '@/components/assistant'
-import type { Lesson, LessonPage, LessonMessage } from '@/types/db'
+import type { InteractiveLesson, InteractiveLessonDocument, LessonMessage } from '@/types/db'
 
-export default function LessonViewerPage() {
+interface PageImage {
+  id: string
+  document_id: string
+  page_number: number
+  image_path: string
+}
+
+interface InteractiveLessonData {
+  lesson: InteractiveLesson & {
+    interactive_lesson_documents: InteractiveLessonDocument[]
+  }
+  documentUrls: Record<string, string>
+  totalPages: number
+}
+
+export default function InteractiveLessonViewerPage() {
   const params = useParams()
-  const router = useRouter()
   const lessonId = params.id as string
 
-  const [lesson, setLesson] = useState<Lesson | null>(null)
-  const [pages, setPages] = useState<LessonPage[]>([])
+  const [lessonData, setLessonData] = useState<InteractiveLessonData | null>(null)
+  const [pageImages, setPageImages] = useState<PageImage[]>([])
   const [messages, setMessages] = useState<LessonMessage[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [imageLoading, setImageLoading] = useState(true)
   const [showAssistant, setShowAssistant] = useState(true)
   const [authToken, setAuthToken] = useState<string | null>(null)
-  const [makingInteractive, setMakingInteractive] = useState(false)
 
   useEffect(() => {
     loadLesson()
@@ -39,7 +52,8 @@ export default function LessonViewerPage() {
 
       setAuthToken(session.access_token)
 
-      const response = await fetch(`/api/lessons/${lessonId}`, {
+      // Fetch lesson data
+      const response = await fetch(`/api/interactive-lessons/${lessonId}/data`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
@@ -47,66 +61,47 @@ export default function LessonViewerPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setLesson(data.lesson)
-        setPages(data.pages)
-        setMessages(data.messages)
+        setLessonData(data)
+        
+        // Fetch page images
+        const pagesResponse = await fetch(`/api/interactive-lessons/${lessonId}/page/1`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        })
+        
+        if (pagesResponse.ok) {
+          const pagesData = await pagesResponse.json()
+          if (pagesData.allPages) {
+            setPageImages(pagesData.allPages)
+          }
+        }
       } else {
-        window.location.href = '/lessons'
+        window.location.href = '/interactive-lessons'
       }
     } catch (error) {
-      console.error('Error loading lesson:', error)
+      console.error('Error loading interactive lesson:', error)
     } finally {
       setLoading(false)
     }
   }
 
   const goToPage = (page: number) => {
-    if (page >= 1 && page <= (lesson?.total_pages || 1)) {
+    const totalPages = lessonData?.totalPages || 1
+    if (page >= 1 && page <= totalPages) {
       setImageLoading(true)
       setCurrentPage(page)
     }
   }
 
-  const handleMakeInteractive = async () => {
-    if (makingInteractive) return
-
-    setMakingInteractive(true)
-    const supabase = createClient()
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        window.location.href = '/login'
-        return
-      }
-
-      const response = await fetch('/api/interactive-lessons/from-lesson', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lessonId }),
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        // Redirect to the new or existing interactive lesson
-        router.push(`/interactive-lessons/${data.interactiveLessonId}`)
-      } else {
-        console.error('Error creating interactive lesson:', data.error)
-        alert(data.error || 'Failed to create interactive lesson')
-      }
-    } catch (error) {
-      console.error('Error making lesson interactive:', error)
-      alert('Failed to create interactive lesson')
-    } finally {
-      setMakingInteractive(false)
+  // Get current page image URL
+  const getCurrentPageImageUrl = () => {
+    const pageImage = pageImages.find(p => p.page_number === currentPage)
+    if (pageImage) {
+      return pageImage.image_path
     }
+    return null
   }
-
-  const currentPageData = pages.find(p => p.page_number === currentPage)
 
   if (loading) {
     return (
@@ -116,19 +111,23 @@ export default function LessonViewerPage() {
     )
   }
 
-  if (!lesson) {
+  if (!lessonData) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-text-secondary">Lesson not found</p>
+        <p className="text-text-secondary">Interactive lesson not found</p>
       </div>
     )
   }
+
+  const lesson = lessonData.lesson
+  const totalPages = lessonData.totalPages || pageImages.length || 1
+  const currentPageImageUrl = getCurrentPageImageUrl()
 
   return (
     <div className="h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="h-14 border-b border-border flex items-center px-4 gap-4 flex-shrink-0">
-        <Link href="/lessons" className="btn-ghost">
+        <Link href="/interactive-lessons" className="btn-ghost">
           <FiArrowLeft className="w-4 h-4" />
         </Link>
         <h1 className="text-lg font-semibold text-text-primary truncate flex-1">
@@ -136,21 +135,8 @@ export default function LessonViewerPage() {
         </h1>
         <div className="flex items-center gap-2">
           <span className="text-sm text-text-tertiary mono">
-            {currentPage} / {lesson.total_pages}
+            {currentPage} / {totalPages}
           </span>
-          <button
-            onClick={handleMakeInteractive}
-            disabled={makingInteractive}
-            className="btn-secondary flex items-center gap-2"
-            title="Create interactive lesson with MCQs"
-          >
-            {makingInteractive ? (
-              <div className="spinner w-4 h-4" />
-            ) : (
-              <FiZap className="w-4 h-4" />
-            )}
-            <span className="text-sm hidden sm:inline">Make it Interactive</span>
-          </button>
           {!showAssistant && (
             <button
               onClick={() => setShowAssistant(true)}
@@ -182,16 +168,16 @@ export default function LessonViewerPage() {
               <input
                 type="number"
                 min={1}
-                max={lesson.total_pages}
+                max={totalPages}
                 value={currentPage}
                 onChange={(e) => goToPage(parseInt(e.target.value) || 1)}
                 className="w-16 px-2 py-1 bg-surface border border-border text-center text-sm mono"
               />
-              <span className="text-text-tertiary text-sm">/ {lesson.total_pages}</span>
+              <span className="text-text-tertiary text-sm">/ {totalPages}</span>
             </div>
             <button
               onClick={() => goToPage(currentPage + 1)}
-              disabled={currentPage >= lesson.total_pages}
+              disabled={currentPage >= totalPages}
               className="btn-ghost disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <span className="hidden sm:inline">Next</span>
@@ -201,7 +187,7 @@ export default function LessonViewerPage() {
 
           {/* Page Image */}
           <div className="flex-1 overflow-auto p-4 flex items-start justify-center">
-            {currentPageData ? (
+            {currentPageImageUrl ? (
               <div className="relative">
                 {imageLoading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-surface">
@@ -209,11 +195,11 @@ export default function LessonViewerPage() {
                   </div>
                 )}
                 <img
-                  src={currentPageData.image_url}
+                  src={currentPageImageUrl}
                   alt={`Page ${currentPage}`}
                   className="max-w-full h-auto border border-border"
                   onLoad={() => setImageLoading(false)}
-                  style={{ maxHeight: 'calc(100vh - 180px)' }}
+                  style={{ maxHeight: 'calc(100vh - 240px)' }}
                 />
               </div>
             ) : (
@@ -221,6 +207,13 @@ export default function LessonViewerPage() {
                 Page not available
               </div>
             )}
+          </div>
+
+          {/* MCQ Interface Placeholder */}
+          <div className="h-16 border-t border-border flex items-center justify-center bg-surface">
+            <p className="text-sm text-text-tertiary">
+              MCQ interface will appear here
+            </p>
           </div>
         </div>
 
@@ -231,8 +224,8 @@ export default function LessonViewerPage() {
               lessonId={lessonId}
               lessonName={lesson.name}
               currentPage={currentPage}
-              totalPages={lesson.total_pages}
-              pageImageUrl={currentPageData?.image_url}
+              totalPages={totalPages}
+              pageImageUrl={currentPageImageUrl || undefined}
               initialMessages={messages}
               onClose={() => setShowAssistant(false)}
             />
@@ -242,3 +235,4 @@ export default function LessonViewerPage() {
     </div>
   )
 }
+
