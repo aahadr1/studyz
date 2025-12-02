@@ -28,19 +28,31 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    
+    // Check environment variables
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('Missing Supabase environment variables')
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+    }
+    
     const supabase = createServerClient()
     
     // Get user from auth header
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized - no auth header' }, { status: 401 })
     }
     
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (authError) {
+      console.error('Auth error:', authError)
+      return NextResponse.json({ error: `Auth error: ${authError.message}` }, { status: 401 })
+    }
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized - no user' }, { status: 401 })
     }
 
     // Check lesson ownership
@@ -51,7 +63,12 @@ export async function POST(
       .eq('user_id', user.id)
       .single()
 
-    if (lessonError || !lesson) {
+    if (lessonError) {
+      console.error('Error fetching lesson:', lessonError)
+      return NextResponse.json({ error: `Lesson error: ${lessonError.message}` }, { status: 404 })
+    }
+    
+    if (!lesson) {
       return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
     }
 
@@ -65,6 +82,7 @@ export async function POST(
 
     // Convert data URL to buffer
     const imageBuffer = dataUrlToBuffer(dataUrl)
+    console.log(`Uploading page ${pageNumber} for lesson ${id}, buffer size: ${imageBuffer.length}`)
 
     // Upload to storage
     const imagePath = `${user.id}/${id}/page-${pageNumber}.png`
@@ -78,7 +96,10 @@ export async function POST(
 
     if (uploadError) {
       console.error('Error uploading page image:', uploadError)
-      return NextResponse.json({ error: 'Failed to upload page image' }, { status: 500 })
+      return NextResponse.json({ 
+        error: `Storage error: ${uploadError.message}`,
+        details: uploadError 
+      }, { status: 500 })
     }
 
     // Get public URL
@@ -86,31 +107,44 @@ export async function POST(
       .from('lesson-pages')
       .getPublicUrl(imagePath)
 
-    // Create page record
+    // Create page record (use insert, not upsert to avoid constraint issues)
+    // First try to delete any existing record for this page
+    await supabase
+      .from('lesson_pages')
+      .delete()
+      .eq('lesson_id', id)
+      .eq('page_number', pageNumber)
+
+    // Then insert the new record
     const { data: page, error: pageError } = await supabase
       .from('lesson_pages')
-      .upsert({
+      .insert({
         lesson_id: id,
         page_number: pageNumber,
         image_url: publicUrl,
-      }, {
-        onConflict: 'lesson_id,page_number',
       })
       .select()
       .single()
 
     if (pageError) {
       console.error('Error creating page record:', pageError)
-      return NextResponse.json({ error: 'Failed to create page record' }, { status: 500 })
+      return NextResponse.json({ 
+        error: `Database error: ${pageError.message}`,
+        code: pageError.code,
+        details: pageError.details
+      }, { status: 500 })
     }
 
+    console.log(`Page ${pageNumber} uploaded successfully for lesson ${id}`)
     return NextResponse.json({ 
       page,
       message: 'Page uploaded successfully' 
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Page POST error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ 
+      error: `Server error: ${error?.message || 'Unknown error'}` 
+    }, { status: 500 })
   }
 }
 
