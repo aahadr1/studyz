@@ -161,7 +161,7 @@ async function generateTTS(text: string): Promise<string | null> {
         input: {
           text: text.trim().substring(0, 10000),
           voice_id: voiceId,
-          speed: 1,
+          speed: 1.3,
           emotion: 'auto',
           pitch: 0,
           volume: 1,
