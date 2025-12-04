@@ -9,11 +9,10 @@ import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
 // Processing steps with weights for overall progress calculation
 const STEPS = [
-  { id: 'converting', label: 'Converting PDF', weight: 10 },
-  { id: 'uploading', label: 'Uploading pages', weight: 15 },
-  { id: 'transcribing', label: 'Transcribing content', weight: 35 },
-  { id: 'generating', label: 'Creating lesson', weight: 15 },
-  { id: 'audio', label: 'Generating audio', weight: 25 },
+  { id: 'converting', label: 'Converting PDF', weight: 15 },
+  { id: 'uploading', label: 'Uploading pages', weight: 20 },
+  { id: 'transcribing', label: 'Transcribing content', weight: 45 },
+  { id: 'generating', label: 'Creating lesson', weight: 20 },
 ] as const
 
 type StepId = typeof STEPS[number]['id']
@@ -282,31 +281,6 @@ export default function NewInteractiveLessonPage() {
         const errorData = await generateResponse.json()
         throw new Error(errorData.error || 'Failed to generate lesson sections')
       }
-      updateProcessing('generating', 1, 1, ['converting', 'uploading', 'transcribing', 'generating'])
-
-      // STEP 5: Generate audio for each section
-      for (let i = 0; i < totalPages; i++) {
-        updateProcessing('audio', i + 1, totalPages)
-        
-        const audioResponse = await fetch(`/api/interactive-lessons/${lessonId}/sections/generate-audio`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            page_number: i + 1,
-            total_pages: totalPages,
-          }),
-        })
-
-        if (!audioResponse.ok) {
-          const errorData = await audioResponse.json()
-          console.warn(`Failed to generate audio for page ${i + 1}:`, errorData.error)
-          // Continue with other pages - audio is not critical
-        }
-      }
-
       // Mark lesson as ready
       await fetch(`/api/interactive-lessons/${lessonId}`, {
         method: 'PATCH',
@@ -320,7 +294,7 @@ export default function NewInteractiveLessonPage() {
         }),
       })
 
-      updateProcessing('audio', totalPages, totalPages, ['converting', 'uploading', 'transcribing', 'generating', 'audio'])
+      updateProcessing('generating', 1, 1, ['converting', 'uploading', 'transcribing', 'generating'])
       
       // Small delay to show completion
       await new Promise(r => setTimeout(r, 500))
