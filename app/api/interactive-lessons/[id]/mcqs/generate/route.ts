@@ -59,16 +59,17 @@ async function createAuthClient() {
   )
 }
 
-const MCQ_GENERATION_PROMPT = `You are an expert educational content creator specializing in creating high-quality multiple choice questions for studying.
+// Standard MCQ generation prompt (5 questions per page)
+const MCQ_STANDARD_PROMPT = `You are an expert educational content creator specializing in creating high-quality multiple choice questions for studying.
 
-Based on the provided lesson page content, create EXACTLY 5 multiple choice questions.
+Based on the provided lesson page content, create multiple choice questions.
 
 CRITICAL REQUIREMENTS:
 1. Each question MUST be answerable ONLY from the content visible on this specific page
 2. Questions should test UNDERSTANDING, not just memorization
 3. Include 4 answer choices (A, B, C, D) - only ONE is correct
 4. Provide a brief, helpful explanation for the correct answer
-5. Vary difficulty: 2 easy, 2 medium, 1 hard question
+5. Vary difficulty: mix of easy, medium, and hard questions
 6. Questions should be clear, unambiguous, and educational
 7. Avoid trick questions - focus on genuine learning assessment
 
@@ -90,9 +91,68 @@ Return a JSON object with this EXACT structure:
       "difficulty": "easy"
     }
   ]
+}`
+
+// Comprehensive MCQ generation prompt (up to 30 questions per page)
+const MCQ_COMPREHENSIVE_PROMPT = `You are an EXHAUSTIVE educational content creator. Your mission is to create the MAXIMUM number of high-quality MCQs that thoroughly cover EVERY SINGLE DETAIL on this page.
+
+## YOUR MISSION
+Analyze the page with EXTREME attention to detail. DO NOT skip or overlook ANY:
+- Every definition, term, or concept mentioned
+- Every number, date, statistic, or measurement
+- Every name, place, or proper noun
+- Every formula, equation, or mathematical expression
+- Every relationship, comparison, or contrast
+- Every cause-effect relationship
+- Every step in any process or procedure
+- Every item in any list or enumeration
+- Every label, caption, or annotation
+- Every example or illustration
+- Every exception or special case
+- Every visual element (diagram, chart, table, graph)
+- Every heading, subheading, or section title
+- Every key phrase or important statement
+
+## QUESTION GENERATION STRATEGY
+
+For EACH piece of information, consider creating questions that test:
+1. **Direct recall**: "What is X?" / "According to the page, what is..."
+2. **Understanding**: "Why is X important?" / "What does X mean in this context?"
+3. **Application**: "If X occurs, what would happen?"
+4. **Relationships**: "How does X relate to Y?"
+5. **Identification**: "Which of the following is an example of X?"
+6. **Negation**: "Which of the following is NOT..."
+7. **Comparison**: "How does X differ from Y?"
+8. **Sequence**: "What comes after/before X?"
+9. **Characteristics**: "Which characteristic describes X?"
+10. **Classification**: "X belongs to which category?"
+
+## CRITICAL REQUIREMENTS
+
+1. **EXHAUSTIVE COVERAGE**: Create as many questions as needed to cover EVERY detail. If the page has 20 concepts, you should have questions on ALL 20.
+2. **PAGE-SPECIFIC**: Every question MUST be answerable SOLELY from this page's content
+3. **4 CHOICES**: Each question has exactly 4 choices (A, B, C, D), only ONE correct
+4. **PLAUSIBLE DISTRACTORS**: Wrong answers should be believable but clearly wrong based on page content
+5. **CLEAR EXPLANATIONS**: Brief explanation referencing the specific page content
+6. **VARIED DIFFICULTY**: Include easy (40%), medium (40%), and hard (20%) questions
+7. **NO REDUNDANCY**: Each question must test a DIFFERENT aspect or detail
+
+## OUTPUT FORMAT
+
+Return a JSON object:
+{
+  "questions": [
+    {
+      "question": "Complete, clear question text?",
+      "choices": ["A. Option", "B. Option", "C. Option", "D. Option"],
+      "correct_index": 0,
+      "explanation": "Brief explanation referencing page content",
+      "difficulty": "easy|medium|hard"
+    }
+  ]
 }
 
-Generate exactly 5 questions. No more, no less.`
+Generate the MAXIMUM number of meaningful questions (up to the specified limit). Do NOT artificially limit yourself - if the page has enough content for 30 questions, generate 30 questions. Quality AND quantity matter.`
 
 // POST: Generate MCQs for a SINGLE page (call multiple times from frontend)
 export async function POST(
@@ -122,11 +182,22 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { page_number, mcqs_per_page = 5, total_pages = 1, current_page_index = 0 } = body
+    const { 
+      page_number, 
+      mcqs_per_page = 5, 
+      total_pages = 1, 
+      current_page_index = 0,
+      mode = 'standard' // 'standard' or 'comprehensive'
+    } = body
 
     if (!page_number) {
       return NextResponse.json({ error: 'page_number is required' }, { status: 400 })
     }
+
+    // Determine prompt and settings based on mode
+    const isComprehensive = mode === 'comprehensive'
+    const targetMcqs = isComprehensive ? Math.min(mcqs_per_page, 30) : mcqs_per_page
+    const systemPrompt = isComprehensive ? MCQ_COMPREHENSIVE_PROMPT : MCQ_STANDARD_PROMPT
 
     // Get lesson documents
     const { data: documents } = await supabaseAdmin
@@ -179,23 +250,25 @@ export async function POST(
     const generatedMcqs: any[] = []
 
     try {
+      // Build user prompt based on mode
+      const userPrompt = isComprehensive
+        ? `Analyze this lesson page (page ${page_number}) with EXTREME attention to detail. Create UP TO ${targetMcqs} multiple choice questions that cover EVERY SINGLE piece of information, concept, definition, number, formula, and detail visible on this page. The student will see this exact page while answering, so ALL questions must be answerable ONLY from this page's content. DO NOT skip any information - be exhaustive!`
+        : `Analyze this lesson page (page ${page_number}) and create ${targetMcqs} high-quality multiple choice questions based ONLY on what is visible on this page. The student will see this exact page while answering, so questions must be directly answerable from this content.`
+
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: MCQ_GENERATION_PROMPT },
+          { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
             content: [
-              { 
-                type: 'text', 
-                text: `Analyze this lesson page (page ${page_number}) and create ${mcqs_per_page} high-quality multiple choice questions based ONLY on what is visible on this page. The student will see this exact page while answering, so questions must be directly answerable from this content.`
-              },
+              { type: 'text', text: userPrompt },
               { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
             ]
           }
         ],
         response_format: { type: 'json_object' },
-        max_tokens: 4000,
+        max_tokens: isComprehensive ? 16000 : 4000,
         temperature: 0.7
       })
 

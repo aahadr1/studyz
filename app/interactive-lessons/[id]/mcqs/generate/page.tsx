@@ -32,6 +32,7 @@ export default function GenerateMCQsPage() {
   const [generateProcessing, setGenerateProcessing] = useState(false)
   const [generateProgress, setGenerateProgress] = useState(0)
   const [mcqsPerPage, setMcqsPerPage] = useState(5)
+  const [comprehensiveMode, setComprehensiveMode] = useState(false)
   const [currentGeneratingPage, setCurrentGeneratingPage] = useState(0)
   const [generatedCount, setGeneratedCount] = useState(0)
 
@@ -209,7 +210,8 @@ export default function GenerateMCQsPage() {
               page_number: pageNum,
               mcqs_per_page: mcqsPerPage,
               total_pages: totalPages,
-              current_page_index: i
+              current_page_index: i,
+              mode: comprehensiveMode ? 'comprehensive' : 'standard'
             }),
           })
 
@@ -351,32 +353,83 @@ export default function GenerateMCQsPage() {
             {activeTab === 'generate' && (
               <div>
                 <p className="text-sm text-text-secondary mb-4">
-                  AI will analyze each page of your lesson and create {mcqsPerPage} high-quality MCQs per page. 
+                  AI will analyze each page of your lesson and create MCQs. 
                   Each question will be answerable only from the content on that specific page.
                 </p>
 
+                {/* Comprehensive Mode Toggle */}
+                <div className="mb-6 p-4 bg-elevated border border-border rounded-lg">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={comprehensiveMode}
+                      onChange={(e) => {
+                        setComprehensiveMode(e.target.checked)
+                        if (e.target.checked) {
+                          setMcqsPerPage(30) // Default to max in comprehensive mode
+                        } else {
+                          setMcqsPerPage(5) // Default in standard mode
+                        }
+                      }}
+                      className="mt-1 w-4 h-4 text-accent rounded border-border"
+                      disabled={generateProcessing}
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-text-primary">
+                        🔬 Mode exhaustif (jusqu'à 30 MCQs/page)
+                      </span>
+                      <p className="text-xs text-text-tertiary mt-1">
+                        L'IA analysera chaque détail de la page pour créer un maximum de questions. 
+                        Parfait pour une révision complète de chaque concept, formule, définition et exemple.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
                 <div className="mb-6">
-                  <label className="input-label">MCQs per page</label>
+                  <label className="input-label">
+                    {comprehensiveMode ? 'Maximum de MCQs par page' : 'MCQs par page'}
+                  </label>
                   <select
                     value={mcqsPerPage}
                     onChange={(e) => setMcqsPerPage(parseInt(e.target.value))}
                     className="input"
                     disabled={generateProcessing}
                   >
-                    <option value={3}>3 questions</option>
-                    <option value={5}>5 questions (recommended)</option>
-                    <option value={7}>7 questions</option>
-                    <option value={10}>10 questions</option>
+                    {comprehensiveMode ? (
+                      <>
+                        <option value={15}>15 questions</option>
+                        <option value={20}>20 questions</option>
+                        <option value={25}>25 questions</option>
+                        <option value={30}>30 questions (maximum)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value={3}>3 questions</option>
+                        <option value={5}>5 questions (recommended)</option>
+                        <option value={7}>7 questions</option>
+                        <option value={10}>10 questions</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
-                <div className="bg-surface border border-border p-4 rounded mb-6">
+                <div className={`border p-4 rounded mb-6 ${comprehensiveMode ? 'bg-accent/5 border-accent/30' : 'bg-surface border-border'}`}>
                   <p className="text-sm text-text-primary font-medium mb-2">
-                    This will generate approximately {totalPages * mcqsPerPage} MCQs
+                    {comprehensiveMode ? '🎯 ' : ''}
+                    {comprehensiveMode 
+                      ? `Génération exhaustive : jusqu'à ${totalPages * mcqsPerPage} MCQs`
+                      : `This will generate approximately ${totalPages * mcqsPerPage} MCQs`
+                    }
                   </p>
                   <p className="text-xs text-text-tertiary">
-                    {totalPages} pages × {mcqsPerPage} questions per page
+                    {totalPages} pages × {comprehensiveMode ? `jusqu'à ${mcqsPerPage}` : mcqsPerPage} questions par page
                   </p>
+                  {comprehensiveMode && (
+                    <p className="text-xs text-accent mt-2">
+                      ✓ Chaque détail sera couvert • ✓ Formules et définitions incluses • ✓ Tous les exemples testés
+                    </p>
+                  )}
                 </div>
 
                 {generateProcessing && (
@@ -404,17 +457,17 @@ export default function GenerateMCQsPage() {
                 <button
                   onClick={handleGenerateFromLesson}
                   disabled={generateProcessing || totalPages === 0}
-                  className="btn-primary w-full disabled:opacity-50"
+                  className={`w-full disabled:opacity-50 ${comprehensiveMode ? 'btn-primary bg-accent' : 'btn-primary'}`}
                 >
                   {generateProcessing ? (
                     <>
                       <div className="spinner w-4 h-4" />
-                      Generating... ({currentGeneratingPage}/{totalPages})
+                      {comprehensiveMode ? 'Analyse exhaustive' : 'Generating'}... ({currentGeneratingPage}/{totalPages})
                     </>
                   ) : (
                     <>
                       <FiZap className="w-4 h-4" />
-                      Generate MCQs from Lesson
+                      {comprehensiveMode ? '🔬 Générer MCQs exhaustifs' : 'Generate MCQs from Lesson'}
                     </>
                   )}
                 </button>
