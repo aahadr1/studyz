@@ -59,23 +59,40 @@ async function createAuthClient() {
   )
 }
 
-const MCQ_EXTRACTION_PROMPT = `You are an expert at extracting multiple choice questions from educational documents.
+const MCQ_EXTRACTION_PROMPT = `You are an EXPERT MCQ extraction specialist with advanced OCR and vision capabilities. Your task is to extract EVERY SINGLE multiple choice question with MAXIMUM accuracy.
 
-Analyze the provided content and extract ALL multiple choice questions you can find.
+## CRITICAL: MIXED CONTENT HANDLING
 
-For each question, provide:
+Documents may contain a MIX of different content types - extract from ALL:
+1. **Clean typed/printed MCQs** - Standard formatted questions
+2. **Handwritten MCQs** - Questions written by hand
+3. **EMBEDDED PHOTOS OF MCQ TESTS** - Photos of actual exam papers WITHIN the document
+4. **Low quality or blurry images** - Make EXTRA effort to decipher these
+
+## YOUR TASK
+
+Extract ABSOLUTELY EVERY MCQ you can find, including:
+- Questions in the main document text
+- Questions in any embedded photos/images of tests
+- Questions that are blurry or low quality (make best effort)
+- Handwritten questions
+
+For each question provide:
 1. The complete question text
 2. All answer choices (A, B, C, D format)
 3. The correct answer index (0=A, 1=B, 2=C, 3=D)
 4. A brief explanation of why the answer is correct
 
-IMPORTANT:
-- Extract questions EXACTLY as they appear
-- If the correct answer is marked, use it. If not, make your best judgment.
-- Ensure choices are in consistent format
-- Include any context needed to understand the question
+## IMAGE QUALITY HANDLING
 
-Return a JSON object with this structure:
+For LOW QUALITY, BLURRY content:
+- Make your BEST effort to decipher
+- Use context clues from surrounding text
+- NEVER skip a question just because it's hard to read
+- Low quality photos often contain the most important questions
+
+## OUTPUT FORMAT
+
 {
   "questions": [
     {
@@ -87,7 +104,9 @@ Return a JSON object with this structure:
   ]
 }
 
-If no MCQs are found, return: { "questions": [] }`
+If no MCQs are found, return: { "questions": [] }
+
+CRITICAL: Extract from BOTH typed text AND embedded photos. Never skip questions because of quality issues.`
 
 // POST: Upload and process MCQs from text or document
 export async function POST(

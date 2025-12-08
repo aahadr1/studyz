@@ -290,6 +290,25 @@ export default function NewMCQPage() {
 
       // Common post-processing steps
       
+      // Deduplicate questions (remove duplicates from mixed documents)
+      if (allQuestions.length > 1) {
+        setProcessingStep('Removing duplicate questions...')
+        try {
+          const dedupResponse = await fetch(`/api/mcq/${mcqSetId}/deduplicate`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          })
+          const dedupData = await dedupResponse.json()
+          if (dedupData.duplicatesRemoved > 0) {
+            console.log(`Removed ${dedupData.duplicatesRemoved} duplicate questions`)
+          }
+        } catch (dedupError) {
+          console.log('Deduplication step skipped:', dedupError)
+        }
+      }
+
       // Auto-correct if enabled
       if (autoCorrect && allQuestions.length > 0) {
         setProcessingStep('AI is verifying and correcting questions...')

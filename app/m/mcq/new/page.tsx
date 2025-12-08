@@ -247,6 +247,20 @@ export default function MobileNewMCQPage() {
 
       updateStep('extract', 'done')
 
+      // Step 2.5: Deduplicate questions (remove duplicates from mixed documents)
+      try {
+        const dedupRes = await fetch(`/api/mcq/${mcqSetId}/deduplicate`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+        })
+        const dedupData = await dedupRes.json()
+        if (dedupData.duplicatesRemoved > 0) {
+          console.log(`Removed ${dedupData.duplicatesRemoved} duplicate questions`)
+        }
+      } catch (dedupError) {
+        console.log('Deduplication step skipped:', dedupError)
+      }
+
       // Step 3: Auto-correct
       if (autoCorrect) {
         updateStep('correct', 'active')
