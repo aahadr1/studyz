@@ -307,7 +307,7 @@ export default function MCQSetPage() {
       <main className="p-8">
         <div className="max-w-7xl mx-auto">
           {questions.length > 0 ? (
-            <MCQViewer questions={questions} lesson={lesson} />
+            <MCQViewer questions={questions} lesson={lesson} mcqSetId={mcqSetId} />
           ) : (
             <div className="border border-border p-8 text-center">
               <p className="text-text-secondary">No questions found in this set.</p>

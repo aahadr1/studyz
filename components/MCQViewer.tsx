@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { FiCheck, FiX, FiArrowRight, FiArrowLeft, FiBook, FiCommand, FiVolume2 } from 'react-icons/fi'
+import { FiCheck, FiX, FiArrowRight, FiArrowLeft, FiBook, FiCommand, FiVolume2, FiMessageCircle, FiSend, FiTrash2 } from 'react-icons/fi'
 import LessonCard, { LessonCardData } from './LessonCard'
 import ScoreTracker from './ScoreTracker'
 import MCQModeSelector, { MCQMode } from './MCQModeSelector'
 import { SpeakButton } from './mobile/TextToSpeech'
+import { createClient } from '@/lib/supabase'
 
 export interface MCQQuestion {
   id?: string
@@ -36,6 +37,13 @@ interface MCQViewerProps {
   lesson?: Lesson | null
   onSessionComplete?: (stats: SessionStats) => void
   initialMode?: MCQMode
+  mcqSetId?: string
+}
+
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
 }
 
 interface SessionStats {
@@ -51,7 +59,8 @@ export default function MCQViewer({
   questions, 
   lesson,
   onSessionComplete,
-  initialMode = 'test'
+  initialMode = 'test',
+  mcqSetId
 }: MCQViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedOption, setSelectedOption] = useState<string | null>(null)
@@ -59,6 +68,7 @@ export default function MCQViewer({
   const [mode, setMode] = useState<MCQMode>(initialMode)
   
   const [showLessonSidebar, setShowLessonSidebar] = useState(true)
+  const [showChatSidebar, setShowChatSidebar] = useState(false)
   const [expandedCardIndex, setExpandedCardIndex] = useState<number | null>(null)
   
   const [correctAnswers, setCorrectAnswers] = useState(0)
@@ -72,8 +82,15 @@ export default function MCQViewer({
   const [challengeTimeLeft, setChallengeTimeLeft] = useState(30)
   const [ttsLanguage, setTtsLanguage] = useState<'en' | 'fr'>('en')
   
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatSending, setChatSending] = useState(false)
+  
   const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({})
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   const getActiveQuestions = useCallback(() => {
     if (mode === 'review') {
@@ -157,12 +174,77 @@ export default function MCQViewer({
         case 'ArrowRight': if (hasChecked) handleNext(); break
         case 'ArrowLeft': handlePrevious(); break
         case 'l': case 'L': setShowLessonSidebar(prev => !prev); break
+        case 'c': case 'C': if (e.metaKey || e.ctrlKey) setShowChatSidebar(prev => !prev); break
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [hasChecked, selectedOption, currentIndex, activeQuestions.length, currentQuestion])
+
+  // Scroll chat to bottom when messages change
+  useEffect(() => {
+    if (showChatSidebar && chatMessagesEndRef.current) {
+      chatMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [chatMessages, showChatSidebar])
+
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || chatSending || !mcqSetId) return
+
+    const userMessage = chatInput.trim()
+    setChatInput('')
+    setChatSending(true)
+
+    const tempMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: userMessage,
+    }
+    setChatMessages(prev => [...prev, tempMessage])
+
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) return
+
+      const response = await fetch(`/api/mcq/${mcqSetId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          currentQuestion: currentQuestion,
+          conversationHistory: chatMessages.slice(-10),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: data.response,
+        }
+        setChatMessages(prev => [...prev, assistantMessage])
+      } else {
+        setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
+      }
+    } catch (error) {
+      console.error('Chat error:', error)
+      setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
+    } finally {
+      setChatSending(false)
+    }
+  }
+
+  const clearChat = () => {
+    setChatMessages([])
+  }
 
   if (!questions || questions.length === 0) {
     return (
@@ -335,6 +417,22 @@ export default function MCQViewer({
                     >
                       <FiBook className="w-3 h-3 inline mr-1" />
                       Lessons
+                    </button>
+                  )}
+                  {mcqSetId && (
+                    <button
+                      onClick={() => setShowChatSidebar(!showChatSidebar)}
+                      className={`text-xs uppercase tracking-wider px-3 py-1.5 border transition-colors relative ${
+                        showChatSidebar 
+                          ? 'border-indigo-500 text-indigo-500 bg-indigo-500/10' 
+                          : 'border-border text-text-secondary hover:border-text-primary'
+                      }`}
+                    >
+                      <FiMessageCircle className="w-3 h-3 inline mr-1" />
+                      AI Chat
+                      {chatMessages.length > 0 && !showChatSidebar && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full" />
+                      )}
                     </button>
                   )}
                 </div>
@@ -592,6 +690,132 @@ export default function MCQViewer({
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Chat Sidebar */}
+      {showChatSidebar && mcqSetId && !isComplete && (
+        <div className="w-96 flex-shrink-0">
+          <div className="sticky top-4">
+            <div className="border border-border h-[calc(100vh-8rem)] flex flex-col bg-background">
+              {/* Chat Header */}
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <h3 className="text-xs font-medium uppercase tracking-wider flex items-center gap-2">
+                  <FiMessageCircle className="w-4 h-4 text-indigo-500" />
+                  AI Assistant
+                </h3>
+                <div className="flex items-center gap-2">
+                  {chatMessages.length > 0 && (
+                    <button
+                      onClick={clearChat}
+                      className="p-1.5 text-text-tertiary hover:text-text-primary transition-colors"
+                      title="Clear chat"
+                    >
+                      <FiTrash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowChatSidebar(false)}
+                    className="p-1.5 text-text-tertiary hover:text-text-primary transition-colors"
+                  >
+                    <FiX className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Chat Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {chatMessages.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4">
+                      <FiMessageCircle className="w-6 h-6 text-text-tertiary" />
+                    </div>
+                    <p className="text-sm text-text-secondary mb-2">Ask about this question</p>
+                    <p className="text-xs text-text-tertiary mb-6">I can help explain concepts, why answers are correct, or clarify confusing parts.</p>
+                    
+                    {/* Quick Prompts */}
+                    <div className="space-y-2">
+                      {[
+                        'Why is this the correct answer?',
+                        'Explain the concept being tested',
+                        'What are common mistakes here?',
+                      ].map((prompt, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setChatInput(prompt)
+                            chatInputRef.current?.focus()
+                          }}
+                          className="block w-full p-3 text-left text-sm border border-border hover:border-text-primary transition-colors"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  chatMessages.map((message) => (
+                    <div 
+                      key={message.id} 
+                      className={`p-3 text-sm ${
+                        message.role === 'user' 
+                          ? 'bg-surface border border-border ml-8' 
+                          : 'bg-background border border-indigo-500/30 mr-8'
+                      }`}
+                    >
+                      <p className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
+                        {message.role === 'user' ? 'You' : 'Assistant'}
+                      </p>
+                      <p className="whitespace-pre-wrap text-text-primary">{message.content}</p>
+                    </div>
+                  ))
+                )}
+                {chatSending && (
+                  <div className="p-3 bg-background border border-indigo-500/30 mr-8">
+                    <p className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">Assistant</p>
+                    <div className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                )}
+                <div ref={chatMessagesEndRef} />
+              </div>
+
+              {/* Chat Input */}
+              <div className="p-4 border-t border-border">
+                <div className="flex gap-2">
+                  <textarea
+                    ref={chatInputRef}
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSendChat()
+                      }
+                    }}
+                    placeholder="Ask about this question..."
+                    rows={1}
+                    className="flex-1 px-3 py-2 border border-border bg-background text-sm resize-none focus:outline-none focus:border-text-primary"
+                    disabled={chatSending}
+                    style={{ minHeight: '40px', maxHeight: '100px' }}
+                  />
+                  <button
+                    onClick={handleSendChat}
+                    disabled={!chatInput.trim() || chatSending}
+                    className="w-10 h-10 bg-indigo-500 text-white flex items-center justify-center disabled:opacity-30 transition-opacity"
+                  >
+                    <FiSend className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="mt-2 text-[10px] text-text-tertiary">
+                  Press Enter to send · Shift+Enter for new line
+                </p>
               </div>
             </div>
           </div>
