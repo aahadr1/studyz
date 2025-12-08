@@ -41,6 +41,16 @@ interface MCQQuestion {
 
 type MCQMode = 'study' | 'test' | 'challenge' | 'review'
 
+// Fisher-Yates shuffle algorithm
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
 export default function MobileMCQViewerPage() {
   const params = useParams()
   const router = useRouter()
@@ -64,6 +74,7 @@ export default function MobileMCQViewerPage() {
   const [incorrectQuestionIds, setIncorrectQuestionIds] = useState<Set<string>>(new Set())
   const [isComplete, setIsComplete] = useState(false)
   const [totalTimeSeconds, setTotalTimeSeconds] = useState(0)
+  const [shuffledQuestions, setShuffledQuestions] = useState<MCQQuestion[]>([])
   
   // Challenge mode
   const [challengeTimeLeft, setChallengeTimeLeft] = useState(30)
@@ -132,7 +143,10 @@ export default function MobileMCQViewerPage() {
       if (response.ok) {
         const data = await response.json()
         setMcqSet(data.set)
-        setQuestions(data.questions || [])
+        const loadedQuestions = data.questions || []
+        setQuestions(loadedQuestions)
+        // Shuffle questions for test/challenge modes
+        setShuffledQuestions(shuffleArray(loadedQuestions))
       } else {
         router.push('/m/mcq')
       }
@@ -147,8 +161,13 @@ export default function MobileMCQViewerPage() {
     if (mode === 'review') {
       return questions.filter(q => incorrectQuestionIds.has(q.id || ''))
     }
+    // Use shuffled questions for test and challenge modes
+    if (mode === 'test' || mode === 'challenge') {
+      return shuffledQuestions.length > 0 ? shuffledQuestions : questions
+    }
+    // Study mode uses original order
     return questions
-  }, [mode, questions, incorrectQuestionIds])
+  }, [mode, questions, incorrectQuestionIds, shuffledQuestions])
 
   const activeQuestions = getActiveQuestions()
   const currentQuestion = activeQuestions[currentIndex]
@@ -212,6 +231,10 @@ export default function MobileMCQViewerPage() {
     setShowLessonSheet(false)
     setShowExplanationSheet(false)
     setIsStudyMaterialExpanded(false)
+    // Reshuffle when switching to test or challenge mode
+    if (newMode === 'test' || newMode === 'challenge') {
+      setShuffledQuestions(shuffleArray(questions))
+    }
   }
 
   const handleRestart = () => {
@@ -226,6 +249,10 @@ export default function MobileMCQViewerPage() {
     setShowLessonSheet(false)
     setShowExplanationSheet(false)
     setIsStudyMaterialExpanded(false)
+    // Reshuffle on restart for test/challenge modes
+    if (mode === 'test' || mode === 'challenge') {
+      setShuffledQuestions(shuffleArray(questions))
+    }
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
