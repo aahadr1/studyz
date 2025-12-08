@@ -19,7 +19,9 @@ import {
   FiTrendingUp,
   FiInfo,
   FiVolume2,
-  FiGlobe
+  FiGlobe,
+  FiMessageCircle,
+  FiSend
 } from 'react-icons/fi'
 import { SpeakButton } from '@/components/mobile/TextToSpeech'
 
@@ -87,10 +89,18 @@ export default function MobileMCQViewerPage() {
   const [ttsLanguage, setTtsLanguage] = useState<'en' | 'fr'>('en')
   const [isStudyMaterialExpanded, setIsStudyMaterialExpanded] = useState(false)
 
+  // Chat state
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; content: string }>>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatSending, setChatSending] = useState(false)
+
   // Touch handling
   const touchStartX = useRef<number>(0)
   const touchStartY = useRef<number>(0)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     loadMCQSet()
@@ -125,6 +135,66 @@ export default function MobileMCQViewerPage() {
       setChallengeTimeLeft(30)
     }
   }, [currentIndex, mode])
+
+  // Scroll chat to bottom when messages change
+  useEffect(() => {
+    if (chatOpen && chatMessagesEndRef.current) {
+      chatMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [chatMessages, chatOpen])
+
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || chatSending) return
+
+    const userMessage = chatInput.trim()
+    setChatInput('')
+    setChatSending(true)
+
+    const tempMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user' as const,
+      content: userMessage,
+    }
+    setChatMessages(prev => [...prev, tempMessage])
+
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) return
+
+      const response = await fetch(`/api/mcq/${mcqSetId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          currentQuestion: currentQuestion,
+          conversationHistory: chatMessages.slice(-10),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        const assistantMessage = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant' as const,
+          content: data.response,
+        }
+        setChatMessages(prev => [...prev, assistantMessage])
+      } else {
+        setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
+      }
+    } catch (error) {
+      console.error('Chat error:', error)
+      setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
+    } finally {
+      setChatSending(false)
+    }
+  }
 
   const loadMCQSet = async () => {
     const supabase = createClient()
@@ -445,6 +515,16 @@ export default function MobileMCQViewerPage() {
           >
             <FiVolume2 className="w-3 h-3" strokeWidth={1.5} />
             {ttsLanguage.toUpperCase()}
+          </button>
+          {/* Chat Button */}
+          <button 
+            onClick={() => setChatOpen(true)}
+            className="p-2 border border-[var(--color-border)] relative"
+          >
+            <FiMessageCircle className="w-4 h-4" strokeWidth={1.5} />
+            {chatMessages.length > 0 && (
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-[var(--color-text)]" />
+            )}
           </button>
           {/* Mode Selector */}
           <button 
@@ -1047,6 +1127,117 @@ export default function MobileMCQViewerPage() {
                   <>Finish Quiz <FiAward className="w-4 h-4" strokeWidth={1.5} /></>
                 )}
               </button>
+            </div>
+            <div className="h-safe-bottom bg-[var(--color-bg)]" />
+          </div>
+        </div>
+      )}
+
+      {/* Chat Assistant Sheet */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setChatOpen(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-bg)] border-t border-[var(--color-border)] flex flex-col" style={{ height: '70%' }}>
+            {/* Chat Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)] flex-shrink-0">
+              <div>
+                <h2 className="font-medium text-sm">AI Assistant</h2>
+                <p className="text-[10px] text-[var(--color-text-secondary)] mono">
+                  Question {currentIndex + 1} of {activeQuestions.length}
+                </p>
+              </div>
+              <button onClick={() => setChatOpen(false)} className="p-2">
+                <FiX className="w-5 h-5" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {chatMessages.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 border border-[var(--color-border)] flex items-center justify-center mx-auto mb-4">
+                    <FiMessageCircle className="w-6 h-6 text-[var(--color-text-tertiary)]" strokeWidth={1.5} />
+                  </div>
+                  <p className="text-sm text-[var(--color-text-secondary)] mb-2">Ask about this question</p>
+                  <p className="text-xs text-[var(--color-text-tertiary)]">I can help explain concepts, why answers are correct, or clarify confusing parts.</p>
+                  
+                  {/* Quick Prompts */}
+                  <div className="mt-4 space-y-2">
+                    {[
+                      'Why is this the correct answer?',
+                      'Explain the concept being tested',
+                      'What are common mistakes here?',
+                    ].map((prompt, i) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          setChatInput(prompt)
+                          chatInputRef.current?.focus()
+                        }}
+                        className="block w-full p-3 text-left text-sm border border-[var(--color-border)] active:bg-[var(--color-surface)]"
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                chatMessages.map((message) => (
+                  <div 
+                    key={message.id} 
+                    className={`p-3 text-sm ${
+                      message.role === 'user' 
+                        ? 'bg-[var(--color-surface)] border border-[var(--color-border)] ml-8' 
+                        : 'bg-[var(--color-bg)] border border-[var(--color-text)] mr-8'
+                    }`}
+                  >
+                    <p className="text-[9px] uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
+                      {message.role === 'user' ? 'You' : 'Assistant'}
+                    </p>
+                    <p className="whitespace-pre-wrap text-[var(--color-text)]">{message.content}</p>
+                  </div>
+                ))
+              )}
+              {chatSending && (
+                <div className="p-3 bg-[var(--color-bg)] border border-[var(--color-text)] mr-8">
+                  <p className="text-[9px] uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">Assistant</p>
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-[var(--color-text)] animate-pulse" />
+                    <div className="w-1.5 h-1.5 bg-[var(--color-text)] animate-pulse" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 bg-[var(--color-text)] animate-pulse" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
+              <div ref={chatMessagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="p-4 border-t border-[var(--color-border)] flex-shrink-0">
+              <div className="flex gap-2">
+                <textarea
+                  ref={chatInputRef}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSendChat()
+                    }
+                  }}
+                  placeholder="Ask a question..."
+                  rows={1}
+                  className="flex-1 px-4 py-3 border border-[var(--color-border)] bg-[var(--color-bg)] text-sm resize-none focus:outline-none focus:border-[var(--color-text)]"
+                  disabled={chatSending}
+                  style={{ minHeight: '48px', maxHeight: '100px' }}
+                />
+                <button
+                  onClick={handleSendChat}
+                  disabled={!chatInput.trim() || chatSending}
+                  className="w-12 h-12 bg-[var(--color-text)] text-[var(--color-bg)] flex items-center justify-center disabled:opacity-30"
+                >
+                  <FiSend className="w-4 h-4" strokeWidth={1.5} />
+                </button>
+              </div>
             </div>
             <div className="h-safe-bottom bg-[var(--color-bg)]" />
           </div>

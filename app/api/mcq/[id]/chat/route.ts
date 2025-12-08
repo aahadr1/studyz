@@ -1,0 +1,150 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import OpenAI from 'openai'
+
+// Create a Supabase client with service role for server-side operations
+function createServerClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
+}
+
+// Lazy initialization of OpenAI client
+let _openai: OpenAI | null = null
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return _openai
+}
+
+// POST /api/mcq/[id]/chat - Send a message to the AI assistant about MCQ questions
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const supabase = createServerClient()
+    
+    // Get user from auth header
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Parse request body
+    const { message, currentQuestion, conversationHistory = [] } = await request.json()
+
+    if (!message) {
+      return NextResponse.json({ error: 'Message is required' }, { status: 400 })
+    }
+
+    // Verify MCQ set ownership
+    const { data: mcqSet, error: mcqError } = await supabase
+      .from('mcq_sets')
+      .select('id, name')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (mcqError || !mcqSet) {
+      return NextResponse.json({ error: 'MCQ set not found' }, { status: 404 })
+    }
+
+    // Build context about the current question
+    let questionContext = ''
+    if (currentQuestion) {
+      questionContext = `
+Current Question:
+"${currentQuestion.question}"
+
+Options:
+${currentQuestion.options?.map((opt: any) => `${opt.label}. ${opt.text}`).join('\n') || 'No options available'}
+
+Correct Answer: ${currentQuestion.correctOption || 'Unknown'}
+
+${currentQuestion.explanation ? `Explanation: ${currentQuestion.explanation}` : ''}
+
+${currentQuestion.lesson_card ? `
+Study Material:
+- Title: ${currentQuestion.lesson_card.title || ''}
+- Overview: ${currentQuestion.lesson_card.conceptOverview || ''}
+${currentQuestion.lesson_card.keyPoints?.length ? `- Key Points: ${currentQuestion.lesson_card.keyPoints.join(', ')}` : ''}
+` : ''}
+`
+    }
+
+    // Build messages array for OpenAI
+    const systemPrompt = `You are Studyz, an expert AI study assistant helping students understand multiple choice questions. You're currently helping with "${mcqSet.name}".
+
+${questionContext ? `The student is currently looking at this question:\n${questionContext}` : ''}
+
+Your capabilities:
+- Explain why the correct answer is correct
+- Break down complex concepts into simple terms
+- Help students understand common mistakes
+- Provide additional context and examples
+- Create memory aids for difficult concepts
+
+Guidelines:
+- Be concise but thorough
+- Use markdown formatting for clarity (headings, lists, bold)
+- When explaining, start with the key insight
+- Be encouraging and supportive
+- If the student got the answer wrong, help them understand why
+- Don't just give away answers - help them learn`
+
+    const messages: any[] = [
+      { role: 'system', content: systemPrompt }
+    ]
+
+    // Add conversation history (limit to last 10 messages)
+    if (conversationHistory && conversationHistory.length > 0) {
+      const recentHistory = conversationHistory.slice(-10)
+      for (const msg of recentHistory) {
+        messages.push({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        })
+      }
+    }
+
+    // Add current message
+    messages.push({ role: 'user', content: message })
+
+    // Get response from OpenAI
+    const completion = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      max_tokens: 1500,
+      temperature: 0.7,
+    })
+
+    const assistantResponse = completion.choices[0]?.message?.content || 'I apologize, but I could not generate a response.'
+
+    return NextResponse.json({
+      response: assistantResponse,
+    })
+  } catch (error) {
+    console.error('MCQ Chat POST error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
