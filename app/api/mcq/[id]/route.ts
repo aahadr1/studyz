@@ -71,10 +71,16 @@ export async function GET(
       console.error('Error fetching questions:', questionsError)
     }
 
+    // Transform questions to use camelCase for frontend compatibility
+    const transformedQuestions = (questions || []).map(q => ({
+      ...q,
+      correctOption: q.correct_option, // Map snake_case to camelCase
+    }))
+
     return NextResponse.json({
       set: mcqSet,
       pages: pages || [],
-      questions: questions || [],
+      questions: transformedQuestions,
     })
   } catch (error) {
     console.error('MCQ GET error:', error)
