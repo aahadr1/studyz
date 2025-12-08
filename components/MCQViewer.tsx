@@ -7,6 +7,22 @@ import ScoreTracker from './ScoreTracker'
 import MCQModeSelector, { MCQMode } from './MCQModeSelector'
 import { SpeakButton } from './mobile/TextToSpeech'
 import { createClient } from '@/lib/supabase'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
+// Persistence key prefix for localStorage
+const STORAGE_KEY_PREFIX = 'mcq_progress_'
+
+interface MCQProgress {
+  currentIndex: number
+  correctAnswers: number
+  incorrectAnswers: number
+  answeredQuestions: string[]
+  incorrectQuestionIds: string[]
+  mode: MCQMode
+  totalTimeSeconds: number
+  chatMessages: ChatMessage[]
+}
 
 export interface MCQQuestion {
   id?: string
@@ -91,6 +107,52 @@ export default function MCQViewer({
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
+  const hasLoadedProgress = useRef(false)
+
+  // Load progress from localStorage on mount
+  useEffect(() => {
+    if (!mcqSetId || hasLoadedProgress.current) return
+    hasLoadedProgress.current = true
+    
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}${mcqSetId}`)
+      if (saved) {
+        const progress: MCQProgress = JSON.parse(saved)
+        setCurrentIndex(progress.currentIndex || 0)
+        setCorrectAnswers(progress.correctAnswers || 0)
+        setIncorrectAnswers(progress.incorrectAnswers || 0)
+        setAnsweredQuestions(new Set(progress.answeredQuestions || []))
+        setIncorrectQuestionIds(new Set(progress.incorrectQuestionIds || []))
+        setMode(progress.mode || initialMode)
+        setTotalTimeSeconds(progress.totalTimeSeconds || 0)
+        setChatMessages(progress.chatMessages || [])
+      }
+    } catch (e) {
+      console.error('Failed to load MCQ progress:', e)
+    }
+  }, [mcqSetId, initialMode])
+
+  // Save progress to localStorage whenever relevant state changes
+  useEffect(() => {
+    if (!mcqSetId || !hasLoadedProgress.current) return
+    
+    const progress: MCQProgress = {
+      currentIndex,
+      correctAnswers,
+      incorrectAnswers,
+      answeredQuestions: Array.from(answeredQuestions),
+      incorrectQuestionIds: Array.from(incorrectQuestionIds),
+      mode,
+      totalTimeSeconds,
+      chatMessages,
+    }
+    
+    try {
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}${mcqSetId}`, JSON.stringify(progress))
+    } catch (e) {
+      console.error('Failed to save MCQ progress:', e)
+    }
+  }, [mcqSetId, currentIndex, correctAnswers, incorrectAnswers, answeredQuestions, incorrectQuestionIds, mode, totalTimeSeconds, chatMessages])
 
   const getActiveQuestions = useCallback(() => {
     if (mode === 'review') {
@@ -328,7 +390,17 @@ export default function MCQViewer({
     setIncorrectAnswers(0)
     setTotalTimeSeconds(0)
     setAnsweredQuestions(new Set())
+    setIncorrectQuestionIds(new Set())
     setIsComplete(false)
+    setChatMessages([])
+    // Clear saved progress
+    if (mcqSetId) {
+      try {
+        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${mcqSetId}`)
+      } catch (e) {
+        console.error('Failed to clear MCQ progress:', e)
+      }
+    }
   }
 
   const showLessonBeforeAnswer = mode === 'study' && !hasChecked
@@ -769,7 +841,15 @@ export default function MCQViewer({
                       <p className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
                         {message.role === 'user' ? 'You' : 'Assistant'}
                       </p>
-                      <p className="whitespace-pre-wrap text-text-primary">{message.content}</p>
+                      {message.role === 'user' ? (
+                        <p className="whitespace-pre-wrap text-text-primary">{message.content}</p>
+                      ) : (
+                        <div className="prose prose-sm prose-invert max-w-none text-text-primary prose-headings:text-text-primary prose-headings:font-medium prose-headings:mt-3 prose-headings:mb-2 prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-text-primary prose-code:bg-elevated prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}

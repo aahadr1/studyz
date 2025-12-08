@@ -24,6 +24,22 @@ import {
   FiSend
 } from 'react-icons/fi'
 import { SpeakButton } from '@/components/mobile/TextToSpeech'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
+// Persistence key prefix for localStorage
+const STORAGE_KEY_PREFIX = 'mcq_mobile_progress_'
+
+interface MCQProgress {
+  currentIndex: number
+  correctAnswers: number
+  incorrectAnswers: number
+  answeredQuestions: string[]
+  incorrectQuestionIds: string[]
+  mode: MCQMode
+  totalTimeSeconds: number
+  chatMessages: Array<{ id: string; role: 'user' | 'assistant'; content: string }>
+}
 
 interface MCQQuestion {
   id?: string
@@ -101,6 +117,7 @@ export default function MobileMCQViewerPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
+  const hasLoadedProgress = useRef(false)
 
   useEffect(() => {
     loadMCQSet()
@@ -108,6 +125,55 @@ export default function MobileMCQViewerPage() {
       if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [mcqSetId])
+
+  // Load progress from localStorage after questions are loaded
+  useEffect(() => {
+    if (!mcqSetId || questions.length === 0 || hasLoadedProgress.current) return
+    hasLoadedProgress.current = true
+    
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}${mcqSetId}`)
+      if (saved) {
+        const progress: MCQProgress = JSON.parse(saved)
+        setCurrentIndex(Math.min(progress.currentIndex || 0, questions.length - 1))
+        setCorrectAnswers(progress.correctAnswers || 0)
+        setIncorrectAnswers(progress.incorrectAnswers || 0)
+        setAnsweredQuestions(new Set(progress.answeredQuestions || []))
+        setIncorrectQuestionIds(new Set(progress.incorrectQuestionIds || []))
+        setMode(progress.mode || 'test')
+        setTotalTimeSeconds(progress.totalTimeSeconds || 0)
+        setChatMessages(progress.chatMessages || [])
+        // Re-shuffle for test/challenge modes with loaded state
+        if (progress.mode === 'test' || progress.mode === 'challenge') {
+          setShuffledQuestions(shuffleArray(questions))
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load MCQ progress:', e)
+    }
+  }, [mcqSetId, questions])
+
+  // Save progress to localStorage whenever relevant state changes
+  useEffect(() => {
+    if (!mcqSetId || !hasLoadedProgress.current) return
+    
+    const progress: MCQProgress = {
+      currentIndex,
+      correctAnswers,
+      incorrectAnswers,
+      answeredQuestions: Array.from(answeredQuestions),
+      incorrectQuestionIds: Array.from(incorrectQuestionIds),
+      mode,
+      totalTimeSeconds,
+      chatMessages,
+    }
+    
+    try {
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}${mcqSetId}`, JSON.stringify(progress))
+    } catch (e) {
+      console.error('Failed to save MCQ progress:', e)
+    }
+  }, [mcqSetId, currentIndex, correctAnswers, incorrectAnswers, answeredQuestions, incorrectQuestionIds, mode, totalTimeSeconds, chatMessages])
 
   // Timer
   useEffect(() => {
@@ -315,13 +381,21 @@ export default function MobileMCQViewerPage() {
     setIncorrectAnswers(0)
     setTotalTimeSeconds(0)
     setAnsweredQuestions(new Set())
+    setIncorrectQuestionIds(new Set())
     setIsComplete(false)
     setShowLessonSheet(false)
     setShowExplanationSheet(false)
     setIsStudyMaterialExpanded(false)
+    setChatMessages([])
     // Reshuffle on restart for test/challenge modes
     if (mode === 'test' || mode === 'challenge') {
       setShuffledQuestions(shuffleArray(questions))
+    }
+    // Clear saved progress
+    try {
+      localStorage.removeItem(`${STORAGE_KEY_PREFIX}${mcqSetId}`)
+    } catch (e) {
+      console.error('Failed to clear MCQ progress:', e)
     }
   }
 
@@ -1194,7 +1268,15 @@ export default function MobileMCQViewerPage() {
                     <p className="text-[9px] uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
                       {message.role === 'user' ? 'You' : 'Assistant'}
                     </p>
-                    <p className="whitespace-pre-wrap text-[var(--color-text)]">{message.content}</p>
+                    {message.role === 'user' ? (
+                      <p className="whitespace-pre-wrap text-[var(--color-text)]">{message.content}</p>
+                    ) : (
+                      <div className="prose prose-sm max-w-none text-[var(--color-text)] prose-headings:text-[var(--color-text)] prose-headings:font-medium prose-headings:text-sm prose-headings:mt-2 prose-headings:mb-1 prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-strong:text-[var(--color-text)]">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
