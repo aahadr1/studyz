@@ -54,6 +54,18 @@ export default function InputArea({
   }, [input, isLoading, onSend])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Cmd+Enter (or Ctrl+Enter on Windows) to toggle recording
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      if (isRecording) {
+        stopRecording()
+      } else {
+        startRecording()
+      }
+      return
+    }
+    
+    // Regular Enter to submit (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit()
@@ -222,7 +234,7 @@ export default function InputArea({
           Viewing page {currentPage}
         </span>
         <span className="text-xs text-text-tertiary">
-          Press Enter to send, Shift+Enter for new line
+          Enter: send • Shift+Enter: new line • Cmd+Enter: voice
         </span>
       </div>
     </div>
