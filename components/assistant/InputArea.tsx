@@ -71,7 +71,7 @@ export default function InputArea({
     
     recognition.continuous = true
     recognition.interimResults = true
-    recognition.lang = 'en-US'
+    recognition.lang = 'fr-FR'
 
     recognition.onstart = () => {
       setIsRecording(true)
