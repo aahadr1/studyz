@@ -146,7 +146,7 @@ Remember: Voice allows for rich, detailed explanations. Students want to truly u
     const completion = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       messages: messages,
-      max_tokens: 300, // Keep responses shorter for voice
+      max_tokens: 1000, // Allow for detailed voice explanations
       temperature: 0.8, // Slightly more natural/conversational
     })
 

@@ -219,7 +219,7 @@ Remember: Your default is to teach deeply and comprehensively. The student is he
       const streamResponse = await getOpenAI().chat.completions.create({
         model: pageImageUrl ? 'gpt-4o' : 'gpt-4o-mini',
         messages: openAiMessages,
-        max_tokens: 2000,
+        max_tokens: 4000,
         temperature: 0.7,
         stream: true,
       })
@@ -272,7 +272,7 @@ Remember: Your default is to teach deeply and comprehensively. The student is he
     const completion = await getOpenAI().chat.completions.create({
       model: pageImageUrl ? 'gpt-4o' : 'gpt-4o-mini',
       messages: openAiMessages,
-      max_tokens: 2000,
+      max_tokens: 4000,
       temperature: 0.7,
     })
 
