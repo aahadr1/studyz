@@ -63,8 +63,48 @@ const VOICES = {
   },
 }
 
-// Clean text for optimal TTS output
-function cleanTextForTTS(text: string): string {
+// Clean text for optimal TTS output using LLM
+async function cleanTextForTTSWithLLM(text: string, openai: OpenAI): Promise<string> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `Tu es un expert en préparation de texte pour la synthèse vocale (text-to-speech). Ton rôle est de transformer un texte avec du formatage markdown en un texte oral pur, fluide et naturel qui sera lu par un système TTS.
+
+RÈGLES STRICTES :
+1. Supprime TOUT le formatage markdown (**, *, #, -, •, etc.)
+2. Supprime toutes les listes et puces
+3. Convertis tout en phrases complètes et fluides
+4. Garde uniquement la ponctuation simple : . , ? !
+5. Supprime les emojis et symboles spéciaux
+6. Assure-toi que le texte se lit naturellement à l'oral
+7. Garde tout le contenu et le sens, seulement change le formatage
+8. Le texte doit être fluide, sans pauses bizarres
+
+Retourne UNIQUEMENT le texte nettoyé, sans commentaires ni explications.`
+        },
+        {
+          role: 'user',
+          content: `Nettoie ce texte pour la synthèse vocale :\n\n${text}`
+        }
+      ],
+      max_tokens: 4000,
+      temperature: 0.3,
+    })
+
+    const cleaned = response.choices[0]?.message?.content?.trim() || text
+    return cleaned
+  } catch (error) {
+    console.error('[TTS Cleaner] LLM cleaning failed, using fallback:', error)
+    // Fallback to simple cleaning if LLM fails
+    return cleanTextForTTSFallback(text)
+  }
+}
+
+// Fallback cleaning function (simple regex-based)
+function cleanTextForTTSFallback(text: string): string {
   let cleaned = text
   
   // Remove all markdown formatting
@@ -296,12 +336,12 @@ async function generateTTS(text: string): Promise<string | null> {
         input: {
           text: text.trim().substring(0, 10000),
           voice_id: voiceId,
-          speed: 1.0, // Natural speaking speed for better fluidity
-          emotion: 'friendly', // More engaging tone
+          speed: 1.3,
+          emotion: 'auto',
           pitch: 0,
           volume: 1,
-          sample_rate: 44100, // Higher quality audio
-          bitrate: 192000, // Higher bitrate for better quality
+          sample_rate: 32000,
+          bitrate: 128000,
           audio_format: 'mp3',
           channel: 'mono',
           language_boost: 'French',
@@ -459,16 +499,23 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to generate explanation' }, { status: 500 })
     }
 
-    console.log(`[ExplainPage] Generated ${explanation.length} chars, now cleaning for TTS...`)
+    console.log(`[ExplainPage] Generated ${explanation.length} chars, now cleaning for TTS with LLM...`)
 
-    // Clean the text for optimal TTS output
-    const cleanedExplanation = cleanTextForTTS(explanation)
-    console.log(`[ExplainPage] Cleaned text: ${cleanedExplanation.length} chars, generating TTS...`)
+    // Clean the text for optimal TTS output using LLM
+    const cleanedExplanation = await cleanTextForTTSWithLLM(explanation, openai)
+    console.log(`[ExplainPage] LLM cleaned text: ${cleanedExplanation.length} chars`)
+    
+    // Validate cleaned text - if it's too short or empty, use original
+    const textForTTS = cleanedExplanation.trim().length > 50 
+      ? cleanedExplanation.trim() 
+      : explanation.trim()
+    
+    console.log(`[ExplainPage] Using text for TTS: ${textForTTS.length} chars, generating TTS...`)
 
     // Generate TTS audio in French with cleaned text
-    const audioUrl = await generateTTS(cleanedExplanation)
+    const audioUrl = await generateTTS(textForTTS)
 
-    console.log(`[ExplainPage] TTS result:`, audioUrl ? 'success' : 'failed')
+    console.log(`[ExplainPage] TTS result:`, audioUrl ? `success - ${audioUrl.substring(0, 100)}...` : 'failed')
 
     // Save the explanation as a message in the database
     const messageContent = `🎧 **Explication de la page ${page_number}**\n\n${explanation}`
