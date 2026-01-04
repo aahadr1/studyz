@@ -63,12 +63,101 @@ const VOICES = {
   },
 }
 
+// Clean text for optimal TTS output
+function cleanTextForTTS(text: string): string {
+  let cleaned = text
+  
+  // Remove all markdown formatting
+  cleaned = cleaned.replace(/\*\*\*(.+?)\*\*\*/g, '$1') // Bold+italic
+  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, '$1') // Bold
+  cleaned = cleaned.replace(/\*(.+?)\*/g, '$1') // Italic
+  cleaned = cleaned.replace(/__(.+?)__/g, '$1') // Underline
+  cleaned = cleaned.replace(/_(.+?)_/g, '$1') // Italic alt
+  cleaned = cleaned.replace(/~~(.+?)~~/g, '$1') // Strikethrough
+  
+  // Remove markdown headers
+  cleaned = cleaned.replace(/^#{1,6}\s+/gm, '')
+  
+  // Remove markdown links but keep text
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+  
+  // Remove code blocks and inline code
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, '')
+  cleaned = cleaned.replace(/`([^`]+)`/g, '$1')
+  
+  // Remove bullet points and list markers
+  cleaned = cleaned.replace(/^[\s]*[-*+•]\s+/gm, '')
+  cleaned = cleaned.replace(/^[\s]*\d+\.\s+/gm, '')
+  
+  // Remove blockquotes
+  cleaned = cleaned.replace(/^>\s+/gm, '')
+  
+  // Remove horizontal rules
+  cleaned = cleaned.replace(/^[\s]*[-*_]{3,}[\s]*$/gm, '')
+  
+  // Remove common emojis (like 🎧) - using a more compatible approach
+  // Remove emoji ranges without \u{} syntax
+  cleaned = cleaned.replace(/[\uD800-\uDFFF]./g, '')
+  cleaned = cleaned.replace(/[\u2600-\u27BF]/g, '') // Misc symbols
+  cleaned = cleaned.replace(/[\u2700-\u27BF]/g, '') // Dingbats
+  
+  // Replace special quotes with simple quotes
+  cleaned = cleaned.replace(/[«»""]/g, '"')
+  cleaned = cleaned.replace(/['']/g, "'")
+  
+  // Replace em-dashes and en-dashes with regular dashes or remove
+  cleaned = cleaned.replace(/[—–]/g, ', ')
+  
+  // Replace colons and semicolons with commas (they can cause weird pauses in TTS)
+  cleaned = cleaned.replace(/\s*[:;]\s*/g, ', ')
+  
+  // Remove multiple consecutive spaces
+  cleaned = cleaned.replace(/\s{2,}/g, ' ')
+  
+  // Remove multiple consecutive line breaks (max 2)
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n')
+  
+  // Remove leading/trailing whitespace from each line
+  cleaned = cleaned.split('\n').map(line => line.trim()).join('\n')
+  
+  // Remove any remaining special characters that could cause issues
+  cleaned = cleaned.replace(/[#\[\]{}\\|<>]/g, '')
+  
+  // Ensure proper spacing after punctuation
+  cleaned = cleaned.replace(/([.!?])\s*([A-Z])/g, '$1 $2')
+  cleaned = cleaned.replace(/,\s*/g, ', ')
+  
+  // Final trim
+  cleaned = cleaned.trim()
+  
+  return cleaned
+}
+
 // French Teacher System Prompt
 const FRENCH_TEACHER_PROMPT = `Tu es un professeur expert, passionné et bienveillant. Tu vas expliquer cette page de cours à un étudiant francophone, comme si tu donnais un cours particulier approfondi.
 
 ## TON RÔLE
 
-Tu regardes cette page avec l'étudiant et tu lui expliques son contenu de manière pédagogique, engageante et EXTRÊMEMENT DÉTAILLÉE. Ton explication sera lue à voix haute, donc utilise un style oral naturel.
+Tu regardes cette page avec l'étudiant et tu lui expliques son contenu de manière pédagogique, engageante et EXTRÊMEMENT DÉTAILLÉE. 
+
+## CRITIQUE: FORMAT POUR TEXT-TO-SPEECH
+
+⚠️ TON EXPLICATION SERA CONVERTIE EN AUDIO PAR UN SYSTÈME TEXT-TO-SPEECH. Tu DOIS suivre ces règles STRICTEMENT :
+
+### RÈGLES ABSOLUES DE FORMATAGE :
+1. **ZÉRO MARKDOWN** : Aucun **, __, *, #, -, •, ou autre symbole de formatage
+2. **AUCUNE LISTE** : Pas de tirets, pas de numéros, pas de puces
+3. **TEXTE FLUIDE UNIQUEMENT** : Écris en paragraphes continus et naturels
+4. **PONCTUATION SIMPLE** : Utilise UNIQUEMENT des points (.), des virgules (,), des points d'interrogation (?), et des points d'exclamation (!)
+5. **PAS DE SYMBOLES SPÉCIAUX** : Pas de :, ;, —, «», [], {}, etc.
+6. **PHRASES COMPLÈTES** : Pas de phrases fragmentées ou de notes
+
+### POUR UN TTS FLUIDE :
+- Écris exactement comme tu PARLES à l'oral
+- Utilise des phrases naturelles avec un rythme fluide
+- Les virgules créent de courtes pauses naturelles
+- Les points créent des pauses plus longues
+- N'utilise pas de caractères qui ne se prononcent pas
 
 ## DIRECTIVE CRITIQUE: EXPLICATIONS COMPLÈTES ET APPROFONDIES
 
@@ -133,15 +222,30 @@ Tu regardes cette page avec l'étudiant et tu lui expliques son contenu de mani�
 
 ## CE QU'IL NE FAUT PAS FAIRE
 - Ne te limite JAMAIS à simplement lister ou paraphraser le contenu
+- N'utilise AUCUN markdown ou symbole de formatage
+- Ne crée AUCUNE liste ou énumération avec des tirets
 - N'utilise pas un ton robotique ou superficiel
 - Ne saute pas d'explication sans approfondir
 - Ne laisse aucun concept inexpliqué ou partiellement expliqué
 - Ne reste pas en surface - creuse en profondeur !
 
-## FORMAT DE SORTIE
-Écris ton explication en français, de manière fluide, naturelle et TRÈS DÉTAILLÉE, comme si tu donnais un cours particulier complet. Prends le temps qu'il faut pour VRAIMENT enseigner - l'étudiant est là pour COMPRENDRE EN PROFONDEUR, pas juste pour un survol. Vise 500-800 mots ou plus si nécessaire pour couvrir tous les aspects.
+## FORMAT DE SORTIE POUR TTS
 
-**Rappel crucial** : Ton rôle est d'être un EXCELLENT professeur qui va bien au-delà du matériel écrit pour vraiment faire comprendre les concepts dans toutes leurs dimensions.`
+⚠️ **ABSOLUMENT CRITIQUE** : Génère UNIQUEMENT du texte oral pur, sans AUCUN formatage.
+
+**BON EXEMPLE** :
+"Regarde en haut de la page, tu vois le titre qui parle de la photosynthèse. C'est un processus fascinant qui permet aux plantes de transformer la lumière du soleil en énergie. Laisse moi t'expliquer comment ça fonctionne exactement. D'abord, les feuilles captent la lumière grâce à la chlorophylle, ce pigment vert que tu connais bien."
+
+**MAUVAIS EXEMPLE** (N'UTILISE JAMAIS CE FORMAT) :
+"# La Photosynthèse
+**Points clés** :
+- Transformation de la lumière
+- Rôle de la chlorophylle
+- Production d'oxygène"
+
+Écris ton explication en français, de manière fluide, naturelle et TRÈS DÉTAILLÉE, comme si tu parlais vraiment à voix haute dans un cours particulier. Vise 500-800 mots ou plus. Uniquement des phrases complètes qui s'enchaînent naturellement.
+
+**Rappel crucial** : Ton texte sera LU PAR UN ROBOT. Zéro markdown, zéro symbole, uniquement du texte oral pur avec une ponctuation simple.`
 
 // Cache for model version
 let cachedVersion: string | null = null
@@ -192,12 +296,12 @@ async function generateTTS(text: string): Promise<string | null> {
         input: {
           text: text.trim().substring(0, 10000),
           voice_id: voiceId,
-          speed: 1.3,
-          emotion: 'auto',
+          speed: 1.0, // Natural speaking speed for better fluidity
+          emotion: 'friendly', // More engaging tone
           pitch: 0,
           volume: 1,
-          sample_rate: 32000,
-          bitrate: 128000,
+          sample_rate: 44100, // Higher quality audio
+          bitrate: 192000, // Higher bitrate for better quality
           audio_format: 'mp3',
           channel: 'mono',
           language_boost: 'French',
@@ -355,10 +459,14 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to generate explanation' }, { status: 500 })
     }
 
-    console.log(`[ExplainPage] Generated ${explanation.length} chars, now generating TTS...`)
+    console.log(`[ExplainPage] Generated ${explanation.length} chars, now cleaning for TTS...`)
 
-    // Generate TTS audio in French
-    const audioUrl = await generateTTS(explanation)
+    // Clean the text for optimal TTS output
+    const cleanedExplanation = cleanTextForTTS(explanation)
+    console.log(`[ExplainPage] Cleaned text: ${cleanedExplanation.length} chars, generating TTS...`)
+
+    // Generate TTS audio in French with cleaned text
+    const audioUrl = await generateTTS(cleanedExplanation)
 
     console.log(`[ExplainPage] TTS result:`, audioUrl ? 'success' : 'failed')
 
