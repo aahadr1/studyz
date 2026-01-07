@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Increase body size limit for file uploads (50MB)
+  eslint: {
+    // This repo doesn't ship with eslint installed; skip it during builds so `next build` stays clean/non-interactive.
+    ignoreDuringBuilds: true,
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '50mb',

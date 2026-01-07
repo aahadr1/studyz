@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiCheck, FiX, FiChevronRight, FiList, FiRefreshCw } from 'react-icons/fi'
+import { FiCheck, FiX, FiChevronLeft, FiChevronRight, FiList, FiRefreshCw } from 'react-icons/fi'
 import Link from 'next/link'
 import type { PageMCQWithProgress } from '@/types/db'
 
@@ -21,6 +21,23 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [stats, setStats] = useState({ total: 0, answered: 0, correct: 0, remaining: 0 })
+
+  const goToMcqIndex = (nextIndex: number, nextMcqs?: PageMCQWithProgress[]) => {
+    const list = nextMcqs || mcqs
+    if (nextIndex < 0 || nextIndex >= list.length) return
+
+    setCurrentMcqIndex(nextIndex)
+    const nextMcq = list[nextIndex]
+    if (nextMcq?.progress) {
+      setSelectedAnswer(nextMcq.progress.selected_index)
+      setIsCorrect(nextMcq.progress.is_correct)
+      setShowResult(true)
+    } else {
+      setSelectedAnswer(null)
+      setShowResult(false)
+      setIsCorrect(false)
+    }
+  }
 
   const loadMcqs = useCallback(async () => {
     setLoading(true)
@@ -41,18 +58,15 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
 
       if (response.ok) {
         const data = await response.json()
-        setMcqs(data.mcqs || [])
-        setCurrentMcqIndex(data.currentMcqIndex || 0)
+        const loadedMcqs = data.mcqs || []
+        const initialIndex = data.currentMcqIndex || 0
+        setMcqs(loadedMcqs)
+        setCurrentMcqIndex(initialIndex)
         setStats(data.stats || { total: 0, answered: 0, correct: 0, remaining: 0 })
-        onMcqsChange?.(data.mcqs?.length > 0)
+        onMcqsChange?.(loadedMcqs.length > 0)
 
         // If current MCQ is already answered, show result
-        const currentMcq = data.mcqs?.[data.currentMcqIndex]
-        if (currentMcq?.progress) {
-          setSelectedAnswer(currentMcq.progress.selected_index)
-          setIsCorrect(currentMcq.progress.is_correct)
-          setShowResult(true)
-        }
+        goToMcqIndex(initialIndex, loadedMcqs)
       }
     } catch (error) {
       console.error('Error loading MCQs:', error)
@@ -97,9 +111,9 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
         setShowResult(true)
 
         // Update local state
-        setMcqs(prev => prev.map((mcq, idx) => 
-          idx === currentMcqIndex 
-            ? { ...mcq, progress: { 
+        const updatedMcqs = mcqs.map((mcq, idx) => 
+          idx === currentMcqIndex
+            ? { ...mcq, progress: {
                 id: '', 
                 user_id: '', 
                 mcq_id: mcq.id, 
@@ -108,7 +122,8 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
                 answered_at: new Date().toISOString()
               }}
             : mcq
-        ))
+        )
+        setMcqs(updatedMcqs)
 
         setStats(prev => ({
           ...prev,
@@ -125,29 +140,11 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
   }
 
   const handleNextQuestion = () => {
-    // Find next unanswered question
-    let nextIndex = currentMcqIndex + 1
-    while (nextIndex < mcqs.length && mcqs[nextIndex].progress) {
-      nextIndex++
-    }
+    goToMcqIndex(currentMcqIndex + 1)
+  }
 
-    if (nextIndex < mcqs.length) {
-      setCurrentMcqIndex(nextIndex)
-      setSelectedAnswer(null)
-      setShowResult(false)
-    } else {
-      // All questions answered, go back to first unanswered or just increment
-      setCurrentMcqIndex((currentMcqIndex + 1) % mcqs.length)
-      const nextMcq = mcqs[(currentMcqIndex + 1) % mcqs.length]
-      if (nextMcq?.progress) {
-        setSelectedAnswer(nextMcq.progress.selected_index)
-        setIsCorrect(nextMcq.progress.is_correct)
-        setShowResult(true)
-      } else {
-        setSelectedAnswer(null)
-        setShowResult(false)
-      }
-    }
+  const handlePreviousQuestion = () => {
+    goToMcqIndex(currentMcqIndex - 1)
   }
 
   const handleRetry = () => {
@@ -285,32 +282,46 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
 
         {/* Actions */}
         <div className="flex items-center justify-between">
-          {!showResult ? (
-            <button
-              onClick={handleSubmitAnswer}
-              disabled={selectedAnswer === null || submitting}
-              className="btn-primary disabled:opacity-50"
-            >
-              {submitting ? (
-                <div className="spinner w-4 h-4" />
-              ) : (
-                'Submit Answer'
-              )}
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              {!isCorrect && !currentMcq.progress && (
+          <button
+            onClick={handlePreviousQuestion}
+            disabled={currentMcqIndex === 0}
+            className="btn-secondary disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <FiChevronLeft className="w-4 h-4" />
+            Previous
+          </button>
+
+          <div className="flex items-center gap-2">
+            {!showResult ? (
+              <button
+                onClick={handleSubmitAnswer}
+                disabled={selectedAnswer === null || submitting}
+                className="btn-primary disabled:opacity-50"
+              >
+                {submitting ? (
+                  <div className="spinner w-4 h-4" />
+                ) : (
+                  'Submit Answer'
+                )}
+              </button>
+            ) : (
+              !isCorrect && !currentMcq.progress && (
                 <button onClick={handleRetry} className="btn-secondary">
                   <FiRefreshCw className="w-4 h-4" />
                   Retry
                 </button>
-              )}
-              <button onClick={handleNextQuestion} className="btn-primary">
-                Next Question
-                <FiChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+              )
+            )}
+
+            <button
+              onClick={handleNextQuestion}
+              disabled={!showResult || currentMcqIndex >= mcqs.length - 1}
+              className="btn-primary disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Next
+              <FiChevronRight className="w-4 h-4" />
+            </button>
+          </div>
 
           <span className="text-xs text-text-tertiary">
             {stats.remaining} remaining on this page
