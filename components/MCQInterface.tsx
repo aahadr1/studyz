@@ -184,7 +184,7 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
   if (!currentMcq) return null
 
   return (
-    <div className="border-t border-border bg-surface">
+    <div className="border-t border-border bg-surface h-full flex flex-col min-h-0">
       {/* Progress bar */}
       <div className="h-1 bg-border">
         <div 
@@ -193,7 +193,7 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
         />
       </div>
 
-      <div className="p-4">
+      <div className="p-4 flex-1 min-h-0 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -213,75 +213,78 @@ export default function MCQInterface({ lessonId, currentPage, onMcqsChange }: MC
           </Link>
         </div>
 
-        {/* Question */}
-        <p className="text-sm font-medium text-text-primary mb-3">
-          {currentMcq.question}
-        </p>
+        {/* Scrollable content (keeps actions always visible in fixed-height bottom panel) */}
+        <div className="flex-1 min-h-0 overflow-auto pr-1">
+          {/* Question */}
+          <p className="text-sm font-medium text-text-primary mb-3">
+            {currentMcq.question}
+          </p>
 
-        {/* Choices */}
-        <div className="space-y-2 mb-4">
-          {currentMcq.choices.map((choice, index) => {
-            const isSelected = selectedAnswer === index
-            const isCorrectAnswer = index === currentMcq.correct_index
-            
-            let className = "w-full p-3 text-left text-sm border transition-all "
-            
-            if (showResult) {
-              if (isCorrectAnswer) {
-                className += "border-success bg-success/10 text-success"
-              } else if (isSelected && !isCorrect) {
-                className += "border-error bg-error/10 text-error"
+          {/* Choices */}
+          <div className="space-y-2 mb-4">
+            {currentMcq.choices.map((choice, index) => {
+              const isSelected = selectedAnswer === index
+              const isCorrectAnswer = index === currentMcq.correct_index
+              
+              let className = "w-full p-3 text-left text-sm border transition-all "
+              
+              if (showResult) {
+                if (isCorrectAnswer) {
+                  className += "border-success bg-success/10 text-success"
+                } else if (isSelected && !isCorrect) {
+                  className += "border-error bg-error/10 text-error"
+                } else {
+                  className += "border-border text-text-secondary opacity-50"
+                }
               } else {
-                className += "border-border text-text-secondary opacity-50"
+                if (isSelected) {
+                  className += "border-accent bg-accent/10 text-text-primary"
+                } else {
+                  className += "border-border hover:border-text-tertiary text-text-secondary hover:text-text-primary"
+                }
               }
-            } else {
-              if (isSelected) {
-                className += "border-accent bg-accent/10 text-text-primary"
-              } else {
-                className += "border-border hover:border-text-tertiary text-text-secondary hover:text-text-primary"
-              }
-            }
 
-            return (
-              <button
-                key={index}
-                onClick={() => !showResult && setSelectedAnswer(index)}
-                disabled={showResult}
-                className={className}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 flex items-center justify-center border border-current rounded text-xs font-medium">
-                    {String.fromCharCode(65 + index)}
-                  </span>
-                  <span className="flex-1">{choice.replace(/^[A-D]\.\s*/, '')}</span>
-                  {showResult && isCorrectAnswer && (
-                    <FiCheck className="w-4 h-4 text-success" />
-                  )}
-                  {showResult && isSelected && !isCorrect && (
-                    <FiX className="w-4 h-4 text-error" />
-                  )}
-                </div>
-              </button>
-            )
-          })}
+              return (
+                <button
+                  key={index}
+                  onClick={() => !showResult && setSelectedAnswer(index)}
+                  disabled={showResult}
+                  className={className}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 flex items-center justify-center border border-current rounded text-xs font-medium">
+                      {String.fromCharCode(65 + index)}
+                    </span>
+                    <span className="flex-1">{choice.replace(/^[A-D]\.\s*/, '')}</span>
+                    {showResult && isCorrectAnswer && (
+                      <FiCheck className="w-4 h-4 text-success" />
+                    )}
+                    {showResult && isSelected && !isCorrect && (
+                      <FiX className="w-4 h-4 text-error" />
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Result and explanation */}
+          {showResult && (
+            <div className={`p-3 rounded mb-4 ${isCorrect ? 'bg-success/10 border border-success/20' : 'bg-error/10 border border-error/20'}`}>
+              <p className={`text-sm font-medium mb-1 ${isCorrect ? 'text-success' : 'text-error'}`}>
+                {isCorrect ? '✓ Correct!' : '✗ Incorrect'}
+              </p>
+              {currentMcq.explanation && (
+                <p className="text-sm text-text-secondary">
+                  {currentMcq.explanation}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Result and explanation */}
-        {showResult && (
-          <div className={`p-3 rounded mb-4 ${isCorrect ? 'bg-success/10 border border-success/20' : 'bg-error/10 border border-error/20'}`}>
-            <p className={`text-sm font-medium mb-1 ${isCorrect ? 'text-success' : 'text-error'}`}>
-              {isCorrect ? '✓ Correct!' : '✗ Incorrect'}
-            </p>
-            {currentMcq.explanation && (
-              <p className="text-sm text-text-secondary">
-                {currentMcq.explanation}
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Actions */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-shrink-0">
           <button
             onClick={handlePreviousQuestion}
             disabled={currentMcqIndex === 0}
