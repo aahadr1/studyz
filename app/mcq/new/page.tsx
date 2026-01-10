@@ -34,6 +34,23 @@ export default function NewMCQPage() {
     message: string
   } | null>(null)
 
+  const runWithConcurrency = async <T,>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<void>
+  ) => {
+    const queue = items.map((item, index) => ({ item, index }))
+    let cursor = 0
+    const runners = Array.from({ length: Math.min(limit, queue.length) }).map(async () => {
+      while (cursor < queue.length) {
+        const current = queue[cursor]
+        cursor += 1
+        await worker(current.item, current.index)
+      }
+    })
+    await Promise.all(runners)
+  }
+
   useEffect(() => {
     const checkAuth = async () => {
       const supabase = createClient()
@@ -228,12 +245,12 @@ export default function NewMCQPage() {
         mcqSetId = createData.set.id
         finalSetName = createData.set.name
 
-        // Process each page
-        for (let i = 0; i < pageImages.length; i++) {
-          const pageImage = pageImages[i]
-          setCurrentPage(i + 1)
-          setProcessingStep(`Extracting MCQs from page ${i + 1} of ${pageImages.length}...`)
+        // Process pages concurrently (faster than sequential)
+        const concurrency = 4
+        let completed = 0
+        setProcessingStep(`Extracting MCQs (${concurrency} concurrent workers)...`)
 
+        await runWithConcurrency(pageImages, concurrency, async (pageImage, i) => {
           try {
             const pageResponse = await fetch(`/api/mcq/${mcqSetId}/page`, {
               method: 'POST',
@@ -253,18 +270,20 @@ export default function NewMCQPage() {
 
             if (!pageResponse.ok) {
               console.error(`Error processing page ${i + 1}:`, pageData.error)
-              continue
+              return
             }
 
             if (pageData.questions && pageData.questions.length > 0) {
               allQuestions.push(...pageData.questions)
             }
-
-            console.log(`Page ${i + 1}: extracted ${pageData.extractedQuestionCount} questions`)
           } catch (pageError) {
             console.error(`Error processing page ${i + 1}:`, pageError)
+          } finally {
+            completed += 1
+            setCurrentPage(completed)
+            setProcessingStep(`Extracting MCQs... (${completed}/${pageImages.length})`)
           }
-        }
+        })
       } else {
         // Text processing flow
         setProcessingStep('Preparing text for processing...')

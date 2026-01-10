@@ -49,6 +49,23 @@ export default function MobileNewMCQPage() {
   const [currentProgress, setCurrentProgress] = useState(0)
   const [error, setError] = useState('')
 
+  const runWithConcurrency = async <T,>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<void>
+  ) => {
+    const queue = items.map((item, index) => ({ item, index }))
+    let cursor = 0
+    const runners = Array.from({ length: Math.min(limit, queue.length) }).map(async () => {
+      while (cursor < queue.length) {
+        const current = queue[cursor]
+        cursor += 1
+        await worker(current.item, current.index)
+      }
+    })
+    await Promise.all(runners)
+  }
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (!selectedFile) return
@@ -227,26 +244,27 @@ export default function MobileNewMCQPage() {
         // Step 2: Extract questions
         updateStep('extract', 'active')
 
-        for (let i = 0; i < pageImages.length; i++) {
-          const pageImage = pageImages[i]
-          
-          await fetch(`/api/mcq/${mcqSetId}/page`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              pageNumber: pageImage.pageNumber,
-              dataUrl: pageImage.dataUrl,
-              prevDataUrl: i > 0 ? pageImages[i - 1]?.dataUrl : null,
-              nextDataUrl: i + 1 < pageImages.length ? pageImages[i + 1]?.dataUrl : null,
-            }),
-          })
-
-          processedItems++
-          setCurrentProgress(Math.round((processedItems / totalItems) * 100))
-        }
+        const concurrency = 4
+        await runWithConcurrency(pageImages, concurrency, async (pageImage, i) => {
+          try {
+            await fetch(`/api/mcq/${mcqSetId}/page`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                pageNumber: pageImage.pageNumber,
+                dataUrl: pageImage.dataUrl,
+                prevDataUrl: i > 0 ? pageImages[i - 1]?.dataUrl : null,
+                nextDataUrl: i + 1 < pageImages.length ? pageImages[i + 1]?.dataUrl : null,
+              }),
+            })
+          } finally {
+            processedItems++
+            setCurrentProgress(Math.round((processedItems / totalItems) * 100))
+          }
+        })
       } else {
         // Text mode
         const chunks = splitTextIntoChunks(textContent)

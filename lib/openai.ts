@@ -243,7 +243,7 @@ export async function extractMcqsFromImage(imageUrl: string, cfg?: McqExtraction
   const openai = getOpenAI()
   const constraints = buildExtractionConstraintsText(cfg)
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o', // Best vision model for complex documents
+    model: 'gpt-4o-mini',
     messages: [
       {
         role: 'system',
@@ -317,7 +317,7 @@ CRITICAL RULE:
   }
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: ADVANCED_MCQ_EXTRACTION_PROMPT },
       { role: 'user', content },
