@@ -316,27 +316,36 @@ CRITICAL RULE:
     })
   }
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: ADVANCED_MCQ_EXTRACTION_PROMPT },
-      { role: 'user', content },
-    ],
-    response_format: { type: 'json_object' },
-    max_tokens: 8192,
-    temperature: 0.2,
-  })
+  const run = async (model: 'gpt-4o-mini' | 'gpt-4o') => {
+    const response = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: ADVANCED_MCQ_EXTRACTION_PROMPT },
+        { role: 'user', content },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 8192,
+      temperature: 0.2,
+    })
 
-  const raw = response.choices[0]?.message?.content
-  if (!raw) return { pageNumber: anchorPageNumber, questions: [] }
+    const raw = response.choices[0]?.message?.content
+    if (!raw) return { pageNumber: anchorPageNumber, questions: [] } as ExtractedMcqPage
 
-  try {
-    const parsed = JSON.parse(raw) as ExtractedMcqPage
-    return parsed
-  } catch (error) {
-    console.error('Failed to parse MCQ extraction (page window) response:', error)
-    return { pageNumber: anchorPageNumber, questions: [] }
+    try {
+      return JSON.parse(raw) as ExtractedMcqPage
+    } catch (error) {
+      console.error(`Failed to parse MCQ extraction (page window) response (${model}):`, error)
+      return { pageNumber: anchorPageNumber, questions: [] }
+    }
   }
+
+  // Fast path: gpt-4o-mini
+  const mini = await run('gpt-4o-mini')
+  if ((mini.questions || []).length > 0) return mini
+
+  // Fallback: if mini finds nothing, retry with gpt-4o for better OCR robustness
+  const full = await run('gpt-4o')
+  return full
 }
 
 /**

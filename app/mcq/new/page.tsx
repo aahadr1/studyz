@@ -27,6 +27,7 @@ export default function NewMCQPage() {
   const [processingStep, setProcessingStep] = useState('')
   const [currentPage, setCurrentPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+  const [failedPages, setFailedPages] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{
     set: { id: string; name: string; total_pages: number; total_questions: number }
@@ -189,6 +190,7 @@ export default function NewMCQPage() {
 
     setIsProcessing(true)
     setError(null)
+    setFailedPages([])
 
     try {
       const supabase = createClient()
@@ -273,6 +275,7 @@ export default function NewMCQPage() {
 
             if (!pageResponse.ok) {
               console.error(`Error processing page ${i + 1}:`, pageData.error)
+              setFailedPages(prev => [...prev, pageImage.pageNumber])
               return
             }
 
@@ -281,6 +284,7 @@ export default function NewMCQPage() {
             }
           } catch (pageError) {
             console.error(`Error processing page ${i + 1}:`, pageError)
+            setFailedPages(prev => [...prev, pageImage.pageNumber])
           } finally {
             completed += 1
             setCurrentPage(completed)
@@ -553,6 +557,12 @@ export default function NewMCQPage() {
                 <p className="text-text-secondary mb-4">
                   No MCQ questions were found in the input.
                 </p>
+                {failedPages.length > 0 && (
+                  <p className="text-xs text-text-tertiary mb-4">
+                    Note: {failedPages.length} page(s) failed to process (likely rate-limit/timeouts): {failedPages.slice(0, 12).join(',')}
+                    {failedPages.length > 12 ? '…' : ''}
+                  </p>
+                )}
                 <button onClick={handleReset} className="btn-primary">
                   Try Again
                 </button>
