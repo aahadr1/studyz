@@ -304,7 +304,26 @@ CRITICAL RULE:
   const content: any[] = [
     {
       type: 'text',
-      text: `${windowHeader}${constraints}`,
+      text: `${windowHeader}
+
+Extract ALL MCQs you can see, but ONLY those that START on the anchor page. Preserve the FULL option list (2-10). If multiple correct answers are indicated, return all correctOptions.
+
+Return JSON exactly in this shape:
+{
+  "pageNumber": ${anchorPageNumber},
+  "questions": [
+    {
+      "question": "…",
+      "options": [{"label":"A","text":"…"}],
+      "questionType": "scq" | "mcq",
+      "correctOptions": ["A"],
+      "sourcePageStart": ${anchorPageNumber},
+      "sourcePageEnd": ${anchorPageNumber},
+      "explanation": ""
+    }
+  ]
+}
+${constraints}`,
     },
   ]
 

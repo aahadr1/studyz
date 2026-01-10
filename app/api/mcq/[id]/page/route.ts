@@ -136,9 +136,10 @@ export async function POST(
       }, { status: 500 })
     }
 
-    // Extract MCQs from the page image using GPT-4o-mini
+    // Extract MCQs from the page image (fast model with gpt-4o fallback)
     console.log(`Extracting MCQs from page ${pageNumber}...`)
     let questions: any[] = []
+    let rawQuestionsCount = 0
     
     try {
       const pagesForWindow = [
@@ -160,6 +161,7 @@ export async function POST(
         }
       )
 
+      rawQuestionsCount = (extractedData.questions || []).length
       questions = (extractedData.questions || []).filter((q: any) => {
         const start = typeof q?.sourcePageStart === 'number' ? q.sourcePageStart : pageNumber
         return start === pageNumber
@@ -212,11 +214,20 @@ export async function POST(
       console.log(`Extracted ${questions.length} questions from page ${pageNumber}`)
     } catch (error: any) {
       console.error(`Error extracting MCQs from page ${pageNumber}:`, error)
-      // Continue - page is uploaded, just no questions extracted
+      // IMPORTANT: do not silently succeed, otherwise the UI shows "0 found" with no clue why.
+      return NextResponse.json(
+        {
+          error: 'Failed to extract MCQs from page',
+          details: error?.message,
+          pageNumber,
+        },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({
       pageNumber,
+      rawQuestionsCount,
       questionsExtracted: questions.length,
       questions: questions,
       message: `Page ${pageNumber} processed successfully`
