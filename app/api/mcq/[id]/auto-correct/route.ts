@@ -34,7 +34,8 @@ interface CorrectedQuestion {
   confidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW'
   question: string
   options: Array<{ label: string; text: string }>
-  correctOption: string
+  questionType?: 'scq' | 'mcq'
+  correctOptions?: string[]
   explanation: string
 }
 
@@ -76,7 +77,7 @@ export async function POST(
     // Fetch all questions for this set
     const { data: questions, error: questionsError } = await supabase
       .from('mcq_questions')
-      .select('id, question, options, correct_option, explanation')
+      .select('id, question, options, question_type, correct_options, correct_option, explanation')
       .eq('mcq_set_id', mcqSetId)
       .order('page_number', { ascending: true })
 
@@ -120,6 +121,8 @@ export async function POST(
         const result = JSON.parse(content)
         const correctedQuestions = result.correctedQuestions || []
 
+        const normalizeArr = (v: any): string[] => Array.isArray(v) ? v : []
+
         // Update each corrected question in the database
         for (const corrected of correctedQuestions) {
           const originalQuestion = batch.find(q => q.id === corrected.id)
@@ -128,17 +131,39 @@ export async function POST(
             totalModified++
             
             // Check if the answer was changed
-            if (originalQuestion && originalQuestion.correct_option !== corrected.correctOption) {
-              totalAnswersChanged++
+            if (originalQuestion) {
+              const originalCorrectOptions =
+                (Array.isArray(originalQuestion.correct_options) && originalQuestion.correct_options.length > 0)
+                  ? originalQuestion.correct_options
+                  : (originalQuestion.correct_option ? [originalQuestion.correct_option] : [])
+              const newCorrectOptions = normalizeArr(corrected.correctOptions)
+              const same =
+                originalCorrectOptions.length === newCorrectOptions.length &&
+                originalCorrectOptions.every((x: string) => newCorrectOptions.includes(x))
+              if (!same) totalAnswersChanged++
             }
 
             // Update the question in database
+            const originalCorrectOptionsForUpdate =
+              (Array.isArray(originalQuestion?.correct_options) && originalQuestion!.correct_options.length > 0)
+                ? originalQuestion!.correct_options
+                : (originalQuestion?.correct_option ? [originalQuestion.correct_option] : [])
+            const correctedCorrectOptions = normalizeArr(corrected.correctOptions)
+            const finalCorrectOptions = correctedCorrectOptions.length > 0
+              ? correctedCorrectOptions
+              : originalCorrectOptionsForUpdate
+            const correctedQuestionType: 'scq' | 'mcq' =
+              corrected.questionType === 'mcq' || finalCorrectOptions.length > 1 ? 'mcq' : 'scq'
+            const primaryCorrect = finalCorrectOptions[0] || (originalQuestion?.correct_option || 'A')
+
             await supabase
               .from('mcq_questions')
               .update({
                 question: corrected.question,
                 options: corrected.options,
-                correct_option: corrected.correctOption,
+                question_type: correctedQuestionType,
+                correct_options: finalCorrectOptions,
+                correct_option: primaryCorrect,
                 explanation: corrected.explanation,
                 is_corrected: true,
               })

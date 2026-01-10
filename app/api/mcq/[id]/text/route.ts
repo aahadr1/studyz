@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
-import { getMcqExtractionPrompt } from '@/lib/prompts'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -76,20 +75,34 @@ export async function POST(
       messages: [
         {
           role: 'system',
-          content: `You are an expert educational content extraction specialist. Your task is to extract ALL multiple choice questions from the provided text.
+          content: `You are an expert educational content extraction specialist.
+Your task is to extract ALL questions from the provided text, supporting BOTH:
+- SCQ (single correct answer)
+- MCQ (multiple correct answers / select all that apply)
 
 ## YOUR CORE RESPONSIBILITIES
 
-1. **Complete Extraction**: Extract EVERY multiple choice question from the text. Do not skip any questions.
+1. **Complete Extraction**: Extract EVERY question from the text. Do not skip any questions.
 
 2. **Accurate Transcription**: Preserve the original wording of questions and options.
 
-3. **Correct Answer Identification**: Identify the correct answer by looking for:
+3. **Correct Answer Identification**: Identify the correct answer(s) by looking for:
    - Explicit markings (asterisks, "correct:", etc.)
    - Answer keys
    - If no correct answer is marked, make your best educated guess based on subject matter expertise
 
-4. **Explanation Generation**: Provide a clear explanation of WHY the correct answer is correct.
+4. **Explanations**:
+   - If the source includes an explanation, include it.
+   - If no explanation is present, you may return an empty string. (Explanations can be generated later.)
+
+5. **Options**:
+   - Preserve the full set of options. Questions may have 2-10 options.
+   - Do NOT drop options (e.g. if a question has 10 propositions, return all 10).
+   - Normalize labels to A, B, C, ... (up to J for 10).
+
+6. **SCQ vs MCQ**:
+   - If question says "select all that apply", "choose X correct", or if the answer key lists multiple answers, set "questionType" to "mcq" and return multiple correctOptions.
+   - Otherwise set "questionType" to "scq" and return a single correctOptions entry.
 
 ## OUTPUT FORMAT
 
@@ -104,21 +117,21 @@ Return a JSON object with this exact structure:
         {"label": "C", "text": "Third option"},
         {"label": "D", "text": "Fourth option"}
       ],
-      "correctOption": "B",
-      "explanation": "Detailed explanation of why B is correct."
+      "questionType": "scq",
+      "correctOptions": ["B"],
+      "explanation": ""
     }
   ]
 }
 
 ## IMPORTANT NOTES
-- Handle various MCQ formats (A/B/C/D, 1/2/3/4, a/b/c/d, etc.)
-- Questions may have 2-6 options
+- Handle various formats (A/B/C/D, 1/2/3/4/.../10, a/b/c/d, etc.)
 - True/False questions should be formatted as A) True, B) False
-- If the text contains no MCQs, return {"questions": []}`
+- If the text contains no questions, return {"questions": []}`
         },
         {
           role: 'user',
-          content: `Extract ALL multiple choice questions from the following text:\n\n${text}`
+          content: `Extract ALL questions from the following text:\n\n${text}`
         }
       ],
       response_format: { type: 'json_object' },
@@ -148,8 +161,14 @@ Return a JSON object with this exact structure:
       page_number: chunkIndex + 1, // Use chunk index as "page number"
       question: q.question,
       options: q.options,
-      correct_option: q.correctOption,
-      explanation: q.explanation,
+      question_type: q.questionType || ((q.correctOptions || []).length > 1 ? 'mcq' : 'scq'),
+      correct_options: Array.isArray(q.correctOptions)
+        ? q.correctOptions
+        : (q.correctOption ? [q.correctOption] : []),
+      correct_option: (Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
+        ? q.correctOptions[0]
+        : (q.correctOption || 'A'),
+      explanation: q.explanation || null,
     }))
 
     if (questionRecords.length > 0) {

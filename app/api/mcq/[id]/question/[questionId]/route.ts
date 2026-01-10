@@ -51,7 +51,14 @@ export async function PUT(
 
     // Parse request body
     const body = await request.json()
-    const { question, options, correct_option, explanation } = body
+    const { question, options, correct_option, correct_options, question_type, explanation } = body
+
+    const normalizedCorrectOptions: string[] = Array.isArray(correct_options)
+      ? correct_options
+      : (typeof correct_option === 'string' && correct_option ? [correct_option] : [])
+    const normalizedQuestionType: 'scq' | 'mcq' =
+      question_type === 'mcq' || normalizedCorrectOptions.length > 1 ? 'mcq' : 'scq'
+    const primaryCorrect = normalizedCorrectOptions[0] || (typeof correct_option === 'string' && correct_option ? correct_option : 'A')
 
     // Update the question
     const { data: updatedQuestion, error: updateError } = await supabase
@@ -59,7 +66,9 @@ export async function PUT(
       .update({
         question,
         options,
-        correct_option,
+        question_type: normalizedQuestionType,
+        correct_options: normalizedCorrectOptions,
+        correct_option: primaryCorrect,
         explanation,
       })
       .eq('id', questionId)

@@ -13,6 +13,8 @@ export interface MCQQuestionData {
   question: string
   options: MCQOption[]
   correct_option: string
+  question_type?: 'scq' | 'mcq'
+  correct_options?: string[]
   explanation?: string
 }
 
@@ -31,7 +33,19 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
 
   const handleEdit = (question: MCQQuestionData) => {
     setEditingId(question.id)
-    setEditData({ ...question, options: [...question.options] })
+    const normalizedCorrectOptions =
+      Array.isArray(question.correct_options) && question.correct_options.length > 0
+        ? question.correct_options
+        : (question.correct_option ? [question.correct_option] : [])
+    const normalizedQuestionType: 'scq' | 'mcq' =
+      question.question_type === 'mcq' || normalizedCorrectOptions.length > 1 ? 'mcq' : 'scq'
+
+    setEditData({
+      ...question,
+      question_type: normalizedQuestionType,
+      correct_options: normalizedCorrectOptions,
+      options: [...question.options],
+    })
   }
 
   const handleCancelEdit = () => {
@@ -44,6 +58,14 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
     
     setSaving(true)
     try {
+      const correctOptions =
+        Array.isArray(editData.correct_options) && editData.correct_options.length > 0
+          ? editData.correct_options
+          : (editData.correct_option ? [editData.correct_option] : [])
+      const questionType: 'scq' | 'mcq' =
+        editData.question_type === 'mcq' || correctOptions.length > 1 ? 'mcq' : 'scq'
+      const primaryCorrect = correctOptions[0] || editData.correct_option || 'A'
+
       const response = await fetch(`/api/mcq/${mcqSetId}/question/${editData.id}`, {
         method: 'PUT',
         headers: {
@@ -53,7 +75,9 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
         body: JSON.stringify({
           question: editData.question,
           options: editData.options,
-          correct_option: editData.correct_option,
+          question_type: questionType,
+          correct_options: correctOptions,
+          correct_option: primaryCorrect,
           explanation: editData.explanation,
         }),
       })
@@ -109,23 +133,44 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
 
   const handleRemoveOption = (index: number) => {
     if (!editData || editData.options.length <= 2) return
+    const removedLabel = editData.options[index]?.label
     const newOptions = editData.options.filter((_, i) => i !== index)
     // Re-label options
     const relabeledOptions = newOptions.map((opt, i) => ({
       ...opt,
       label: String.fromCharCode(65 + i)
     }))
-    // Update correct_option if needed
-    let newCorrect = editData.correct_option
-    if (editData.correct_option === editData.options[index].label) {
-      newCorrect = relabeledOptions[0]?.label || 'A'
-    } else {
-      const oldIndex = editData.options.findIndex(o => o.label === editData.correct_option)
-      if (oldIndex > index) {
-        newCorrect = String.fromCharCode(65 + oldIndex - 1)
-      }
-    }
-    setEditData({ ...editData, options: relabeledOptions, correct_option: newCorrect })
+
+    // Remap correct options after relabeling
+    const oldLabels = editData.options.map(o => o.label)
+    const oldToNew = new Map<string, string>()
+    relabeledOptions.forEach((opt, i) => {
+      // old index i maps to new label
+      const oldLabel = oldLabels[i < index ? i : i + 1]
+      if (oldLabel) oldToNew.set(oldLabel, opt.label)
+    })
+
+    const currentCorrectOptions =
+      Array.isArray(editData.correct_options) && editData.correct_options.length > 0
+        ? editData.correct_options
+        : (editData.correct_option ? [editData.correct_option] : [])
+
+    const remapped = currentCorrectOptions
+      .filter(lbl => lbl !== removedLabel)
+      .map(lbl => oldToNew.get(lbl) || lbl)
+      .filter(lbl => relabeledOptions.some(o => o.label === lbl))
+
+    const nextCorrectOptions = remapped.length > 0 ? remapped : [relabeledOptions[0]?.label || 'A']
+    const nextQuestionType: 'scq' | 'mcq' =
+      editData.question_type === 'mcq' || nextCorrectOptions.length > 1 ? 'mcq' : 'scq'
+
+    setEditData({
+      ...editData,
+      options: relabeledOptions,
+      question_type: nextQuestionType,
+      correct_options: nextCorrectOptions,
+      correct_option: nextCorrectOptions[0],
+    })
   }
 
   return (
@@ -184,17 +229,58 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
                   {/* Options */}
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-2">Options</label>
+                    <div className="flex items-center gap-3 mb-2">
+                      <label className="text-xs text-text-secondary">Type:</label>
+                      <select
+                        value={editData.question_type || 'scq'}
+                        onChange={(e) => {
+                          const t = e.target.value === 'mcq' ? 'mcq' : 'scq'
+                          const current =
+                            Array.isArray(editData.correct_options) && editData.correct_options.length > 0
+                              ? editData.correct_options
+                              : (editData.correct_option ? [editData.correct_option] : [])
+                          const next = t === 'scq' ? [current[0] || 'A'] : current
+                          setEditData({
+                            ...editData,
+                            question_type: t,
+                            correct_options: next,
+                            correct_option: next[0] || 'A',
+                          })
+                        }}
+                        className="px-2 py-1 bg-elevated border border-border rounded-lg text-xs text-text-primary"
+                      >
+                        <option value="scq">Single choice (SCQ)</option>
+                        <option value="mcq">Multiple correct (MCQ)</option>
+                      </select>
+                    </div>
                     <div className="space-y-2">
                       {editData.options.map((opt, i) => (
                         <div key={i} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="correct_option"
-                            checked={editData.correct_option === opt.label}
-                            onChange={() => setEditData({ ...editData, correct_option: opt.label })}
-                            className="w-4 h-4 text-accent"
-                            title="Mark as correct"
-                          />
+                          {editData.question_type === 'mcq' ? (
+                            <input
+                              type="checkbox"
+                              checked={Array.isArray(editData.correct_options) && editData.correct_options.includes(opt.label)}
+                              onChange={() => {
+                                const current = Array.isArray(editData.correct_options) ? editData.correct_options : []
+                                const next = current.includes(opt.label)
+                                  ? current.filter(x => x !== opt.label)
+                                  : [...current, opt.label]
+                                const final = next.length > 0 ? next : [opt.label]
+                                setEditData({ ...editData, correct_options: final, correct_option: final[0] })
+                              }}
+                              className="w-4 h-4 text-accent"
+                              title="Mark as correct"
+                            />
+                          ) : (
+                            <input
+                              type="radio"
+                              name="correct_option"
+                              checked={(Array.isArray(editData.correct_options) ? editData.correct_options[0] : editData.correct_option) === opt.label}
+                              onChange={() => setEditData({ ...editData, correct_options: [opt.label], correct_option: opt.label })}
+                              className="w-4 h-4 text-accent"
+                              title="Mark as correct"
+                            />
+                          )}
                           <span className="w-8 h-8 bg-background rounded-full flex items-center justify-center font-semibold text-sm">
                             {opt.label}
                           </span>
@@ -217,7 +303,7 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
                         </div>
                       ))}
                     </div>
-                    {editData.options.length < 6 && (
+                    {editData.options.length < 10 && (
                       <button
                         onClick={handleAddOption}
                         className="mt-2 flex items-center gap-1 text-sm text-accent hover:underline"
@@ -288,28 +374,37 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
                   {/* Options display */}
                   <div className="ml-11 space-y-2">
                     {q.options.map((opt) => (
+                      (() => {
+                        const corrects =
+                          Array.isArray(q.correct_options) && q.correct_options.length > 0
+                            ? q.correct_options
+                            : (q.correct_option ? [q.correct_option] : [])
+                        const isCorrect = corrects.includes(opt.label)
+                        return (
                       <div
                         key={opt.label}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                          opt.label === q.correct_option
+                          isCorrect
                             ? 'bg-green-50 border border-green-200'
                             : 'bg-elevated'
                         }`}
                       >
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
-                          opt.label === q.correct_option
+                          isCorrect
                             ? 'bg-green-500 text-white'
                             : 'bg-background'
                         }`}>
                           {opt.label}
                         </span>
-                        <span className={opt.label === q.correct_option ? 'text-green-900' : 'text-text-primary'}>
+                        <span className={isCorrect ? 'text-green-900' : 'text-text-primary'}>
                           {opt.text}
                         </span>
-                        {opt.label === q.correct_option && (
+                        {isCorrect && (
                           <FiCheck className="w-4 h-4 text-green-600 ml-auto" />
                         )}
                       </div>
+                        )
+                      })()
                     ))}
                   </div>
 

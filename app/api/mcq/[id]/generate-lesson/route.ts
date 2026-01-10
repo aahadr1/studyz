@@ -57,7 +57,7 @@ export async function POST(
     // Fetch all questions for this set
     const { data: questions, error: questionsError } = await supabase
       .from('mcq_questions')
-      .select('id, question, options, correct_option, explanation')
+      .select('id, question, options, question_type, correct_options, correct_option, explanation')
       .eq('mcq_set_id', mcqSetId)
       .order('page_number', { ascending: true })
 

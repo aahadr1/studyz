@@ -28,7 +28,9 @@ export interface MCQQuestion {
   id?: string
   question: string
   options: Array<{ label: string; text: string }>
-  correctOption: string
+  correctOption?: string
+  correctOptions?: string[]
+  questionType?: 'scq' | 'mcq'
   explanation?: string
   section_id?: string
   lesson_card?: LessonCardData
@@ -79,7 +81,7 @@ export default function MCQViewer({
   mcqSetId
 }: MCQViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [selectedOption, setSelectedOption] = useState<string | null>(null)
+  const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set())
   const [hasChecked, setHasChecked] = useState(false)
   const [mode, setMode] = useState<MCQMode>(initialMode)
   
@@ -163,7 +165,27 @@ export default function MCQViewer({
 
   const activeQuestions = getActiveQuestions()
   const currentQuestion = activeQuestions[currentIndex]
-  const isCorrect = selectedOption === currentQuestion?.correctOption
+  const effectiveCorrectOptions: string[] = (() => {
+    if (!currentQuestion) return []
+    if (Array.isArray(currentQuestion.correctOptions) && currentQuestion.correctOptions.length > 0) {
+      return currentQuestion.correctOptions
+    }
+    if (currentQuestion.correctOption) return [currentQuestion.correctOption]
+    return []
+  })()
+  const effectiveQuestionType: 'scq' | 'mcq' =
+    currentQuestion?.questionType === 'mcq' || effectiveCorrectOptions.length > 1 ? 'mcq' : 'scq'
+  const isCorrect = (() => {
+    if (!currentQuestion) return false
+    if (effectiveQuestionType === 'scq') {
+      const sel = Array.from(selectedOptions)
+      return sel.length === 1 && sel[0] === effectiveCorrectOptions[0]
+    }
+    // mcq: exact set match
+    if (selectedOptions.size === 0) return false
+    if (selectedOptions.size !== effectiveCorrectOptions.length) return false
+    return effectiveCorrectOptions.every(o => selectedOptions.has(o))
+  })()
   const hasLessonCards = questions.some(q => q.lesson_card)
 
   useEffect(() => {
@@ -214,19 +236,55 @@ export default function MCQViewer({
       }
 
       switch (e.key) {
-        case '1': case '2': case '3': case '4':
-          if (!hasChecked) {
-            const optionIndex = parseInt(e.key) - 1
-            const option = currentQuestion?.options[optionIndex]
-            if (option) setSelectedOption(option.label)
+        case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
+          if (hasChecked) break
+          const idx = e.key === '0' ? 9 : (parseInt(e.key) - 1)
+          const opt = currentQuestion?.options?.[idx]
+          if (opt) {
+            setSelectedOptions(prev => {
+              const next = new Set(prev)
+              if (effectiveQuestionType === 'mcq') {
+                if (next.has(opt.label)) next.delete(opt.label)
+                else next.add(opt.label)
+              } else {
+                next.clear()
+                next.add(opt.label)
+              }
+              return next
+            })
           }
           break
-        case 'a': case 'A': if (!hasChecked) setSelectedOption('A'); break
-        case 'b': case 'B': if (!hasChecked) setSelectedOption('B'); break
-        case 'c': case 'C': if (!hasChecked) setSelectedOption('C'); break
-        case 'd': case 'D': if (!hasChecked) setSelectedOption('D'); break
+        }
+        case 'a': case 'A':
+        case 'b': case 'B':
+        case 'c': case 'C':
+        case 'd': case 'D':
+        case 'e': case 'E':
+        case 'f': case 'F':
+        case 'g': case 'G':
+        case 'h': case 'H':
+        case 'i': case 'I':
+        case 'j': case 'J': {
+          if (hasChecked) break
+          const label = e.key.toUpperCase()
+          const opt = currentQuestion?.options?.find(o => o.label === label)
+          if (opt) {
+            setSelectedOptions(prev => {
+              const next = new Set(prev)
+              if (effectiveQuestionType === 'mcq') {
+                if (next.has(label)) next.delete(label)
+                else next.add(label)
+              } else {
+                next.clear()
+                next.add(label)
+              }
+              return next
+            })
+          }
+          break
+        }
         case 'Enter':
-          if (!hasChecked && selectedOption) handleCheck()
+          if (!hasChecked && selectedOptions.size > 0) handleCheck()
           else if (hasChecked && currentIndex < activeQuestions.length - 1) handleNext()
           break
         case ' ':
@@ -242,7 +300,7 @@ export default function MCQViewer({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [hasChecked, selectedOption, currentIndex, activeQuestions.length, currentQuestion])
+  }, [hasChecked, selectedOptions, currentIndex, activeQuestions.length, currentQuestion, effectiveQuestionType])
 
   // Scroll chat to bottom when messages change
   useEffect(() => {
@@ -329,7 +387,7 @@ export default function MCQViewer({
   }
 
   const handleCheck = () => {
-    if (!selectedOption || !currentQuestion) return
+    if (selectedOptions.size === 0 || !currentQuestion) return
     
     setHasChecked(true)
     const questionId = currentQuestion.id || `q-${currentIndex}`
@@ -337,7 +395,7 @@ export default function MCQViewer({
     if (!answeredQuestions.has(questionId)) {
       setAnsweredQuestions(prev => new Set(prev).add(questionId))
       
-      if (selectedOption === currentQuestion.correctOption) {
+      if (isCorrect) {
         setCorrectAnswers(prev => prev + 1)
       } else {
         setIncorrectAnswers(prev => prev + 1)
@@ -349,7 +407,7 @@ export default function MCQViewer({
   const handleNext = () => {
     if (currentIndex < activeQuestions.length - 1) {
       setCurrentIndex(currentIndex + 1)
-      setSelectedOption(null)
+      setSelectedOptions(new Set())
       setHasChecked(false)
     } else {
       setIsComplete(true)
@@ -369,7 +427,7 @@ export default function MCQViewer({
   const handlePrevious = () => {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1)
-      setSelectedOption(null)
+      setSelectedOptions(new Set())
       setHasChecked(false)
     }
   }
@@ -377,14 +435,14 @@ export default function MCQViewer({
   const handleModeChange = (newMode: MCQMode) => {
     setMode(newMode)
     setCurrentIndex(0)
-    setSelectedOption(null)
+    setSelectedOptions(new Set())
     setHasChecked(false)
     setIsComplete(false)
   }
 
   const handleRestart = () => {
     setCurrentIndex(0)
-    setSelectedOption(null)
+    setSelectedOptions(new Set())
     setHasChecked(false)
     setCorrectAnswers(0)
     setIncorrectAnswers(0)
@@ -569,9 +627,9 @@ export default function MCQViewer({
               {/* Options */}
               <div className="space-y-2">
                 {currentQuestion.options.map((option, index) => {
-                  const isSelected = selectedOption === option.label
+                  const isSelected = selectedOptions.has(option.label)
                   const showResult = hasChecked
-                  const isCorrectOption = option.label === currentQuestion.correctOption
+                  const isCorrectOption = effectiveCorrectOptions.includes(option.label)
 
                   let optionClasses = 'mcq-option '
                   
@@ -588,7 +646,20 @@ export default function MCQViewer({
                   return (
                     <button
                       key={option.label}
-                      onClick={() => !hasChecked && setSelectedOption(option.label)}
+                      onClick={() => {
+                        if (hasChecked) return
+                        setSelectedOptions(prev => {
+                          const next = new Set(prev)
+                          if (effectiveQuestionType === 'mcq') {
+                            if (next.has(option.label)) next.delete(option.label)
+                            else next.add(option.label)
+                          } else {
+                            next.clear()
+                            next.add(option.label)
+                          }
+                          return next
+                        })
+                      }}
                       disabled={hasChecked}
                       className={optionClasses}
                     >
@@ -630,7 +701,7 @@ export default function MCQViewer({
                       </div>
                       {!isCorrect && (
                         <p className="text-sm text-text-secondary mb-2">
-                          Correct answer: <span className="font-medium text-text-primary">{currentQuestion.correctOption}</span>
+                          Correct answer: <span className="font-medium text-text-primary">{effectiveCorrectOptions.join(', ')}</span>
                         </p>
                       )}
                       {currentQuestion.explanation && (
@@ -675,7 +746,7 @@ export default function MCQViewer({
                 {!hasChecked && (
                   <button
                     onClick={handleCheck}
-                    disabled={!selectedOption}
+                    disabled={selectedOptions.size === 0}
                     className="btn-primary disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Check

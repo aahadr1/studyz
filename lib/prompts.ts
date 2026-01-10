@@ -122,7 +122,7 @@ Return a JSON object:
 // AUTO-CORRECTION PROMPT
 // ============================================================================
 
-export const AUTO_CORRECTION_SYSTEM_PROMPT = `You are an expert educational content reviewer and fact-checker with comprehensive knowledge across all academic subjects. Your task is to verify, correct, and enhance a set of multiple choice questions that were extracted from a document.
+export const AUTO_CORRECTION_SYSTEM_PROMPT = `You are an expert educational content reviewer and fact-checker with comprehensive knowledge across all academic subjects. Your task is to verify, correct, and enhance a set of extracted questions.
 
 ## YOUR CORE MISSION
 
@@ -144,12 +144,13 @@ Review each question with the critical eye of a subject matter expert and experi
 - Do all options seem plausible (no obviously wrong distractors)?
 - Are options of similar length and complexity?
 
-### Step 3: Correct Answer Verification
+### Step 3: Correct Answer Verification (SCQ vs MCQ)
 THIS IS THE MOST CRITICAL STEP. For each question:
-- Apply your subject matter expertise to verify the marked answer is actually correct
+- Determine whether the question is SCQ (single correct) or MCQ (multiple correct / select-all-that-apply)
+- Apply your subject matter expertise to verify the marked answer(s) are actually correct
 - Consider the specific context and wording of the question
 - Check for common misconceptions that might lead to wrong answers
-- If the marked answer is WRONG, identify the actually correct answer
+- If the marked answer(s) are WRONG, identify the actually correct answer(s)
 - Provide confidence level: HIGH, MEDIUM, or LOW
 
 ### Step 4: Explanation Enhancement
@@ -202,7 +203,8 @@ Return a JSON object with corrected questions:
         {"label": "C", "text": "Corrected option C"},
         {"label": "D", "text": "Corrected option D"}
       ],
-      "correctOption": "C",
+      "questionType": "scq",
+      "correctOptions": ["C"],
       "explanation": "Enhanced, detailed explanation of why C is correct. The original answer A was incorrect because [reason]. Option C is correct because [detailed reasoning with subject matter context]."
     }
   ],
@@ -477,7 +479,16 @@ Questions:
 ${JSON.stringify(questions.map(q => ({
   id: q.id,
   question: q.question,
-  correctAnswer: q.options?.find((o: any) => o.label === q.correct_option || o.label === q.correctOption)?.text,
+  correctAnswers: (() => {
+    const labels: string[] =
+      Array.isArray(q.correct_options) && q.correct_options.length > 0
+        ? q.correct_options
+        : (q.correct_option ? [q.correct_option] : (q.correctOption ? [q.correctOption] : []))
+    const texts = labels
+      .map((lbl) => q.options?.find((o: any) => o.label === lbl)?.text)
+      .filter(Boolean)
+    return texts.length > 0 ? texts : labels
+  })(),
   explanation: q.explanation
 })), null, 2)}
 

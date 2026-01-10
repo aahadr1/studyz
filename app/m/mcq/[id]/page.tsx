@@ -45,7 +45,9 @@ interface MCQQuestion {
   id?: string
   question: string
   options: Array<{ label: string; text: string }>
-  correctOption: string
+  correctOption?: string
+  correctOptions?: string[]
+  questionType?: 'scq' | 'mcq'
   explanation?: string
   lesson_card?: {
     title: string
@@ -81,7 +83,7 @@ export default function MobileMCQViewerPage() {
 
   // Quiz state
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [selectedOption, setSelectedOption] = useState<string | null>(null)
+  const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set())
   const [hasChecked, setHasChecked] = useState(false)
   const [mode, setMode] = useState<MCQMode>('test')
   
@@ -307,7 +309,24 @@ export default function MobileMCQViewerPage() {
 
   const activeQuestions = getActiveQuestions()
   const currentQuestion = activeQuestions[currentIndex]
-  const isCorrect = selectedOption === currentQuestion?.correctOption
+  const effectiveCorrectOptions: string[] = (() => {
+    if (!currentQuestion) return []
+    if (Array.isArray(currentQuestion.correctOptions) && currentQuestion.correctOptions.length > 0) return currentQuestion.correctOptions
+    if (currentQuestion.correctOption) return [currentQuestion.correctOption]
+    return []
+  })()
+  const effectiveQuestionType: 'scq' | 'mcq' =
+    currentQuestion?.questionType === 'mcq' || effectiveCorrectOptions.length > 1 ? 'mcq' : 'scq'
+  const isCorrect = (() => {
+    if (!currentQuestion) return false
+    if (effectiveQuestionType === 'scq') {
+      const sel = Array.from(selectedOptions)
+      return sel.length === 1 && sel[0] === effectiveCorrectOptions[0]
+    }
+    if (selectedOptions.size === 0) return false
+    if (selectedOptions.size !== effectiveCorrectOptions.length) return false
+    return effectiveCorrectOptions.every(o => selectedOptions.has(o))
+  })()
   const progress = activeQuestions.length > 0 ? ((currentIndex + 1) / activeQuestions.length) * 100 : 0
   const accuracy = (correctAnswers + incorrectAnswers) > 0 
     ? Math.round((correctAnswers / (correctAnswers + incorrectAnswers)) * 100) 
@@ -315,7 +334,7 @@ export default function MobileMCQViewerPage() {
   const hasLessonCard = currentQuestion?.lesson_card
 
   const handleCheck = () => {
-    if (!selectedOption || !currentQuestion) return
+    if (selectedOptions.size === 0 || !currentQuestion) return
     
     setHasChecked(true)
     
@@ -324,7 +343,7 @@ export default function MobileMCQViewerPage() {
     if (!answeredQuestions.has(questionId)) {
       setAnsweredQuestions(prev => new Set(prev).add(questionId))
       
-      if (selectedOption === currentQuestion.correctOption) {
+      if (isCorrect) {
         setCorrectAnswers(prev => prev + 1)
       } else {
         setIncorrectAnswers(prev => prev + 1)
@@ -336,7 +355,7 @@ export default function MobileMCQViewerPage() {
   const handleNext = () => {
     if (currentIndex < activeQuestions.length - 1) {
       setCurrentIndex(currentIndex + 1)
-      setSelectedOption(null)
+      setSelectedOptions(new Set())
       setHasChecked(false)
       setShowLessonSheet(false)
       setShowExplanationSheet(false)
@@ -349,7 +368,7 @@ export default function MobileMCQViewerPage() {
   const handlePrevious = () => {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1)
-      setSelectedOption(null)
+      setSelectedOptions(new Set())
       setHasChecked(false)
       setShowLessonSheet(false)
       setShowExplanationSheet(false)
@@ -360,7 +379,7 @@ export default function MobileMCQViewerPage() {
   const handleModeChange = (newMode: MCQMode) => {
     setMode(newMode)
     setCurrentIndex(0)
-    setSelectedOption(null)
+    setSelectedOptions(new Set())
     setHasChecked(false)
     setIsComplete(false)
     setShowModeSelector(false)
@@ -375,7 +394,7 @@ export default function MobileMCQViewerPage() {
 
   const handleRestart = () => {
     setCurrentIndex(0)
-    setSelectedOption(null)
+    setSelectedOptions(new Set())
     setHasChecked(false)
     setCorrectAnswers(0)
     setIncorrectAnswers(0)
@@ -719,9 +738,9 @@ export default function MobileMCQViewerPage() {
             {/* Options */}
           <div className="space-y-2">
             {currentQuestion?.options.map((option, index) => {
-                const isSelected = selectedOption === option.label
+                const isSelected = selectedOptions.has(option.label)
                 const showResult = hasChecked
-                const isCorrectOption = option.label === currentQuestion.correctOption
+                const isCorrectOption = effectiveCorrectOptions.includes(option.label)
 
               let borderColor = 'var(--color-border)'
               let bgColor = 'transparent'
@@ -745,7 +764,20 @@ export default function MobileMCQViewerPage() {
                 return (
                   <button
                     key={option.label}
-                    onClick={() => !hasChecked && setSelectedOption(option.label)}
+                    onClick={() => {
+                      if (hasChecked) return
+                      setSelectedOptions(prev => {
+                        const next = new Set(prev)
+                        if (effectiveQuestionType === 'mcq') {
+                          if (next.has(option.label)) next.delete(option.label)
+                          else next.add(option.label)
+                        } else {
+                          next.clear()
+                          next.add(option.label)
+                        }
+                        return next
+                      })
+                    }}
                     disabled={hasChecked}
                   className="w-full flex items-start gap-3 p-4 text-left transition-colors"
                   style={{ border: `1px solid ${borderColor}`, background: bgColor }}
@@ -893,7 +925,7 @@ export default function MobileMCQViewerPage() {
                     </p>
                     {!isCorrect && (
                     <p className="text-xs mt-1" style={{ color: 'var(--color-error)' }}>
-                      Correct: <span className="font-medium">{currentQuestion?.correctOption}</span>
+                      Correct: <span className="font-medium">{effectiveCorrectOptions.join(', ')}</span>
                       </p>
                     )}
                     {currentQuestion?.explanation && (
@@ -943,7 +975,7 @@ export default function MobileMCQViewerPage() {
             {!hasChecked ? (
               <button
                 onClick={handleCheck}
-                disabled={!selectedOption}
+                disabled={selectedOptions.size === 0}
                 className="flex-1 h-12 bg-[var(--color-text)] text-[var(--color-bg)] font-medium text-sm uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-30"
               >
                 <FiCheck className="w-4 h-4" strokeWidth={1.5} />
@@ -1118,10 +1150,10 @@ export default function MobileMCQViewerPage() {
                 <div className="flex items-center gap-2 mb-2">
                   {isCorrect ? <FiCheck className="w-4 h-4" style={{ color: 'var(--color-success)' }} strokeWidth={2} /> : <FiX className="w-4 h-4" style={{ color: 'var(--color-error)' }} strokeWidth={2} />}
                   <span className="text-xs uppercase tracking-wider font-medium" style={{ color: isCorrect ? 'var(--color-success)' : 'var(--color-error)' }}>
-                    Your Answer: {selectedOption}
+                    Your Answer: {Array.from(selectedOptions).join(', ')}
                   </span>
                 </div>
-                {!isCorrect && <p className="text-sm">Correct answer: <strong>{currentQuestion.correctOption}</strong></p>}
+                {!isCorrect && <p className="text-sm">Correct answer: <strong>{effectiveCorrectOptions.join(', ')}</strong></p>}
               </div>
 
               {/* Explanation */}

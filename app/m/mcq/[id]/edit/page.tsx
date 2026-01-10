@@ -20,7 +20,9 @@ interface MCQQuestion {
   id: string
   question: string
   options: Array<{ label: string; text: string }>
-  correctOption: string
+  correctOption?: string
+  correctOptions?: string[]
+  questionType?: 'scq' | 'mcq'
   explanation?: string
 }
 
@@ -46,7 +48,8 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
       { label: 'C', text: '' },
       { label: 'D', text: '' },
     ],
-    correctOption: 'A',
+    questionType: 'scq' as 'scq' | 'mcq',
+    correctOptions: ['A'] as string[],
     explanation: ''
   })
 
@@ -85,16 +88,27 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
   }
 
   const openEditSheet = (question: MCQQuestion) => {
+    const normalizedOptions = (question.options && question.options.length >= 2)
+      ? question.options
+      : [
+          { label: 'A', text: question.options?.[0]?.text || '' },
+          { label: 'B', text: question.options?.[1]?.text || '' },
+          { label: 'C', text: question.options?.[2]?.text || '' },
+          { label: 'D', text: question.options?.[3]?.text || '' },
+        ]
+    const normalizedCorrectOptions =
+      Array.isArray(question.correctOptions) && question.correctOptions.length > 0
+        ? question.correctOptions
+        : (question.correctOption ? [question.correctOption] : ['A'])
+    const normalizedQuestionType: 'scq' | 'mcq' =
+      question.questionType === 'mcq' || normalizedCorrectOptions.length > 1 ? 'mcq' : 'scq'
+
     setEditingQuestion(question)
     setEditForm({
       question: question.question,
-      options: question.options.length === 4 ? question.options : [
-        { label: 'A', text: question.options[0]?.text || '' },
-        { label: 'B', text: question.options[1]?.text || '' },
-        { label: 'C', text: question.options[2]?.text || '' },
-        { label: 'D', text: question.options[3]?.text || '' },
-      ],
-      correctOption: question.correctOption,
+      options: normalizedOptions,
+      questionType: normalizedQuestionType,
+      correctOptions: normalizedQuestionType === 'scq' ? [normalizedCorrectOptions[0] || 'A'] : normalizedCorrectOptions,
       explanation: question.explanation || ''
     })
     setShowEditSheet(true)
@@ -115,7 +129,9 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({
           question: editForm.question,
           options: editForm.options,
-          correctOption: editForm.correctOption,
+          question_type: editForm.questionType,
+          correct_options: editForm.correctOptions,
+          correct_option: (editForm.correctOptions?.[0] || 'A'),
           explanation: editForm.explanation,
         }),
       })
@@ -124,7 +140,7 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
         // Update local state
         setQuestions(questions.map(q => 
           q.id === editingQuestion.id 
-            ? { ...q, ...editForm }
+            ? { ...q, ...editForm, correctOption: editForm.correctOptions?.[0] || 'A', correctOptions: editForm.correctOptions, questionType: editForm.questionType }
             : q
         ))
         setShowEditSheet(false)
@@ -202,7 +218,7 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
                     {question.question}
                   </p>
                   <p className="text-xs text-[var(--color-success)]">
-                    Answer: {question.correctOption}
+                    Answer: {(question.correctOptions && question.correctOptions.length > 0) ? question.correctOptions.join(', ') : (question.correctOption || '')}
                   </p>
                 </div>
               </div>
@@ -234,6 +250,24 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
         title="Edit Question"
       >
         <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+          {/* Question Type */}
+          <div className="input-group-mobile">
+            <label className="input-label-mobile">Type</label>
+            <select
+              value={editForm.questionType}
+              onChange={(e) => {
+                const t = e.target.value === 'mcq' ? 'mcq' : 'scq'
+                const current = Array.isArray(editForm.correctOptions) && editForm.correctOptions.length > 0 ? editForm.correctOptions : ['A']
+                const next = t === 'scq' ? [current[0] || 'A'] : current
+                setEditForm({ ...editForm, questionType: t, correctOptions: next })
+              }}
+              className="input-mobile"
+            >
+              <option value="scq">Single choice (SCQ)</option>
+              <option value="mcq">Multiple correct (MCQ)</option>
+            </select>
+          </div>
+
           {/* Question Text */}
           <div className="input-group-mobile">
             <label className="input-label-mobile">Question</label>
@@ -263,9 +297,20 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
                 />
                 <button
                   type="button"
-                  onClick={() => setEditForm({ ...editForm, correctOption: option.label })}
+                  onClick={() => {
+                    const current = Array.isArray(editForm.correctOptions) ? editForm.correctOptions : []
+                    if (editForm.questionType === 'mcq') {
+                      const next = current.includes(option.label)
+                        ? current.filter(x => x !== option.label)
+                        : [...current, option.label]
+                      const final = next.length > 0 ? next : [option.label]
+                      setEditForm({ ...editForm, correctOptions: final })
+                    } else {
+                      setEditForm({ ...editForm, correctOptions: [option.label] })
+                    }
+                  }}
                   className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    editForm.correctOption === option.label
+                    (editForm.correctOptions || []).includes(option.label)
                       ? 'bg-[var(--color-success)] text-white'
                       : 'bg-[var(--color-surface)] text-[var(--color-text-tertiary)]'
                   }`}

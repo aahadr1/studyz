@@ -75,6 +75,10 @@ export async function GET(
     const transformedQuestions = (questions || []).map(q => ({
       ...q,
       correctOption: q.correct_option, // Map snake_case to camelCase
+      correctOptions: Array.isArray(q.correct_options) && q.correct_options.length > 0
+        ? q.correct_options
+        : (q.correct_option ? [q.correct_option] : []),
+      questionType: q.question_type || ((Array.isArray(q.correct_options) && q.correct_options.length > 1) ? 'mcq' : 'scq'),
     }))
 
     return NextResponse.json({

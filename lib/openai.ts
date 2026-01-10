@@ -90,7 +90,17 @@ Be concise but thorough. If you can't see relevant content on the current page, 
 export interface ExtractedMcqQuestion {
   question: string
   options: Array<{ label: string; text: string }>
-  correctOption: string
+  /**
+   * 'scq' = single correct option
+   * 'mcq' = multiple correct options ("select all that apply")
+   */
+  questionType?: 'scq' | 'mcq'
+  /**
+   * For backward compatibility, some callers still provide a single correctOption.
+   * Prefer correctOptions when present.
+   */
+  correctOption?: string
+  correctOptions?: string[]
   explanation?: string
 }
 
@@ -100,7 +110,8 @@ export interface ExtractedMcqPage {
 }
 
 // Advanced MCQ extraction prompt for mixed documents (typed text + embedded photos)
-const ADVANCED_MCQ_EXTRACTION_PROMPT = `You are an EXPERT MCQ extraction specialist with advanced OCR and vision capabilities. Your task is to extract EVERY SINGLE multiple choice question from this document image with MAXIMUM accuracy.
+const ADVANCED_MCQ_EXTRACTION_PROMPT = `You are an EXPERT question extraction specialist with advanced OCR and vision capabilities.
+Your task is to extract EVERY SINGLE question from this document image with MAXIMUM accuracy.
 
 ## CRITICAL: MIXED CONTENT HANDLING
 
@@ -131,13 +142,21 @@ For LOW QUALITY, BLURRY, or DIFFICULT-TO-READ content:
 ## EXTRACTION RULES
 
 1. **Question Text**: Capture the complete question, including any context or setup
-2. **Options**: Extract ALL answer choices with their labels (A/B/C/D or 1/2/3/4)
-3. **Correct Answer**: Look for:
+2. **Options**: Extract ALL answer choices with their labels. Questions may have 2-10 options. DO NOT drop options.
+   - If the source uses 1-10, normalize to A-J.
+   - If the source uses a/b/c/d, normalize to A/B/C/D.
+3. **Answer Type (SCQ vs MCQ)**:
+   - If the question says "Select all that apply" / "Choose all correct" / "multiple answers", set "questionType" to "mcq".
+   - Otherwise set "questionType" to "scq".
+4. **Correct Answer(s)**: Look for:
    - Checkmarks, circles, or highlights
    - "Correct:", "Answer:", or similar markers
    - Underlined or bold correct options
-   - If not marked, use your expert knowledge to determine the correct answer
-4. **Explanation**: Generate a helpful explanation if none is provided
+   - Answer keys (which may list MULTIPLE correct options)
+   - If not marked, use your expert knowledge to determine the most likely correct answer(s)
+5. **Explanation**:
+   - If the source provides an explanation, include it.
+   - If no explanation is provided, you may return an empty string.
 
 ## SPECIAL CASES
 
@@ -161,8 +180,9 @@ Return JSON:
         {"label": "C", "text": "Third option"},
         {"label": "D", "text": "Fourth option"}
       ],
-      "correctOption": "B",
-      "explanation": "Educational explanation of why B is correct"
+      "questionType": "scq",
+      "correctOptions": ["B"],
+      "explanation": ""
     }
   ]
 }
@@ -194,7 +214,7 @@ export async function extractMcqsFromImage(imageUrl: string): Promise<ExtractedM
         content: [
           {
             type: 'text',
-            text: 'Extract ALL MCQs from this document image. Pay special attention to any embedded photos of test papers or low-quality sections.',
+            text: 'Extract ALL questions from this document image. Preserve the FULL option list (up to 10). If multiple correct answers are indicated, return all correctOptions.',
           },
           {
             type: 'image_url',
@@ -254,7 +274,10 @@ Your task:
 When merging:
 - Use the clearest, most complete question text
 - Keep all unique answer options
-- Prefer marked correct answers over guessed ones
+- Preserve SCQ vs MCQ (questionType). If either version indicates multiple correct answers, use "mcq".
+- For correct answers:
+  - Prefer explicitly marked answers over guessed ones
+  - For MCQ, merge/union correctOptions when both provide valid options
 - Combine explanations if they add value
 
 Return the deduplicated list with merged questions.`
@@ -271,8 +294,9 @@ Return JSON:
     {
       "question": "...",
       "options": [...],
-      "correctOption": "...",
-      "explanation": "..."
+      "questionType": "scq",
+      "correctOptions": ["A"],
+      "explanation": ""
     }
   ],
   "mergeReport": {

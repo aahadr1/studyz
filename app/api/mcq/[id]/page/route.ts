@@ -129,7 +129,13 @@ export async function POST(
           page_number: pageNumber,
           question: q.question,
           options: q.options,
-          correct_option: q.correctOption,
+          question_type: q.questionType || ((q.correctOptions || []).length > 1 ? 'mcq' : 'scq'),
+          correct_options: Array.isArray(q.correctOptions)
+            ? q.correctOptions
+            : (q.correctOption ? [q.correctOption] : []),
+          correct_option: (Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
+            ? q.correctOptions[0]
+            : (q.correctOption || 'A'),
           explanation: q.explanation || null,
         }))
 

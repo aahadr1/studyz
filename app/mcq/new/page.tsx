@@ -72,10 +72,52 @@ export default function NewMCQPage() {
     }
   }
 
-  // Split text into chunks of approximately maxChars characters at sentence boundaries
-  const splitTextIntoChunks = (text: string, maxChars: number = 15000): string[] => {
+  // Split text into chunks that preserve question boundaries when possible.
+  // Smaller chunks reduce LLM truncation (important for large sets like 250 questions with 10 options each).
+  const splitTextIntoChunks = (text: string, maxChars: number = 6000): string[] => {
+    const normalized = text.trim()
+    if (!normalized) return []
+
+    // Try to split by question starts (best effort)
+    const starts: number[] = []
+    const re = /(^|\n)\s*(?:Q?\d{1,4}\s*[).:-]|Question\s+\d{1,4}\b)/gi
+    let m: RegExpExecArray | null
+    while ((m = re.exec(normalized)) !== null) {
+      starts.push(m.index + (m[1] ? m[1].length : 0))
+      // safety
+      if (starts.length > 2000) break
+    }
+
+    if (starts.length >= 5) {
+      const blocks: string[] = []
+      for (let i = 0; i < starts.length; i++) {
+        const start = starts[i]
+        const end = i + 1 < starts.length ? starts[i + 1] : normalized.length
+        const block = normalized.slice(start, end).trim()
+        if (block) blocks.push(block)
+      }
+
+      const chunks: string[] = []
+      let current = ''
+      for (const block of blocks) {
+        if (!current) {
+          current = block
+          continue
+        }
+        if ((current.length + 2 + block.length) <= maxChars) {
+          current += '\n\n' + block
+        } else {
+          chunks.push(current.trim())
+          current = block
+        }
+      }
+      if (current.trim()) chunks.push(current.trim())
+      return chunks
+    }
+
+    // Fallback: sentence/newline splitting
     const chunks: string[] = []
-    let remaining = text.trim()
+    let remaining = normalized
 
     while (remaining.length > 0) {
       if (remaining.length <= maxChars) {
@@ -83,31 +125,25 @@ export default function NewMCQPage() {
         break
       }
 
-      // Find a good split point (end of sentence) near maxChars
       let splitIndex = maxChars
-      
-      // Look for sentence endings (.?!) followed by space or newline
-      const searchStart = Math.max(0, maxChars - 2000)
-      const searchSection = remaining.substring(searchStart, maxChars + 500)
-      
-      // Find the last sentence ending in the search section
+
+      const searchStart = Math.max(0, maxChars - 1500)
+      const searchSection = remaining.substring(searchStart, maxChars + 300)
+
       const sentenceEndRegex = /[.?!]\s+/g
-      let lastMatch = null
-      let match
+      let lastMatch: RegExpExecArray | null = null
+      let match: RegExpExecArray | null
       while ((match = sentenceEndRegex.exec(searchSection)) !== null) {
         if (searchStart + match.index + match[0].length <= maxChars) {
           lastMatch = match
         }
       }
-      
+
       if (lastMatch) {
         splitIndex = searchStart + lastMatch.index + lastMatch[0].length
       } else {
-        // If no sentence ending found, try to split at a newline
         const newlineIndex = remaining.lastIndexOf('\n', maxChars)
-        if (newlineIndex > maxChars * 0.5) {
-          splitIndex = newlineIndex + 1
-        }
+        if (newlineIndex > maxChars * 0.5) splitIndex = newlineIndex + 1
       }
 
       chunks.push(remaining.substring(0, splitIndex).trim())

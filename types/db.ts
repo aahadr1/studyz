@@ -87,6 +87,8 @@ export interface McqQuestion {
   question: string
   options: Array<{ label: string; text: string }>
   correct_option: string
+  question_type?: 'scq' | 'mcq'
+  correct_options?: string[]
   explanation?: string
   section_id?: string
   lesson_card?: LessonCard
@@ -115,6 +117,7 @@ export interface McqSessionAnswer {
   session_id: string
   question_id: string
   selected_option: string
+  selected_options?: string[]
   is_correct: boolean
   time_spent_seconds: number
   answered_at: string

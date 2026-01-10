@@ -81,7 +81,11 @@ export async function POST(
       id: q.id,
       question: q.question,
       options: q.options,
-      correctOption: q.correct_option,
+      questionType: q.question_type || ((Array.isArray(q.correct_options) && q.correct_options.length > 1) ? 'mcq' : 'scq'),
+      correctOptions: Array.isArray(q.correct_options) && q.correct_options.length > 0
+        ? q.correct_options
+        : (q.correct_option ? [q.correct_option] : []),
+      correctOption: q.correct_option, // legacy
       explanation: q.explanation,
       pageNumber: q.page_number
     }))
@@ -106,7 +110,13 @@ export async function POST(
         page_number: q.pageNumber || 1,
         question: q.question,
         options: q.options,
-        correct_option: q.correctOption,
+        question_type: q.questionType || ((q.correctOptions || []).length > 1 ? 'mcq' : 'scq'),
+        correct_options: Array.isArray(q.correctOptions)
+          ? q.correctOptions
+          : (q.correctOption ? [q.correctOption] : []),
+        correct_option: (Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
+          ? q.correctOptions[0]
+          : (q.correctOption || 'A'),
         explanation: q.explanation || null,
       }))
 
