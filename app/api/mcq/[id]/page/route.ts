@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { extractMcqsFromImage } from '@/lib/openai'
+import { extractMcqsFromPageWindow } from '@/lib/openai'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -56,9 +56,11 @@ export async function POST(
 
     // Parse JSON body with single page image
     const body = await request.json()
-    const { pageNumber, dataUrl } = body as {
+    const { pageNumber, dataUrl, prevDataUrl, nextDataUrl } = body as {
       pageNumber: number
       dataUrl: string
+      prevDataUrl?: string | null
+      nextDataUrl?: string | null
     }
 
     if (!pageNumber || !dataUrl) {
@@ -94,6 +96,26 @@ export async function POST(
       .from('mcq-pages')
       .getPublicUrl(imagePath)
 
+    const uploadNeighbor = async (neighborPageNumber: number, neighborDataUrl?: string | null) => {
+      if (!neighborDataUrl) return null
+      try {
+        const b64 = neighborDataUrl.split(',')[1]
+        const buf = Buffer.from(b64, 'base64')
+        const path = `${user.id}/${mcqSetId}/page-${neighborPageNumber}.png`
+        await supabase.storage.from('mcq-pages').upload(path, buf, {
+          contentType: 'image/png',
+          upsert: true,
+        })
+        const { data: { publicUrl: neighborUrl } } = supabase.storage.from('mcq-pages').getPublicUrl(path)
+        return neighborUrl
+      } catch (e) {
+        return null
+      }
+    }
+
+    const prevUrl = pageNumber > 1 ? await uploadNeighbor(pageNumber - 1, prevDataUrl) : null
+    const nextUrl = await uploadNeighbor(pageNumber + 1, nextDataUrl)
+
     // Insert mcq_pages record
     const { data: pageRecord, error: pageError } = await supabase
       .from('mcq_pages')
@@ -119,15 +141,29 @@ export async function POST(
     let questions: any[] = []
     
     try {
-      const extractedData = await extractMcqsFromImage(publicUrl, {
+      const pagesForWindow = [
+        ...(prevUrl ? [{ pageNumber: pageNumber - 1, imageUrl: prevUrl }] : []),
+        { pageNumber, imageUrl: publicUrl },
+        ...(nextUrl ? [{ pageNumber: pageNumber + 1, imageUrl: nextUrl }] : []),
+      ]
+
+      const extractedData = await extractMcqsFromPageWindow(
+        pagesForWindow,
+        pageNumber,
+        {
         extractionInstructions: mcqSet?.extraction_instructions || null,
         expectedTotalQuestions: mcqSet?.expected_total_questions ?? null,
         expectedOptionsPerQuestion: mcqSet?.expected_options_per_question ?? null,
         expectedCorrectOptionsPerQuestion: mcqSet?.expected_correct_options_per_question ?? null,
         pageNumber,
         totalPages: mcqSet?.total_pages ?? null,
+        }
+      )
+
+      questions = (extractedData.questions || []).filter((q: any) => {
+        const start = typeof q?.sourcePageStart === 'number' ? q.sourcePageStart : pageNumber
+        return start === pageNumber
       })
-      questions = extractedData.questions || []
 
       if (questions.length > 0) {
         // Insert questions into database

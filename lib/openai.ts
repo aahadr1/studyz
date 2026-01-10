@@ -101,6 +101,12 @@ export interface ExtractedMcqQuestion {
    */
   correctOption?: string
   correctOptions?: string[]
+  /**
+   * For multi-page extraction: the page where the question STARTS and where it ENDS.
+   * We use this to filter to only keep questions that start on the anchor page.
+   */
+  sourcePageStart?: number
+  sourcePageEnd?: number
   explanation?: string
 }
 
@@ -276,6 +282,60 @@ export async function extractMcqsFromImage(imageUrl: string, cfg?: McqExtraction
   } catch (error) {
     console.error('Failed to parse MCQ extraction response:', error)
     return { pageNumber: 1, questions: [] }
+  }
+}
+
+export async function extractMcqsFromPageWindow(
+  pages: Array<{ pageNumber: number; imageUrl: string }>,
+  anchorPageNumber: number,
+  cfg?: McqExtractionConfig
+): Promise<ExtractedMcqPage> {
+  const openai = getOpenAI()
+  const constraints = buildExtractionConstraintsText(cfg)
+
+  const windowHeader = `You will receive up to 3 consecutive pages (previous/current/next).
+
+CRITICAL RULE:
+- Extract ONLY questions whose START is on the ANCHOR page: ${anchorPageNumber}.
+- You MAY use the previous/next pages ONLY to complete truncated question text, missing options, or answer keys.
+- For each extracted question, set "sourcePageStart" to the page where the question starts (must be ${anchorPageNumber}) and "sourcePageEnd" to the page where the question ends.
+`
+
+  const content: any[] = [
+    {
+      type: 'text',
+      text: `${windowHeader}${constraints}`,
+    },
+  ]
+
+  for (const p of pages) {
+    content.push({ type: 'text', text: `Page ${p.pageNumber}:` })
+    content.push({
+      type: 'image_url',
+      image_url: { url: p.imageUrl, detail: 'high' },
+    })
+  }
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      { role: 'system', content: ADVANCED_MCQ_EXTRACTION_PROMPT },
+      { role: 'user', content },
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: 8192,
+    temperature: 0.2,
+  })
+
+  const raw = response.choices[0]?.message?.content
+  if (!raw) return { pageNumber: anchorPageNumber, questions: [] }
+
+  try {
+    const parsed = JSON.parse(raw) as ExtractedMcqPage
+    return parsed
+  } catch (error) {
+    console.error('Failed to parse MCQ extraction (page window) response:', error)
+    return { pageNumber: anchorPageNumber, questions: [] }
   }
 }
 

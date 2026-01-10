@@ -244,6 +244,8 @@ export default function NewMCQPage() {
               body: JSON.stringify({
                 pageNumber: pageImage.pageNumber,
                 dataUrl: pageImage.dataUrl,
+                prevDataUrl: i > 0 ? pageImages[i - 1]?.dataUrl : null,
+                nextDataUrl: i + 1 < pageImages.length ? pageImages[i + 1]?.dataUrl : null,
               }),
             })
 
