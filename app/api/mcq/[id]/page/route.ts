@@ -118,6 +118,12 @@ export async function POST(
       .from('mcq-pages')
       .getPublicUrl(imagePath)
 
+    // Prefer signed URL for OpenAI so extraction works even if the bucket isn't publicly accessible.
+    const { data: signedData } = await supabase.storage
+      .from('mcq-pages')
+      .createSignedUrl(imagePath, 60 * 10) // 10 minutes
+    const imageUrlForExtraction = signedData?.signedUrl || publicUrl
+
     const uploadNeighbor = async (neighborPageNumber: number, neighborDataUrl?: string | null) => {
       if (!neighborDataUrl) return null
       try {
@@ -128,8 +134,11 @@ export async function POST(
           contentType: 'image/png',
           upsert: true,
         })
-        const { data: { publicUrl: neighborUrl } } = supabase.storage.from('mcq-pages').getPublicUrl(path)
-        return neighborUrl
+        const { data: { publicUrl: neighborPublicUrl } } = supabase.storage.from('mcq-pages').getPublicUrl(path)
+        const { data: neighborSigned } = await supabase.storage
+          .from('mcq-pages')
+          .createSignedUrl(path, 60 * 10)
+        return neighborSigned?.signedUrl || neighborPublicUrl
       } catch (e) {
         return null
       }
@@ -164,7 +173,7 @@ export async function POST(
     
     try {
       const pagesForWindow = [
-        { pageNumber, imageUrl: publicUrl },
+        { pageNumber, imageUrl: imageUrlForExtraction },
         ...(nextUrl ? [{ pageNumber: pageNumber + 1, imageUrl: nextUrl }] : []),
       ]
 
@@ -240,6 +249,10 @@ export async function POST(
           error: 'Failed to extract MCQs from page',
           details: serializeError(error),
           pageNumber,
+          debug: {
+            imageUrlForExtraction,
+            nextUrl,
+          },
         },
         { status: 500 }
       )
