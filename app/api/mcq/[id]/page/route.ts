@@ -6,6 +6,28 @@ export const runtime = 'nodejs'
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
+function serializeError(err: any) {
+  const status = err?.status ?? err?.response?.status ?? null
+  const code = err?.code ?? err?.error?.code ?? null
+  const type = err?.type ?? err?.error?.type ?? null
+  const name = err?.name ?? null
+  const message =
+    err?.message ??
+    err?.error?.message ??
+    (typeof err === 'string' ? err : null) ??
+    null
+
+  // Avoid leaking huge payloads or secrets.
+  const safe = {
+    status,
+    code,
+    type,
+    name,
+    message,
+  }
+  return safe
+}
+
 // Create a Supabase client with service role for server-side operations
 function createServerClient() {
   return createSupabaseClient(
@@ -218,7 +240,7 @@ export async function POST(
       return NextResponse.json(
         {
           error: 'Failed to extract MCQs from page',
-          details: error?.message,
+          details: serializeError(error),
           pageNumber,
         },
         { status: 500 }
@@ -236,7 +258,7 @@ export async function POST(
     console.error('MCQ page POST error:', error)
     return NextResponse.json({ 
       error: 'Internal server error',
-      details: error?.message
+      details: serializeError(error)
     }, { status: 500 })
   }
 }

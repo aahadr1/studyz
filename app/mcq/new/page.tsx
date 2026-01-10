@@ -28,6 +28,7 @@ export default function NewMCQPage() {
   const [currentPage, setCurrentPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [failedPages, setFailedPages] = useState<number[]>([])
+  const [failureDetailsByPage, setFailureDetailsByPage] = useState<Record<number, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{
     set: { id: string; name: string; total_pages: number; total_questions: number }
@@ -191,6 +192,7 @@ export default function NewMCQPage() {
     setIsProcessing(true)
     setError(null)
     setFailedPages([])
+    setFailureDetailsByPage({})
 
     try {
       const supabase = createClient()
@@ -251,7 +253,7 @@ export default function NewMCQPage() {
         finalSetName = createData.set.name
 
         // Process pages concurrently (faster than sequential)
-        const concurrency = 4
+        const concurrency = 2
         let completed = 0
         setProcessingStep(`Extracting MCQs (${concurrency} concurrent workers)...`)
 
@@ -274,8 +276,12 @@ export default function NewMCQPage() {
             const pageData = await pageResponse.json()
 
             if (!pageResponse.ok) {
-              console.error(`Error processing page ${i + 1}:`, pageData.error, pageData.details)
+              console.error(`Error processing page ${pageImage.pageNumber}:`, pageData.error, pageData.details)
               setFailedPages(prev => [...prev, pageImage.pageNumber])
+              setFailureDetailsByPage(prev => ({
+                ...prev,
+                [pageImage.pageNumber]: JSON.stringify(pageData.details ?? pageData.error ?? 'Unknown error'),
+              }))
               return
             }
 
@@ -283,8 +289,12 @@ export default function NewMCQPage() {
               allQuestions.push(...pageData.questions)
             }
           } catch (pageError) {
-            console.error(`Error processing page ${i + 1}:`, pageError)
+            console.error(`Error processing page ${pageImage.pageNumber}:`, pageError)
             setFailedPages(prev => [...prev, pageImage.pageNumber])
+            setFailureDetailsByPage(prev => ({
+              ...prev,
+              [pageImage.pageNumber]: String((pageError as any)?.message || pageError),
+            }))
           } finally {
             completed += 1
             setCurrentPage(completed)
@@ -558,10 +568,24 @@ export default function NewMCQPage() {
                   No MCQ questions were found in the input.
                 </p>
                 {failedPages.length > 0 && (
-                  <p className="text-xs text-text-tertiary mb-4">
-                    Note: {failedPages.length} page(s) failed to process (likely rate-limit/timeouts): {failedPages.slice(0, 12).join(',')}
-                    {failedPages.length > 12 ? '…' : ''}
-                  </p>
+                  <div className="text-left max-w-2xl mx-auto mb-4">
+                    <p className="text-xs text-text-tertiary mb-2">
+                      {failedPages.length} page(s) failed to process:
+                    </p>
+                    <div className="text-xs text-text-secondary bg-elevated border border-border rounded p-3 max-h-48 overflow-auto">
+                      {failedPages
+                        .slice()
+                        .sort((a, b) => a - b)
+                        .map((p) => (
+                          <div key={p} className="mb-2">
+                            <span className="font-medium text-text-primary">Page {p}:</span>{' '}
+                            <span className="text-text-secondary">
+                              {failureDetailsByPage[p] || 'Unknown error'}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
                 )}
                 <button onClick={handleReset} className="btn-primary">
                   Try Again

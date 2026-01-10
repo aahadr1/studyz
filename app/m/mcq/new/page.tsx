@@ -244,7 +244,7 @@ export default function MobileNewMCQPage() {
         // Step 2: Extract questions
         updateStep('extract', 'active')
 
-        const concurrency = 4
+        const concurrency = 2
         await runWithConcurrency(pageImages, concurrency, async (pageImage, i) => {
           try {
             await fetch(`/api/mcq/${mcqSetId}/page`, {
