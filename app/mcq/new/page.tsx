@@ -13,6 +13,7 @@ export default function NewMCQPage() {
   const [user, setUser] = useState<any>(null)
   const [inputMode, setInputMode] = useState<InputMode>('pdf')
   const [file, setFile] = useState<File | null>(null)
+  const [isFileDragging, setIsFileDragging] = useState(false)
   const [textContent, setTextContent] = useState('')
   const [name, setName] = useState('')
   const [extractionInstructions, setExtractionInstructions] = useState('')
@@ -67,19 +68,21 @@ export default function NewMCQPage() {
     checkAuth()
   }, [])
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile) {
-      if (!selectedFile.type.includes('pdf')) {
-        setError('Please select a PDF file')
-        return
-      }
-      setFile(selectedFile)
-      setError(null)
-      if (!name) {
-        setName(selectedFile.name.replace('.pdf', ''))
-      }
+  const handleSelectedFile = (selectedFile?: File | null) => {
+    if (!selectedFile) return
+    if (!selectedFile.type.includes('pdf') && !selectedFile.name.toLowerCase().endsWith('.pdf')) {
+      setError('Please select a PDF file')
+      return
     }
+    setFile(selectedFile)
+    setError(null)
+    if (!name) {
+      setName(selectedFile.name.replace(/\.pdf$/i, ''))
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleSelectedFile(e.target.files?.[0])
   }
 
   const handleModeSwitch = (mode: InputMode) => {
@@ -646,7 +649,34 @@ export default function NewMCQPage() {
                   
                   {!file ? (
                     <label className="block w-full cursor-pointer">
-                      <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-accent hover:bg-accent-muted transition-colors">
+                      <div
+                        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                          isFileDragging ? 'border-accent bg-accent-muted' : 'border-border hover:border-accent hover:bg-accent-muted'
+                        }`}
+                        onDragEnter={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (!isProcessing) setIsFileDragging(true)
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (!isProcessing) setIsFileDragging(true)
+                        }}
+                        onDragLeave={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setIsFileDragging(false)
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setIsFileDragging(false)
+                          if (isProcessing) return
+                          const dropped = e.dataTransfer.files?.[0]
+                          handleSelectedFile(dropped)
+                        }}
+                      >
                         <FiUpload className="w-12 h-12 text-text-tertiary mx-auto mb-4" />
                         <p className="text-text-primary font-medium mb-1">
                           Click to upload or drag and drop

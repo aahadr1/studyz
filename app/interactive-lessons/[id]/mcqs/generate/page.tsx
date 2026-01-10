@@ -21,6 +21,7 @@ export default function GenerateMCQsPage() {
   
   // Upload document state
   const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [isUploadDragging, setIsUploadDragging] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
   const [uploadProcessing, setUploadProcessing] = useState(false)
 
@@ -252,16 +253,18 @@ export default function GenerateMCQsPage() {
     }
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      if (file.type !== 'application/pdf') {
-        setResult({ success: false, message: 'Please select a PDF file' })
-        return
-      }
-      setUploadFile(file)
-      setResult(null)
+  const handleSelectedUploadFile = (file?: File | null) => {
+    if (!file) return
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setResult({ success: false, message: 'Please select a PDF file' })
+      return
     }
+    setUploadFile(file)
+    setResult(null)
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleSelectedUploadFile(e.target.files?.[0])
   }
 
   if (loading) {
@@ -482,7 +485,33 @@ export default function GenerateMCQsPage() {
                 </p>
 
                 {!uploadFile ? (
-                  <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-border border-dashed rounded-lg cursor-pointer bg-surface hover:bg-elevated transition-colors">
+                  <label
+                    className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                      isUploadDragging ? 'border-accent bg-elevated' : 'border-border bg-surface hover:bg-elevated'
+                    }`}
+                    onDragEnter={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (!uploadProcessing) setIsUploadDragging(true)
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (!uploadProcessing) setIsUploadDragging(true)
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setIsUploadDragging(false)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setIsUploadDragging(false)
+                      if (uploadProcessing) return
+                      handleSelectedUploadFile(e.dataTransfer.files?.[0])
+                    }}
+                  >
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
                       <FiUpload className="w-8 h-8 text-text-tertiary mb-3" />
                       <p className="text-sm text-text-secondary mb-1">

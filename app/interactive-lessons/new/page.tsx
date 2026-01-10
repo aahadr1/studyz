@@ -30,6 +30,7 @@ export default function NewInteractiveLessonPage() {
   const router = useRouter()
   const [name, setName] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [isFileDragging, setIsFileDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   
@@ -43,25 +44,27 @@ export default function NewInteractiveLessonPage() {
     completedSteps: []
   })
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile) {
-      if (selectedFile.type !== 'application/pdf') {
-        setError('Please select a PDF file')
-        return
-      }
-      if (selectedFile.size > 50 * 1024 * 1024) {
-        setError('File size must be less than 50MB')
-        return
-      }
-      const estimatedPages = Math.max(1, Math.round(selectedFile.size / (50 * 1024)))
-      if (estimatedPages > 200) {
-        setError(`This file may have around ${estimatedPages} pages. Maximum allowed is 200 pages.`)
-        return
-      }
-      setFile(selectedFile)
-      setError('')
+  const handleSelectedFile = (selectedFile?: File | null) => {
+    if (!selectedFile) return
+    if (selectedFile.type !== 'application/pdf' && !selectedFile.name.toLowerCase().endsWith('.pdf')) {
+      setError('Please select a PDF file')
+      return
     }
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      setError('File size must be less than 50MB')
+      return
+    }
+    const estimatedPages = Math.max(1, Math.round(selectedFile.size / (50 * 1024)))
+    if (estimatedPages > 200) {
+      setError(`This file may have around ${estimatedPages} pages. Maximum allowed is 200 pages.`)
+      return
+    }
+    setFile(selectedFile)
+    setError('')
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleSelectedFile(e.target.files?.[0])
   }
 
   // Calculate overall progress percentage
@@ -356,7 +359,33 @@ export default function NewInteractiveLessonPage() {
             <div>
               <label className="input-label">PDF Document</label>
               {!file ? (
-                <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-border border-dashed rounded-lg cursor-pointer bg-surface hover:bg-elevated transition-colors">
+                <label
+                  className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                    isFileDragging ? 'border-accent bg-elevated' : 'border-border bg-surface hover:bg-elevated'
+                  }`}
+                  onDragEnter={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (!uploading) setIsFileDragging(true)
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (!uploading) setIsFileDragging(true)
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setIsFileDragging(false)
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setIsFileDragging(false)
+                    if (uploading) return
+                    handleSelectedFile(e.dataTransfer.files?.[0])
+                  }}
+                >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <FiUpload className="w-8 h-8 text-text-tertiary mb-3" />
                     <p className="text-sm text-text-secondary mb-1">
