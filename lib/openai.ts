@@ -335,27 +335,53 @@ ${constraints}`,
     })
   }
 
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+  const isRetryableOpenAIError = (err: any) => {
+    const status = err?.status ?? err?.response?.status
+    if (status === 429) return true
+    if ([500, 502, 503, 504].includes(status)) return true
+    const msg = String(err?.message || '').toLowerCase()
+    if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('overloaded')) return true
+    return false
+  }
+
   const run = async (model: 'gpt-4o-mini' | 'gpt-4o') => {
-    const response = await openai.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: ADVANCED_MCQ_EXTRACTION_PROMPT },
-        { role: 'user', content },
-      ],
-      response_format: { type: 'json_object' },
-      max_tokens: 8192,
-      temperature: 0.2,
-    })
+    const maxAttempts = 3
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const response = await openai.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: ADVANCED_MCQ_EXTRACTION_PROMPT },
+            { role: 'user', content },
+          ],
+          response_format: { type: 'json_object' },
+          max_tokens: 8192,
+          temperature: 0.2,
+        })
 
-    const raw = response.choices[0]?.message?.content
-    if (!raw) return { pageNumber: anchorPageNumber, questions: [] } as ExtractedMcqPage
+        const raw = response.choices[0]?.message?.content
+        if (!raw) return { pageNumber: anchorPageNumber, questions: [] } as ExtractedMcqPage
 
-    try {
-      return JSON.parse(raw) as ExtractedMcqPage
-    } catch (error) {
-      console.error(`Failed to parse MCQ extraction (page window) response (${model}):`, error)
-      return { pageNumber: anchorPageNumber, questions: [] }
+        try {
+          return JSON.parse(raw) as ExtractedMcqPage
+        } catch (error) {
+          console.error(`Failed to parse MCQ extraction (page window) response (${model}):`, error)
+          return { pageNumber: anchorPageNumber, questions: [] }
+        }
+      } catch (err: any) {
+        const retryable = isRetryableOpenAIError(err)
+        if (!retryable || attempt === maxAttempts) throw err
+
+        // Exponential backoff with small jitter
+        const base = attempt === 1 ? 600 : attempt === 2 ? 1400 : 2600
+        const jitter = Math.floor(Math.random() * 250)
+        await sleep(base + jitter)
+      }
     }
+
+    return { pageNumber: anchorPageNumber, questions: [] }
   }
 
   // Fast path: gpt-4o-mini

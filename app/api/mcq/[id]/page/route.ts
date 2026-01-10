@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { extractMcqsFromPageWindow } from '@/lib/openai'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
 // Create a Supabase client with service role for server-side operations
