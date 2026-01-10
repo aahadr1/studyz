@@ -1,10 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { deduplicateAndMergeMcqs } from '@/lib/openai'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
+
+function normalizeText(input: unknown): string {
+  if (typeof input !== 'string') return ''
+  return input
+    .replace(/\r\n/g, '\n')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function normalizeOptionLabel(input: unknown): string {
+  if (typeof input !== 'string') return ''
+  return input.trim().toUpperCase()
+}
+
+function normalizeStringArray(input: unknown): string[] {
+  if (!Array.isArray(input)) return []
+  return input
+    .filter((x) => typeof x === 'string')
+    .map((x) => x.trim().toUpperCase())
+    .filter(Boolean)
+}
 
 // Create a Supabase client with service role for server-side operations
 function createServerClient() {
@@ -74,68 +95,89 @@ export async function POST(
       })
     }
 
-    console.log(`Deduplicating ${questions.length} questions for MCQ set ${mcqSetId}`)
+    console.log(`Deduplicating ${questions.length} questions for MCQ set ${mcqSetId} (STRICT exact-match only)`)
 
-    // Convert to the format expected by deduplication function
-    const questionsForDedup = questions.map(q => ({
-      id: q.id,
-      question: q.question,
-      options: q.options,
-      questionType: q.question_type || ((Array.isArray(q.correct_options) && q.correct_options.length > 1) ? 'mcq' : 'scq'),
-      correctOptions: Array.isArray(q.correct_options) && q.correct_options.length > 0
-        ? q.correct_options
-        : (q.correct_option ? [q.correct_option] : []),
-      correctOption: q.correct_option, // legacy
-      explanation: q.explanation,
-      pageNumber: q.page_number
-    }))
+    type Row = any
 
-    // Run deduplication
-    const dedupedQuestions = await deduplicateAndMergeMcqs(questionsForDedup)
-    
-    const originalCount = questions.length
-    const finalCount = dedupedQuestions.length
-    const duplicatesRemoved = originalCount - finalCount
+    const keyToKeepId = new Map<string, string>()
+    const duplicateIds: string[] = []
+    const updatesToApply: Array<{ id: string; update: Record<string, any> }> = []
 
-    if (duplicatesRemoved > 0) {
-      // Delete all existing questions
-      await supabase
-        .from('mcq_questions')
-        .delete()
-        .eq('mcq_set_id', mcqSetId)
+    for (const q of questions as Row[]) {
+      const questionType: 'scq' | 'mcq' =
+        q.question_type === 'mcq' || (Array.isArray(q.correct_options) && q.correct_options.length > 1) ? 'mcq' : 'scq'
 
-      // Insert deduplicated questions
-      const questionRecords = dedupedQuestions.map((q: any, index: number) => ({
-        mcq_set_id: mcqSetId,
-        page_number: q.pageNumber || 1,
-        question: q.question,
-        options: q.options,
-        question_type: q.questionType || ((q.correctOptions || []).length > 1 ? 'mcq' : 'scq'),
-        correct_options: Array.isArray(q.correctOptions)
-          ? q.correctOptions
-          : (q.correctOption ? [q.correctOption] : []),
-        correct_option: (Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
-          ? q.correctOptions[0]
-          : (q.correctOption || 'A'),
-        explanation: q.explanation || null,
+      const correctOptions = (Array.isArray(q.correct_options) && q.correct_options.length > 0)
+        ? normalizeStringArray(q.correct_options)
+        : normalizeStringArray(q.correct_option ? [q.correct_option] : [])
+
+      const opts = Array.isArray(q.options) ? q.options : []
+      const normalizedOptions = opts.map((o: any) => ({
+        label: normalizeOptionLabel(o?.label),
+        text: normalizeText(o?.text),
       }))
 
-      const { error: insertError } = await supabase
-        .from('mcq_questions')
-        .insert(questionRecords)
+      // Exact-match key (question + options + correctOptions + questionType)
+      const key = JSON.stringify({
+        t: questionType,
+        q: normalizeText(q.question),
+        o: normalizedOptions,
+        c: correctOptions,
+      })
 
-      if (insertError) {
-        console.error('Error inserting deduplicated questions:', insertError)
-        return NextResponse.json({ error: 'Failed to save deduplicated questions' }, { status: 500 })
+      const existingKeepId = keyToKeepId.get(key)
+      if (!existingKeepId) {
+        keyToKeepId.set(key, q.id)
+        continue
       }
 
-      // Update total questions count
+      // Perfect duplicate: mark for deletion, but first try to preserve "best" fields on the kept row
+      duplicateIds.push(q.id)
+
+      const kept = (questions as Row[]).find((x) => x.id === existingKeepId)
+      if (kept) {
+        const update: Record<string, any> = {}
+        if (!kept.explanation && q.explanation) update.explanation = q.explanation
+        if (!kept.lesson_card && q.lesson_card) update.lesson_card = q.lesson_card
+        if (!kept.section_id && q.section_id) update.section_id = q.section_id
+        if (Object.keys(update).length > 0) {
+          updatesToApply.push({ id: kept.id, update })
+          Object.assign(kept, update)
+        }
+      }
+    }
+
+    const originalCount = questions.length
+    const duplicatesRemoved = duplicateIds.length
+    const finalCount = originalCount - duplicatesRemoved
+
+    if (duplicatesRemoved > 0) {
+      // Apply any enrichment updates to kept rows (best-effort)
+      for (const u of updatesToApply) {
+        await supabase
+          .from('mcq_questions')
+          .update(u.update)
+          .eq('id', u.id)
+          .eq('mcq_set_id', mcqSetId)
+      }
+
+      // Delete only the exact duplicates (keep variants!)
+      const { error: deleteError } = await supabase
+        .from('mcq_questions')
+        .delete()
+        .in('id', duplicateIds)
+
+      if (deleteError) {
+        console.error('Error deleting duplicates:', deleteError)
+        return NextResponse.json({ error: 'Failed to delete duplicates' }, { status: 500 })
+      }
+
       await supabase
         .from('mcq_sets')
         .update({ total_questions: finalCount })
         .eq('id', mcqSetId)
 
-      console.log(`Deduplication complete: ${originalCount} -> ${finalCount} questions`)
+      console.log(`Strict dedup complete: ${originalCount} -> ${finalCount} questions`)
     }
 
     return NextResponse.json({
