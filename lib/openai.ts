@@ -331,7 +331,8 @@ ${constraints}`,
     content.push({ type: 'text', text: `Page ${p.pageNumber}:` })
     content.push({
       type: 'image_url',
-      image_url: { url: p.imageUrl, detail: 'high' },
+      // Reduce payload/compute: keep anchor page at high, neighbors at low.
+      image_url: { url: p.imageUrl, detail: p.pageNumber === anchorPageNumber ? 'high' : 'low' },
     })
   }
 

@@ -78,7 +78,7 @@ export async function POST(
 
     // Parse JSON body with single page image
     const body = await request.json()
-    const { pageNumber, dataUrl, prevDataUrl, nextDataUrl } = body as {
+    const { pageNumber, dataUrl, prevDataUrl: _prevDataUrl, nextDataUrl } = body as {
       pageNumber: number
       dataUrl: string
       prevDataUrl?: string | null
@@ -135,7 +135,6 @@ export async function POST(
       }
     }
 
-    const prevUrl = pageNumber > 1 ? await uploadNeighbor(pageNumber - 1, prevDataUrl) : null
     const nextUrl = await uploadNeighbor(pageNumber + 1, nextDataUrl)
 
     // Insert mcq_pages record
@@ -165,7 +164,6 @@ export async function POST(
     
     try {
       const pagesForWindow = [
-        ...(prevUrl ? [{ pageNumber: pageNumber - 1, imageUrl: prevUrl }] : []),
         { pageNumber, imageUrl: publicUrl },
         ...(nextUrl ? [{ pageNumber: pageNumber + 1, imageUrl: nextUrl }] : []),
       ]

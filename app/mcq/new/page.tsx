@@ -276,11 +276,14 @@ export default function NewMCQPage() {
             const pageData = await pageResponse.json()
 
             if (!pageResponse.ok) {
-              console.error(`Error processing page ${pageImage.pageNumber}:`, pageData.error, pageData.details)
+              const detailsStr = typeof pageData.details === 'string'
+                ? pageData.details
+                : JSON.stringify(pageData.details ?? null)
+              console.error(`Error processing page ${pageImage.pageNumber}:`, pageData.error, detailsStr)
               setFailedPages(prev => [...prev, pageImage.pageNumber])
               setFailureDetailsByPage(prev => ({
                 ...prev,
-                [pageImage.pageNumber]: JSON.stringify(pageData.details ?? pageData.error ?? 'Unknown error'),
+                [pageImage.pageNumber]: detailsStr || String(pageData.error || 'Unknown error'),
               }))
               return
             }
