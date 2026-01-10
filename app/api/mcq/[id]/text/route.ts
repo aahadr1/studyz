@@ -58,7 +58,7 @@ export async function POST(
     // Verify MCQ set ownership
     const { data: mcqSet, error: setError } = await supabase
       .from('mcq_sets')
-      .select('id, user_id')
+      .select('id, user_id, total_pages, extraction_instructions, expected_total_questions, expected_options_per_question, expected_correct_options_per_question')
       .eq('id', mcqSetId)
       .eq('user_id', user.id)
       .single()
@@ -68,6 +68,23 @@ export async function POST(
     }
 
     console.log(`Processing text chunk ${chunkIndex + 1}, length: ${text.length} chars`)
+
+    const constraintsLines: string[] = []
+    if (typeof mcqSet?.expected_total_questions === 'number') {
+      constraintsLines.push(`- Expected total questions in the document: ${mcqSet.expected_total_questions}.`)
+    }
+    if (typeof mcqSet?.expected_options_per_question === 'number') {
+      constraintsLines.push(`- Expected options per question: ${mcqSet.expected_options_per_question} (do not drop any options).`)
+    }
+    if (typeof mcqSet?.expected_correct_options_per_question === 'number') {
+      constraintsLines.push(`- Expected number of correct options per question (when MCQ): ${mcqSet.expected_correct_options_per_question}.`)
+    }
+    if (typeof mcqSet?.extraction_instructions === 'string' && mcqSet.extraction_instructions.trim()) {
+      constraintsLines.push(`- Additional user instructions: ${mcqSet.extraction_instructions.trim()}`)
+    }
+    const constraintsBlock = constraintsLines.length > 0
+      ? `\n\n### USER-PROVIDED CONSTRAINTS (MUST RESPECT)\n${constraintsLines.join('\n')}\n`
+      : ''
 
     // Call OpenAI to extract MCQs from text
     const response = await openai.chat.completions.create({
@@ -131,7 +148,7 @@ Return a JSON object with this exact structure:
         },
         {
           role: 'user',
-          content: `Extract ALL questions from the following text:\n\n${text}`
+          content: `Extract ALL questions from the following text.${constraintsBlock}\n\n${text}`
         }
       ],
       response_format: { type: 'json_object' },

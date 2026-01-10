@@ -34,6 +34,10 @@ export default function MobileNewMCQPage() {
   const [name, setName] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [textContent, setTextContent] = useState('')
+  const [extractionInstructions, setExtractionInstructions] = useState('')
+  const [expectedTotalQuestions, setExpectedTotalQuestions] = useState<number | ''>('')
+  const [expectedOptionsPerQuestion, setExpectedOptionsPerQuestion] = useState<number | ''>('')
+  const [expectedCorrectOptionsPerQuestion, setExpectedCorrectOptionsPerQuestion] = useState<number | ''>('')
   
   // Options
   const [autoCorrect, setAutoCorrect] = useState(true)
@@ -209,6 +213,10 @@ export default function MobileNewMCQPage() {
             name: name || file!.name.replace('.pdf', ''),
             sourcePdfName: file!.name,
             totalPages: pageImages.length,
+            extractionInstructions,
+            expectedTotalQuestions: expectedTotalQuestions === '' ? null : expectedTotalQuestions,
+            expectedOptionsPerQuestion: expectedOptionsPerQuestion === '' ? null : expectedOptionsPerQuestion,
+            expectedCorrectOptionsPerQuestion: expectedCorrectOptionsPerQuestion === '' ? null : expectedCorrectOptionsPerQuestion,
           }),
         })
 
@@ -254,6 +262,10 @@ export default function MobileNewMCQPage() {
             name: name || 'Pasted MCQ Set',
             sourcePdfName: null,
             totalPages: chunks.length,
+            extractionInstructions,
+            expectedTotalQuestions: expectedTotalQuestions === '' ? null : expectedTotalQuestions,
+            expectedOptionsPerQuestion: expectedOptionsPerQuestion === '' ? null : expectedOptionsPerQuestion,
+            expectedCorrectOptionsPerQuestion: expectedCorrectOptionsPerQuestion === '' ? null : expectedCorrectOptionsPerQuestion,
           }),
         })
 
@@ -531,6 +543,60 @@ export default function MobileNewMCQPage() {
               )}
             </div>
           )}
+
+          {/* Extraction constraints */}
+          <div className="input-group-mobile">
+            <label className="input-label-mobile">Extraction constraints (optional)</label>
+            <div className="mobile-card p-4 space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]">Total</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={expectedTotalQuestions}
+                    onChange={(e) => setExpectedTotalQuestions(e.target.value === '' ? '' : parseInt(e.target.value))}
+                    className="input-mobile mt-1"
+                    placeholder="250"
+                    disabled={isProcessing}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]">Options</label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={10}
+                    value={expectedOptionsPerQuestion}
+                    onChange={(e) => setExpectedOptionsPerQuestion(e.target.value === '' ? '' : parseInt(e.target.value))}
+                    className="input-mobile mt-1"
+                    placeholder="10"
+                    disabled={isProcessing}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]">Correct</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={expectedCorrectOptionsPerQuestion}
+                    onChange={(e) => setExpectedCorrectOptionsPerQuestion(e.target.value === '' ? '' : parseInt(e.target.value))}
+                    className="input-mobile mt-1"
+                    placeholder="5"
+                    disabled={isProcessing}
+                  />
+                </div>
+              </div>
+              <textarea
+                value={extractionInstructions}
+                onChange={(e) => setExtractionInstructions(e.target.value)}
+                placeholder='Custom instructions (e.g. "250 questions, 10 options A-J, 5 correct per question. Do not drop options.")'
+                className="input-mobile min-h-[90px] resize-y text-sm"
+                disabled={isProcessing}
+              />
+            </div>
+          </div>
 
           {/* AI Options */}
           <div className="space-y-3">

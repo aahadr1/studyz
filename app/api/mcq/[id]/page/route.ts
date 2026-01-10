@@ -45,7 +45,7 @@ export async function POST(
     // Verify MCQ set ownership
     const { data: mcqSet, error: setError } = await supabase
       .from('mcq_sets')
-      .select('id, user_id')
+      .select('id, user_id, total_pages, extraction_instructions, expected_total_questions, expected_options_per_question, expected_correct_options_per_question')
       .eq('id', mcqSetId)
       .eq('user_id', user.id)
       .single()
@@ -119,7 +119,14 @@ export async function POST(
     let questions: any[] = []
     
     try {
-      const extractedData = await extractMcqsFromImage(publicUrl)
+      const extractedData = await extractMcqsFromImage(publicUrl, {
+        extractionInstructions: mcqSet?.extraction_instructions || null,
+        expectedTotalQuestions: mcqSet?.expected_total_questions ?? null,
+        expectedOptionsPerQuestion: mcqSet?.expected_options_per_question ?? null,
+        expectedCorrectOptionsPerQuestion: mcqSet?.expected_correct_options_per_question ?? null,
+        pageNumber,
+        totalPages: mcqSet?.total_pages ?? null,
+      })
       questions = extractedData.questions || []
 
       if (questions.length > 0) {

@@ -109,6 +109,39 @@ export interface ExtractedMcqPage {
   questions: ExtractedMcqQuestion[]
 }
 
+export interface McqExtractionConfig {
+  extractionInstructions?: string | null
+  expectedTotalQuestions?: number | null
+  expectedOptionsPerQuestion?: number | null
+  expectedCorrectOptionsPerQuestion?: number | null
+  pageNumber?: number | null
+  totalPages?: number | null
+}
+
+function buildExtractionConstraintsText(cfg?: McqExtractionConfig): string {
+  if (!cfg) return ''
+  const parts: string[] = []
+  if (cfg.pageNumber && cfg.totalPages) {
+    parts.push(`Page context: page ${cfg.pageNumber} of ${cfg.totalPages}.`)
+  } else if (cfg.pageNumber) {
+    parts.push(`Page context: page ${cfg.pageNumber}.`)
+  }
+  if (typeof cfg.expectedTotalQuestions === 'number' && Number.isFinite(cfg.expectedTotalQuestions)) {
+    parts.push(`Expected total questions in the document: ${cfg.expectedTotalQuestions}.`)
+  }
+  if (typeof cfg.expectedOptionsPerQuestion === 'number' && Number.isFinite(cfg.expectedOptionsPerQuestion)) {
+    parts.push(`Expected options per question: ${cfg.expectedOptionsPerQuestion} (do not drop any options).`)
+  }
+  if (typeof cfg.expectedCorrectOptionsPerQuestion === 'number' && Number.isFinite(cfg.expectedCorrectOptionsPerQuestion)) {
+    parts.push(`Expected number of correct options per question (when MCQ): ${cfg.expectedCorrectOptionsPerQuestion}.`)
+  }
+  if (cfg.extractionInstructions && cfg.extractionInstructions.trim()) {
+    parts.push(`Additional user instructions: ${cfg.extractionInstructions.trim()}`)
+  }
+  if (parts.length === 0) return ''
+  return `\n\n### USER-PROVIDED CONSTRAINTS (MUST RESPECT)\n${parts.map(p => `- ${p}`).join('\n')}\n`
+}
+
 // Advanced MCQ extraction prompt for mixed documents (typed text + embedded photos)
 const ADVANCED_MCQ_EXTRACTION_PROMPT = `You are an EXPERT question extraction specialist with advanced OCR and vision capabilities.
 Your task is to extract EVERY SINGLE question from this document image with MAXIMUM accuracy.
@@ -200,8 +233,9 @@ Return JSON:
  * @param imageUrl - Public URL of the page image
  * @returns Extracted MCQs from the page
  */
-export async function extractMcqsFromImage(imageUrl: string): Promise<ExtractedMcqPage> {
+export async function extractMcqsFromImage(imageUrl: string, cfg?: McqExtractionConfig): Promise<ExtractedMcqPage> {
   const openai = getOpenAI()
+  const constraints = buildExtractionConstraintsText(cfg)
   const response = await openai.chat.completions.create({
     model: 'gpt-4o', // Best vision model for complex documents
     messages: [
@@ -214,7 +248,7 @@ export async function extractMcqsFromImage(imageUrl: string): Promise<ExtractedM
         content: [
           {
             type: 'text',
-            text: 'Extract ALL questions from this document image. Preserve the FULL option list (up to 10). If multiple correct answers are indicated, return all correctOptions.',
+            text: `Extract ALL questions from this document image. Preserve the FULL option list (up to 10). If multiple correct answers are indicated, return all correctOptions.${constraints}`,
           },
           {
             type: 'image_url',

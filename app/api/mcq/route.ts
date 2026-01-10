@@ -39,10 +39,22 @@ export async function POST(request: NextRequest) {
 
     // Parse JSON body
     const body = await request.json()
-    const { name, sourcePdfName, totalPages } = body as {
+    const {
+      name,
+      sourcePdfName,
+      totalPages,
+      extractionInstructions,
+      expectedTotalQuestions,
+      expectedOptionsPerQuestion,
+      expectedCorrectOptionsPerQuestion,
+    } = body as {
       name?: string
       sourcePdfName: string
       totalPages: number
+      extractionInstructions?: string
+      expectedTotalQuestions?: number
+      expectedOptionsPerQuestion?: number
+      expectedCorrectOptionsPerQuestion?: number
     }
 
     if (!totalPages || totalPages < 1) {
@@ -67,6 +79,12 @@ export async function POST(request: NextRequest) {
         name: name || sourcePdfName.replace('.pdf', ''),
         source_pdf_name: sourcePdfName,
         total_pages: totalPages,
+        extraction_instructions: typeof extractionInstructions === 'string' && extractionInstructions.trim()
+          ? extractionInstructions.trim()
+          : null,
+        expected_total_questions: Number.isFinite(Number(expectedTotalQuestions)) ? Number(expectedTotalQuestions) : null,
+        expected_options_per_question: Number.isFinite(Number(expectedOptionsPerQuestion)) ? Number(expectedOptionsPerQuestion) : null,
+        expected_correct_options_per_question: Number.isFinite(Number(expectedCorrectOptionsPerQuestion)) ? Number(expectedCorrectOptionsPerQuestion) : null,
       })
       .select()
       .single()

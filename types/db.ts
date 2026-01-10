@@ -66,6 +66,10 @@ export interface McqSet {
   document_url?: string
   total_pages: number
   total_questions: number
+  extraction_instructions?: string
+  expected_total_questions?: number
+  expected_options_per_question?: number
+  expected_correct_options_per_question?: number
   is_corrected: boolean
   has_lesson_cards: boolean
   lesson_content?: GeneratedLesson

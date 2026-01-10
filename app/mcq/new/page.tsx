@@ -15,6 +15,10 @@ export default function NewMCQPage() {
   const [file, setFile] = useState<File | null>(null)
   const [textContent, setTextContent] = useState('')
   const [name, setName] = useState('')
+  const [extractionInstructions, setExtractionInstructions] = useState('')
+  const [expectedTotalQuestions, setExpectedTotalQuestions] = useState<number | ''>('')
+  const [expectedOptionsPerQuestion, setExpectedOptionsPerQuestion] = useState<number | ''>('')
+  const [expectedCorrectOptionsPerQuestion, setExpectedCorrectOptionsPerQuestion] = useState<number | ''>('')
   const [generateLesson, setGenerateLesson] = useState(false)
   const [generateLessonCards, setGenerateLessonCards] = useState(true)
   const [autoCorrect, setAutoCorrect] = useState(true)
@@ -209,6 +213,10 @@ export default function NewMCQPage() {
             name: name || file!.name.replace('.pdf', ''),
             sourcePdfName: file!.name,
             totalPages: pageImages.length,
+            extractionInstructions,
+            expectedTotalQuestions: expectedTotalQuestions === '' ? null : expectedTotalQuestions,
+            expectedOptionsPerQuestion: expectedOptionsPerQuestion === '' ? null : expectedOptionsPerQuestion,
+            expectedCorrectOptionsPerQuestion: expectedCorrectOptionsPerQuestion === '' ? null : expectedCorrectOptionsPerQuestion,
           }),
         })
 
@@ -276,6 +284,10 @@ export default function NewMCQPage() {
             name: name || 'Pasted MCQ Set',
             sourcePdfName: null,
             totalPages: textChunks.length,
+            extractionInstructions,
+            expectedTotalQuestions: expectedTotalQuestions === '' ? null : expectedTotalQuestions,
+            expectedOptionsPerQuestion: expectedOptionsPerQuestion === '' ? null : expectedOptionsPerQuestion,
+            expectedCorrectOptionsPerQuestion: expectedCorrectOptionsPerQuestion === '' ? null : expectedCorrectOptionsPerQuestion,
           }),
         })
 
@@ -690,9 +702,9 @@ You can paste as much text as you want - there's no character limit!`}
                     {textContent.length > 0 && (
                       <>
                         {textContent.length.toLocaleString()} characters
-                        {textContent.length > 15000 && (
+                        {textContent.length > 6000 && (
                           <span className="ml-2">
-                            (will be processed in {Math.ceil(textContent.length / 15000)} chunks)
+                            (will be processed in {Math.ceil(textContent.length / 6000)} chunks)
                           </span>
                         )}
                       </>
@@ -700,6 +712,67 @@ You can paste as much text as you want - there's no character limit!`}
                   </p>
                 </div>
               )}
+
+              {/* Extraction constraints */}
+              <div className="p-4 bg-elevated rounded-lg border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-text-primary">
+                    Extraction constraints (optional)
+                  </label>
+                  <span className="text-xs text-text-tertiary">
+                    Helps avoid missing options/questions on large exams
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-medium text-text-secondary mb-1">Total questions</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={expectedTotalQuestions}
+                      onChange={(e) => setExpectedTotalQuestions(e.target.value === '' ? '' : parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-text-primary"
+                      placeholder="250"
+                      disabled={isProcessing}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-text-secondary mb-1">Options / question</label>
+                    <input
+                      type="number"
+                      min={2}
+                      max={10}
+                      value={expectedOptionsPerQuestion}
+                      onChange={(e) => setExpectedOptionsPerQuestion(e.target.value === '' ? '' : parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-text-primary"
+                      placeholder="10"
+                      disabled={isProcessing}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-text-secondary mb-1">Correct options (MCQ)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={expectedCorrectOptionsPerQuestion}
+                      onChange={(e) => setExpectedCorrectOptionsPerQuestion(e.target.value === '' ? '' : parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-text-primary"
+                      placeholder="5"
+                      disabled={isProcessing}
+                    />
+                  </div>
+                </div>
+
+                <textarea
+                  value={extractionInstructions}
+                  onChange={(e) => setExtractionInstructions(e.target.value)}
+                  placeholder='Custom instructions for the extractor (e.g. "This exam has 250 questions. Each has exactly 10 options (A-J). Each question has 5 correct answers. Do not drop any options.")'
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent resize-y min-h-[80px] text-sm"
+                  disabled={isProcessing}
+                />
+              </div>
 
               {/* AI Enhancement Options */}
               <div className="space-y-3">
