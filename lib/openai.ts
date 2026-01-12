@@ -243,7 +243,7 @@ export async function extractMcqsFromImage(imageUrl: string, cfg?: McqExtraction
   const openai = getOpenAI()
   const constraints = buildExtractionConstraintsText(cfg)
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: 'gpt-4.1',
     messages: [
       {
         role: 'system',
@@ -347,12 +347,12 @@ ${constraints}`,
     return false
   }
 
-  const run = async (model: 'gpt-4o-mini' | 'gpt-4o') => {
+  const run = async () => {
     const maxAttempts = 3
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const response = await openai.chat.completions.create({
-          model,
+          model: 'gpt-4.1',
           messages: [
             { role: 'system', content: ADVANCED_MCQ_EXTRACTION_PROMPT },
             { role: 'user', content },
@@ -368,7 +368,7 @@ ${constraints}`,
         try {
           return JSON.parse(raw) as ExtractedMcqPage
         } catch (error) {
-          console.error(`Failed to parse MCQ extraction (page window) response (${model}):`, error)
+          console.error(`Failed to parse MCQ extraction (page window) response (gpt-4.1):`, error)
           return { pageNumber: anchorPageNumber, questions: [] }
         }
       } catch (err: any) {
@@ -385,13 +385,7 @@ ${constraints}`,
     return { pageNumber: anchorPageNumber, questions: [] }
   }
 
-  // Fast path: gpt-4o-mini
-  const mini = await run('gpt-4o-mini')
-  if ((mini.questions || []).length > 0) return mini
-
-  // Fallback: if mini finds nothing, retry with gpt-4o for better OCR robustness
-  const full = await run('gpt-4o')
-  return full
+  return await run()
 }
 
 /**
