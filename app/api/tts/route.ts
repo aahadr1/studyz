@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       text, 
       language = 'en', 
       voice = 'male',
+      speed = 1.3,
     } = body
 
     if (!text || text.trim().length === 0) {
@@ -69,6 +70,11 @@ export async function POST(request: NextRequest) {
     const trimmedText = text.trim().substring(0, 10000)
     const voiceId = VOICES[language as keyof typeof VOICES]?.[voice as keyof typeof VOICES.en] || VOICES.en.male
     const languageBoost = language === 'fr' ? 'French' : 'English'
+    const safeSpeed = (() => {
+      const n = Number(speed)
+      if (!Number.isFinite(n)) return 1.3
+      return Math.max(0.5, Math.min(2.5, n))
+    })()
 
     console.log(`[TTS] Starting: "${trimmedText.substring(0, 40)}..." voice=${voiceId}`)
 
@@ -87,7 +93,7 @@ export async function POST(request: NextRequest) {
         input: {
           text: trimmedText,
           voice_id: voiceId,
-          speed: 1,
+          speed: safeSpeed,
           emotion: 'auto',
           pitch: 0,
           volume: 1,
@@ -153,6 +159,7 @@ export async function POST(request: NextRequest) {
       audioUrl: prediction.output,
       voiceId,
       language,
+      speed: safeSpeed,
       duration 
     })
 

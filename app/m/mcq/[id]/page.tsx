@@ -110,11 +110,12 @@ export default function MobileMCQViewerPage() {
   const [showModeSelector, setShowModeSelector] = useState(false)
   const [showTTSSelector, setShowTTSSelector] = useState(false)
   const [ttsLanguage, setTtsLanguage] = useState<'en' | 'fr'>('en')
+  const [ttsSpeed, setTtsSpeed] = useState<number>(1.3)
   const [isStudyMaterialExpanded, setIsStudyMaterialExpanded] = useState(false)
 
   // Chat state
   const [chatOpen, setChatOpen] = useState(false)
-  const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; content: string; audioUrl?: string }>>([])
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; content: string; audioUrl?: string; audioSpeed?: number }>>([])
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
@@ -233,9 +234,11 @@ export default function MobileMCQViewerPage() {
     lastAutoPlayedAudioId.current = last.id
     try {
       const audio = new Audio(last.audioUrl)
+      const base = Number(last.audioSpeed) || 1.3
+      audio.playbackRate = ttsSpeed / base
       audio.play().catch(() => {})
     } catch {}
-  }, [chatMessages])
+  }, [chatMessages, ttsSpeed])
 
   const handleSendChat = async (messageOverride?: string) => {
     const message = (typeof messageOverride === 'string' ? messageOverride : chatInput).trim()
@@ -280,6 +283,7 @@ export default function MobileMCQViewerPage() {
             hasChecked,
             isCorrect,
             ttsLanguage,
+            ttsSpeed,
           },
           conversationHistory: chatMessages.slice(-10),
         }),
@@ -293,6 +297,7 @@ export default function MobileMCQViewerPage() {
           role: 'assistant' as const,
           content: data.response,
           audioUrl: data?.tts?.audioUrl,
+          audioSpeed: data?.tts?.speed,
         }
         setChatMessages(prev => [...prev, assistantMessage])
       } else {
@@ -783,7 +788,7 @@ export default function MobileMCQViewerPage() {
         <div className="flex items-center gap-2">
           {/* TTS Language Toggle */}
           <button
-            onClick={() => setTtsLanguage(ttsLanguage === 'en' ? 'fr' : 'en')}
+            onClick={() => setShowTTSSelector(true)}
             className="flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wider border border-[var(--color-border)]"
           >
             <FiVolume2 className="w-3 h-3" strokeWidth={1.5} />
@@ -911,6 +916,7 @@ export default function MobileMCQViewerPage() {
             <SpeakButton 
               text={currentQuestion?.question || ''} 
               language={ttsLanguage}
+              speed={ttsSpeed}
               size="sm"
             />
           </div>
@@ -1116,6 +1122,7 @@ export default function MobileMCQViewerPage() {
                       <SpeakButton 
                         text={currentQuestion.explanation} 
                         language={ttsLanguage}
+                        speed={ttsSpeed}
                         size="sm"
                       />
                     </div>
@@ -1226,6 +1233,85 @@ export default function MobileMCQViewerPage() {
         </div>
       )}
 
+      {/* TTS Settings Sheet (Minimax) */}
+      {showTTSSelector && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setShowTTSSelector(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-bg)] border-t border-[var(--color-border)]">
+            <div className="w-8 h-1 bg-[var(--color-border)] mx-auto mt-3 mb-4" />
+            <div className="px-4 pb-2 flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-tertiary)]">
+                {ttsLanguage === 'fr' ? 'Paramètres audio' : 'Audio settings'}
+              </span>
+              <button onClick={() => setShowTTSSelector(false)} className="p-2">
+                <FiX className="w-5 h-5" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-tertiary)]">
+                  {ttsLanguage === 'fr' ? 'Langue' : 'Language'}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTtsLanguage('en')}
+                    className="flex-1 h-11 border text-xs font-medium uppercase tracking-wider"
+                    style={{
+                      borderColor: ttsLanguage === 'en' ? 'var(--color-text)' : 'var(--color-border)',
+                      background: ttsLanguage === 'en' ? 'var(--color-text)' : 'transparent',
+                      color: ttsLanguage === 'en' ? 'var(--color-bg)' : 'var(--color-text)',
+                    }}
+                  >
+                    English
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTtsLanguage('fr')}
+                    className="flex-1 h-11 border text-xs font-medium uppercase tracking-wider"
+                    style={{
+                      borderColor: ttsLanguage === 'fr' ? 'var(--color-text)' : 'var(--color-border)',
+                      background: ttsLanguage === 'fr' ? 'var(--color-text)' : 'transparent',
+                      color: ttsLanguage === 'fr' ? 'var(--color-bg)' : 'var(--color-text)',
+                    }}
+                  >
+                    Français
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-tertiary)]">
+                    {ttsLanguage === 'fr' ? 'Vitesse' : 'Speed'}
+                  </span>
+                  <span className="text-[10px] mono text-[var(--color-text-secondary)]">
+                    {ttsSpeed.toFixed(2)}x
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2.5}
+                  step={0.05}
+                  value={ttsSpeed}
+                  onChange={(e) => setTtsSpeed(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  {ttsLanguage === 'fr'
+                    ? 'La vitesse par défaut Minimax est 1.30.'
+                    : 'Minimax default speed is 1.30.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="h-safe-bottom" />
+          </div>
+        </div>
+      )}
+
       {/* Lesson Card Sheet (Study Mode - Before Answer) */}
       {showLessonSheet && hasLessonCard && (
         <div className="fixed inset-0 z-50">
@@ -1248,6 +1334,7 @@ export default function MobileMCQViewerPage() {
                   <SpeakButton 
                     text={`${currentQuestion.lesson_card?.title}. ${currentQuestion.lesson_card?.conceptOverview}`} 
                     language={ttsLanguage}
+                    speed={ttsSpeed}
                     size="sm"
                   />
                 </div>
@@ -1317,6 +1404,7 @@ export default function MobileMCQViewerPage() {
                   <SpeakButton 
                     text={`${currentQuestion.lesson_card?.title}. ${currentQuestion.lesson_card?.conceptOverview}. ${currentQuestion.explanation || ''}`} 
                     language={ttsLanguage}
+                    speed={ttsSpeed}
                     size="md"
                   />
                 </div>
@@ -1496,6 +1584,8 @@ export default function MobileMCQViewerPage() {
                         onClick={() => {
                           try {
                             const a = new Audio(message.audioUrl!)
+                            const base = Number(message.audioSpeed) || 1.3
+                            a.playbackRate = ttsSpeed / base
                             a.play().catch(() => {})
                           } catch {}
                         }}

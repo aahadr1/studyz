@@ -107,13 +107,19 @@ export async function generateTtsAudioUrl(params: {
   text: string
   language: TtsLanguage
   voice: TtsVoiceGender
-}): Promise<{ audioUrl: string; voiceId: string; language: string }> {
+  speed?: number
+}): Promise<{ audioUrl: string; voiceId: string; language: string; speed: number }> {
   const apiToken = process.env.REPLICATE_API_TOKEN
   if (!apiToken) throw new Error('TTS not configured. Set REPLICATE_API_TOKEN.')
 
   const voiceId = VOICES[params.language]?.[params.voice] || VOICES.en.male
   const languageBoost = params.language === 'fr' ? 'French' : 'English'
   const version = await getLatestMinimaxVersion(apiToken)
+  const safeSpeed = (() => {
+    const n = Number(params.speed ?? 1.3)
+    if (!Number.isFinite(n)) return 1.3
+    return Math.max(0.5, Math.min(2.5, n))
+  })()
 
   const createResponse = await fetch('https://api.replicate.com/v1/predictions', {
     method: 'POST',
@@ -126,7 +132,7 @@ export async function generateTtsAudioUrl(params: {
       input: {
         text: params.text.trim().substring(0, 10000),
         voice_id: voiceId,
-        speed: 1,
+        speed: safeSpeed,
         emotion: 'auto',
         pitch: 0,
         volume: 1,
@@ -160,6 +166,6 @@ export async function generateTtsAudioUrl(params: {
   if (prediction.status === 'failed') throw new Error(prediction.error || 'TTS generation failed')
   if (!prediction.output) throw new Error('TTS timed out or no output')
 
-  return { audioUrl: String(prediction.output), voiceId, language: params.language }
+  return { audioUrl: String(prediction.output), voiceId, language: params.language, speed: safeSpeed }
 }
 

@@ -105,6 +105,11 @@ ${currentQuestion.lesson_card.keyPoints?.length ? `- Key Points: ${currentQuesti
     }
 
     const ttsLanguage: 'en' | 'fr' = userState?.ttsLanguage === 'fr' ? 'fr' : 'en'
+    const ttsSpeed: number = (() => {
+      const n = Number(userState?.ttsSpeed ?? 1.3)
+      if (!Number.isFinite(n)) return 1.3
+      return Math.max(0.5, Math.min(2.5, n))
+    })()
     const stateContext = userState ? `
 Student state (real-time):
 - Mode: ${userState.mode || 'unknown'}
@@ -182,7 +187,7 @@ Guidelines:
 
     // Generate TTS automatically for the assistant response
     const ttsReadyText = await makeTtsReadyText(assistantResponse, getOpenAI(), ttsLanguage)
-    const tts = await generateTtsAudioUrl({ text: ttsReadyText, language: ttsLanguage, voice: 'male' })
+    const tts = await generateTtsAudioUrl({ text: ttsReadyText, language: ttsLanguage, voice: 'male', speed: ttsSpeed })
 
     return NextResponse.json({
       response: assistantResponse,
@@ -190,6 +195,7 @@ Guidelines:
         audioUrl: tts.audioUrl,
         language: tts.language,
         voiceId: tts.voiceId,
+        speed: tts.speed,
         ttsText: ttsReadyText,
       }
     })

@@ -63,6 +63,7 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   audioUrl?: string
+  audioSpeed?: number
 }
 
 interface SessionStats {
@@ -100,6 +101,7 @@ export default function MCQViewer({
   
   const [challengeTimeLeft, setChallengeTimeLeft] = useState(30)
   const [ttsLanguage, setTtsLanguage] = useState<'en' | 'fr'>('en')
+  const [ttsSpeed, setTtsSpeed] = useState<number>(1.3)
   
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -327,11 +329,13 @@ export default function MCQViewer({
     lastAutoPlayedAudioId.current = last.id
     try {
       const audio = new Audio(last.audioUrl)
+      const base = Number(last.audioSpeed) || 1.3
+      audio.playbackRate = ttsSpeed / base
       audio.play().catch(() => {})
     } catch {
       // ignore
     }
-  }, [chatMessages])
+  }, [chatMessages, ttsSpeed])
 
   const handleSendChat = async (messageOverride?: string) => {
     const message = (typeof messageOverride === 'string' ? messageOverride : chatInput).trim()
@@ -380,6 +384,7 @@ export default function MCQViewer({
             hasChecked,
             isCorrect,
             ttsLanguage,
+            ttsSpeed,
           },
           conversationHistory: chatMessages.slice(-10),
         }),
@@ -393,6 +398,7 @@ export default function MCQViewer({
           role: 'assistant',
           content: data.response,
           audioUrl: data?.tts?.audioUrl,
+          audioSpeed: data?.tts?.speed,
         }
         setChatMessages(prev => [...prev, assistantMessage])
       } else {
@@ -749,6 +755,7 @@ export default function MCQViewer({
                         : ''
                     }`} 
                     language={ttsLanguage}
+                    speed={ttsSpeed}
                     size="sm"
                   />
                 </div>
@@ -778,6 +785,7 @@ export default function MCQViewer({
                 <SpeakButton 
                   text={currentQuestion.question} 
                   language={ttsLanguage}
+                  speed={ttsSpeed}
                   size="md"
                   showLanguageToggle
                 />
@@ -854,6 +862,7 @@ export default function MCQViewer({
                           <SpeakButton 
                             text={currentQuestion.explanation} 
                             language={ttsLanguage}
+                            speed={ttsSpeed}
                             size="sm"
                           />
                         )}
@@ -882,6 +891,7 @@ export default function MCQViewer({
                     <SpeakButton 
                       text={currentQuestion.lesson_card.conceptOverview} 
                       language={ttsLanguage}
+                      speed={ttsSpeed}
                       size="sm"
                     />
                   </div>
@@ -957,6 +967,23 @@ export default function MCQViewer({
                 >
                   FR
                 </button>
+              </div>
+              <div className="flex items-center gap-2 border border-border px-2 py-1">
+                <span className="text-[10px] uppercase tracking-wider text-text-tertiary">
+                  {ttsLanguage === 'fr' ? 'Vitesse' : 'Speed'}
+                </span>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2.5}
+                  step={0.05}
+                  value={ttsSpeed}
+                  onChange={(e) => setTtsSpeed(parseFloat(e.target.value))}
+                  className="w-28"
+                />
+                <span className="text-[10px] mono text-text-tertiary min-w-[44px] text-right">
+                  {ttsSpeed.toFixed(2)}x
+                </span>
               </div>
             </div>
           </>
@@ -1088,6 +1115,8 @@ export default function MCQViewer({
                             onClick={() => {
                               try {
                                 const a = new Audio(message.audioUrl!)
+                                const base = Number(message.audioSpeed) || 1.3
+                                a.playbackRate = ttsSpeed / base
                                 a.play().catch(() => {})
                               } catch {}
                             }}
