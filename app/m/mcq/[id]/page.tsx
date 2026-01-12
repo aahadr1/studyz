@@ -332,6 +332,13 @@ export default function MobileMCQViewerPage() {
     }
   }
 
+  const getExplainCorrectAnswersPrompt = useCallback(() => {
+    if (ttsLanguage === 'fr') {
+      return `Explique-moi les bonnes réponses de ce QCM. Commence par les bonnes options, puis explique brièvement pourquoi les autres options sont fausses. Utilise un langage simple.`
+    }
+    return `Explain the correct answers for this MCQ. Start with the correct option(s), then briefly explain why the other options are wrong. Use simple language.`
+  }, [ttsLanguage])
+
   const formatChatRecordingTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -1679,6 +1686,12 @@ export default function MobileMCQViewerPage() {
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.altKey) {
+                      e.preventDefault()
+                      const prompt = getExplainCorrectAnswersPrompt()
+                      handleSendChat(prompt)
+                      return
+                    }
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault()
                       if (chatRecording) stopChatRecording()

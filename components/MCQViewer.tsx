@@ -452,6 +452,13 @@ export default function MCQViewer({
     }
   }
 
+  const getExplainCorrectAnswersPrompt = useCallback(() => {
+    if (ttsLanguage === 'fr') {
+      return `Explique-moi les bonnes réponses de ce QCM. Commence par les bonnes options, puis explique brièvement pourquoi les autres options sont fausses. Utilise un langage simple.`
+    }
+    return `Explain the correct answers for this MCQ. Start with the correct option(s), then briefly explain why the other options are wrong. Use simple language.`
+  }, [ttsLanguage])
+
   const formatChatRecordingTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -568,6 +575,23 @@ export default function MCQViewer({
   const clearChat = () => {
     setChatMessages([])
   }
+
+  // Global shortcut: Option/Alt + Enter sends a quick prompt for the CURRENT question (when chat is open)
+  useEffect(() => {
+    if (!showChatSidebar) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      // avoid firing while typing inside inputs (textarea handles it)
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key === 'Enter' && e.altKey) {
+        e.preventDefault()
+        const prompt = getExplainCorrectAnswersPrompt()
+        handleSendChat(prompt)
+        chatInputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [showChatSidebar, getExplainCorrectAnswersPrompt])
 
   if (!questions || questions.length === 0) {
     return (
@@ -1211,6 +1235,12 @@ export default function MCQViewer({
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.altKey) {
+                        e.preventDefault()
+                        const prompt = getExplainCorrectAnswersPrompt()
+                        handleSendChat(prompt)
+                        return
+                      }
                       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault()
                         if (chatRecording) stopChatRecording()
@@ -1239,7 +1269,7 @@ export default function MCQViewer({
                 <p className="mt-2 text-[10px] text-text-tertiary">
                   {chatRecording
                     ? `Recording… ${formatChatRecordingTime(chatRecordingSeconds)} · Cmd/Ctrl+Enter or mic to stop`
-                    : 'Enter: send · Shift+Enter: new line · Cmd/Ctrl+Enter: voice'}
+                    : 'Enter: send · Shift+Enter: new line · Cmd/Ctrl+Enter: voice · Option/Alt+Enter: explain correct answers'}
                 </p>
               </div>
             </div>
