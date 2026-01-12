@@ -81,6 +81,7 @@ export async function POST(
       .select('*')
       .eq('mcq_set_id', mcqSetId)
       .order('page_number', { ascending: true })
+      .order('page_question_index', { ascending: true })
 
     if (questionsError) {
       return NextResponse.json({ error: 'Failed to fetch questions' }, { status: 500 })

@@ -173,9 +173,10 @@ Return a JSON object with this exact structure:
     console.log(`Extracted ${questions.length} questions from text chunk ${chunkIndex + 1}`)
 
     // Insert extracted questions into database
-    const questionRecords = questions.map((q: any) => ({
+    const questionRecords = questions.map((q: any, idx: number) => ({
       mcq_set_id: mcqSetId,
       page_number: chunkIndex + 1, // Use chunk index as "page number"
+      page_question_index: idx,
       question: q.question,
       options: q.options,
       question_type: q.questionType || ((q.correctOptions || []).length > 1 ? 'mcq' : 'scq'),

@@ -198,9 +198,10 @@ export async function POST(
 
       if (questions.length > 0) {
         // Insert questions into database
-        const questionRecords = questions.map((q) => ({
+        const questionRecords = questions.map((q, idx) => ({
           mcq_set_id: mcqSetId,
           page_number: pageNumber,
+          page_question_index: idx,
           question: q.question,
           options: q.options,
           question_type: q.questionType || ((q.correctOptions || []).length > 1 ? 'mcq' : 'scq'),

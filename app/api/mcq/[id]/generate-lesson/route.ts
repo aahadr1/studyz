@@ -60,6 +60,7 @@ export async function POST(
       .select('id, question, options, question_type, correct_options, correct_option, explanation')
       .eq('mcq_set_id', mcqSetId)
       .order('page_number', { ascending: true })
+      .order('page_question_index', { ascending: true })
 
     if (questionsError || !questions || questions.length === 0) {
       return NextResponse.json({ error: 'No questions found to generate lesson from' }, { status: 400 })

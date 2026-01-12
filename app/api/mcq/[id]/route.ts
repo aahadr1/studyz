@@ -66,6 +66,7 @@ export async function GET(
       .select('*')
       .eq('mcq_set_id', id)
       .order('page_number', { ascending: true })
+      .order('page_question_index', { ascending: true })
 
     if (questionsError) {
       console.error('Error fetching questions:', questionsError)

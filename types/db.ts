@@ -88,6 +88,7 @@ export interface McqQuestion {
   id: string
   mcq_set_id: string
   page_number: number
+  page_question_index?: number
   question: string
   options: Array<{ label: string; text: string }>
   correct_option: string
