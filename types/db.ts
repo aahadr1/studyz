@@ -114,6 +114,7 @@ export interface McqSession {
   correct_answers: number
   total_time_seconds: number
   is_completed: boolean
+  question_ids?: string[]
 }
 
 export interface McqSessionAnswer {

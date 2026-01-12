@@ -23,13 +23,27 @@ interface MCQEditorProps {
   mcqSetId: string
   accessToken: string
   onUpdate: (questions: MCQQuestionData[]) => void
+  enableSelection?: boolean
+  onSelectionChange?: (selectedIds: string[]) => void
 }
 
-export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }: MCQEditorProps) {
+export default function MCQEditor({
+  questions,
+  mcqSetId,
+  accessToken,
+  onUpdate,
+  enableSelection = false,
+  onSelectionChange,
+}: MCQEditorProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editData, setEditData] = useState<MCQQuestionData | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const emitSelection = (next: Set<string>) => {
+    onSelectionChange?.(Array.from(next))
+  }
 
   const handleEdit = (question: MCQQuestionData) => {
     setEditingId(question.id)
@@ -108,6 +122,14 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
 
       if (response.ok) {
         onUpdate(questions.filter(q => q.id !== questionId))
+        if (enableSelection) {
+          setSelectedIds(prev => {
+            const next = new Set(prev)
+            next.delete(questionId)
+            emitSelection(next)
+            return next
+          })
+        }
       }
     } catch (err) {
       console.error('Error deleting question:', err)
@@ -179,6 +201,32 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
         <h2 className="text-xl font-semibold text-text-primary">
           Edit Questions ({questions.length})
         </h2>
+        {enableSelection && questions.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              onClick={() => {
+                const next = new Set(questions.map(q => q.id))
+                setSelectedIds(next)
+                emitSelection(next)
+              }}
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              onClick={() => {
+                const next = new Set<string>()
+                setSelectedIds(next)
+                emitSelection(next)
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
       </div>
 
       {questions.length === 0 ? (
@@ -331,6 +379,23 @@ export default function MCQEditor({ questions, mcqSetId, accessToken, onUpdate }
                 <div>
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="flex items-start gap-3">
+                      {enableSelection && (
+                        <input
+                          type="checkbox"
+                          className="mt-2"
+                          checked={selectedIds.has(q.id)}
+                          onChange={(e) => {
+                            const checked = e.target.checked
+                            setSelectedIds(prev => {
+                              const next = new Set(prev)
+                              if (checked) next.add(q.id)
+                              else next.delete(q.id)
+                              emitSelection(next)
+                              return next
+                            })
+                          }}
+                        />
+                      )}
                       <span className="flex-shrink-0 w-8 h-8 bg-accent text-white rounded-full flex items-center justify-center font-semibold text-sm">
                         {qIndex + 1}
                       </span>

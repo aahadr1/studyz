@@ -39,7 +39,23 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { mode = 'test', totalQuestions } = body
+    const {
+      mode = 'test',
+      totalQuestions,
+      questionIds,
+    } = body as {
+      mode?: string
+      totalQuestions?: number
+      questionIds?: string[]
+    }
+
+    const normalizedQuestionIds = Array.isArray(questionIds)
+      ? questionIds.filter((x) => typeof x === 'string' && x.length > 0)
+      : null
+    const resolvedTotal =
+      typeof totalQuestions === 'number'
+        ? totalQuestions
+        : (normalizedQuestionIds ? normalizedQuestionIds.length : 0)
 
     // Create new session
     const { data: session, error: sessionError } = await supabase
@@ -48,7 +64,8 @@ export async function POST(
         mcq_set_id: mcqSetId,
         user_id: user.id,
         mode,
-        total_questions: totalQuestions,
+        total_questions: resolvedTotal,
+        question_ids: normalizedQuestionIds ?? [],
       })
       .select()
       .single()
@@ -86,8 +103,10 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get the latest incomplete session
-    const { data: session, error: sessionError } = await supabase
+    const url = new URL(request.url)
+    const sessionId = url.searchParams.get('sessionId')
+
+    const baseQuery = supabase
       .from('mcq_sessions')
       .select(`
         *,
@@ -100,6 +119,23 @@ export async function GET(
       `)
       .eq('mcq_set_id', mcqSetId)
       .eq('user_id', user.id)
+
+    // Fetch a specific session when sessionId is provided (used for "study selection")
+    if (sessionId) {
+      const { data: session, error: sessionError } = await baseQuery
+        .eq('id', sessionId)
+        .single()
+
+      if (sessionError) {
+        console.error('Error fetching session by id:', sessionError)
+        return NextResponse.json({ error: 'Failed to fetch session' }, { status: 500 })
+      }
+
+      return NextResponse.json({ session: session || null })
+    }
+
+    // Otherwise, return the latest incomplete session
+    const { data: session, error: sessionError } = await baseQuery
       .eq('is_completed', false)
       .order('started_at', { ascending: false })
       .limit(1)

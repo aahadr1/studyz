@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { FiLoader, FiEdit2, FiBook, FiZap, FiCheck, FiArrowLeft } from 'react-icons/fi'
 import Link from 'next/link'
@@ -9,11 +9,14 @@ import MCQViewer, { MCQQuestion, Lesson } from '@/components/MCQViewer'
 
 export default function MCQSetPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const mcqSetId = params.id as string
+  const sessionId = searchParams.get('session')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mcqSet, setMcqSet] = useState<any>(null)
   const [questions, setQuestions] = useState<MCQQuestion[]>([])
+  const [activeSessionQuestionIds, setActiveSessionQuestionIds] = useState<string[] | null>(null)
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [generatingLesson, setGeneratingLesson] = useState(false)
   const [generatingLessonCards, setGeneratingLessonCards] = useState(false)
@@ -50,8 +53,33 @@ export default function MCQSetPage() {
 
         const data = await response.json()
         setMcqSet(data.set)
-        setQuestions(data.questions || [])
         setLesson(data.set.lesson_content || null)
+
+        let nextQuestions: MCQQuestion[] = data.questions || []
+
+        if (sessionId) {
+          const sessionRes = await fetch(
+            `/api/mcq/${mcqSetId}/session?sessionId=${encodeURIComponent(sessionId)}`,
+            { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+          )
+          const sessionData = await sessionRes.json()
+          const ids: string[] | null =
+            sessionRes.ok && Array.isArray(sessionData.session?.question_ids)
+              ? sessionData.session.question_ids
+              : null
+
+          if (ids && ids.length > 0) {
+            setActiveSessionQuestionIds(ids)
+            const byId = new Map(nextQuestions.map((q: any) => [q.id, q]))
+            nextQuestions = ids.map(id => byId.get(id)).filter(Boolean) as MCQQuestion[]
+          } else {
+            setActiveSessionQuestionIds(null)
+          }
+        } else {
+          setActiveSessionQuestionIds(null)
+        }
+
+        setQuestions(nextQuestions)
       } catch (err: any) {
         console.error('Load error:', err)
         setError(err.message || 'Failed to load MCQ set')
@@ -61,7 +89,7 @@ export default function MCQSetPage() {
     }
 
     loadMCQSet()
-  }, [mcqSetId])
+  }, [mcqSetId, sessionId])
 
   const handleGenerateLesson = async () => {
     setGeneratingLesson(true)
@@ -306,8 +334,24 @@ export default function MCQSetPage() {
       {/* Content */}
       <main className="p-8">
         <div className="max-w-7xl mx-auto">
+          {sessionId && activeSessionQuestionIds && (
+            <div className="mb-4 p-3 border border-border rounded bg-surface flex items-center justify-between">
+              <p className="text-sm text-text-secondary">
+                Studying a selection of{' '}
+                <span className="font-medium text-text-primary">{activeSessionQuestionIds.length}</span> questions.
+              </p>
+              <Link href={`/mcq/${mcqSetId}`} className="btn-secondary text-xs">
+                Clear selection
+              </Link>
+            </div>
+          )}
           {questions.length > 0 ? (
-            <MCQViewer questions={questions} lesson={lesson} mcqSetId={mcqSetId} />
+            <MCQViewer
+              questions={questions}
+              lesson={lesson}
+              mcqSetId={sessionId ? `${mcqSetId}:${sessionId}` : mcqSetId}
+              initialMode={sessionId ? 'study' : undefined}
+            />
           ) : (
             <div className="border border-border p-8 text-center">
               <p className="text-text-secondary">No questions found in this set.</p>

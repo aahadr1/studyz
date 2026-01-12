@@ -36,6 +36,8 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [accessToken, setAccessToken] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [startingSelection, setStartingSelection] = useState(false)
   
   // Editing state
   const [editingQuestion, setEditingQuestion] = useState<MCQQuestion | null>(null)
@@ -162,9 +164,42 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
 
       if (response.ok) {
         setQuestions(questions.filter(q => q.id !== questionId))
+        setSelectedIds(prev => {
+          const next = new Set(prev)
+          next.delete(questionId)
+          return next
+        })
       }
     } catch (error) {
       console.error('Error deleting question:', error)
+    }
+  }
+
+  const handleStudySelected = async () => {
+    if (!accessToken || selectedIds.size === 0 || startingSelection) return
+    setStartingSelection(true)
+    try {
+      const orderedIds = questions.map(q => q.id).filter(id => selectedIds.has(id))
+      const res = await fetch(`/api/mcq/${mcqSetId}/session`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'study',
+          questionIds: orderedIds,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to create session')
+      const sessionId = data.session?.id
+      if (!sessionId) throw new Error('Missing session id')
+      router.push(`/m/mcq/${mcqSetId}?session=${sessionId}`)
+    } catch (e) {
+      console.error('Failed to start selection session:', e)
+    } finally {
+      setStartingSelection(false)
     }
   }
 
@@ -182,12 +217,25 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
         title="Edit Questions"
         backHref={`/m/mcq/${mcqSetId}`}
         rightAction={
-          <button 
-            onClick={() => router.push(`/m/mcq/${mcqSetId}`)}
-            className="mobile-header-action"
-          >
-            <FiPlay className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleStudySelected}
+                className="mobile-header-action"
+                title="Study selected"
+                disabled={startingSelection}
+              >
+                <FiPlay className="w-5 h-5" />
+              </button>
+            )}
+            <button 
+              onClick={() => router.push(`/m/mcq/${mcqSetId}`)}
+              className="mobile-header-action"
+              title="Practice all"
+            >
+              <FiPlay className="w-5 h-5" />
+            </button>
+          </div>
         }
       />
 
@@ -208,6 +256,20 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
               className="mobile-card p-4"
             >
               <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={selectedIds.has(question.id)}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setSelectedIds(prev => {
+                      const next = new Set(prev)
+                      if (checked) next.add(question.id)
+                      else next.delete(question.id)
+                      return next
+                    })
+                  }}
+                />
                 <div className="w-7 h-7 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-bold text-[var(--color-text-secondary)]">
                     {index + 1}

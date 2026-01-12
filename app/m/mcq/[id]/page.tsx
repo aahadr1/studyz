@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
   FiChevronLeft, 
@@ -75,11 +75,14 @@ export default function MobileMCQViewerPage() {
   const params = useParams()
   const router = useRouter()
   const mcqSetId = params.id as string
+  const searchParams = useSearchParams()
+  const sessionId = searchParams.get('session')
 
   // Data state
   const [mcqSet, setMcqSet] = useState<any>(null)
   const [questions, setQuestions] = useState<MCQQuestion[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeSessionQuestionIds, setActiveSessionQuestionIds] = useState<string[] | null>(null)
 
   // Quiz state
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -126,7 +129,7 @@ export default function MobileMCQViewerPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [mcqSetId])
+  }, [mcqSetId, sessionId])
 
   // Load progress from localStorage after questions are loaded
   useEffect(() => {
@@ -281,7 +284,30 @@ export default function MobileMCQViewerPage() {
       if (response.ok) {
         const data = await response.json()
         setMcqSet(data.set)
-        const loadedQuestions = data.questions || []
+        let loadedQuestions: MCQQuestion[] = data.questions || []
+
+        if (sessionId) {
+          const sessionRes = await fetch(
+            `/api/mcq/${mcqSetId}/session?sessionId=${encodeURIComponent(sessionId)}`,
+            { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+          )
+          const sessionData = await sessionRes.json()
+          const ids: string[] | null =
+            sessionRes.ok && Array.isArray(sessionData.session?.question_ids)
+              ? sessionData.session.question_ids
+              : null
+
+          if (ids && ids.length > 0) {
+            setActiveSessionQuestionIds(ids)
+            const byId = new Map(loadedQuestions.map((q: any) => [q.id, q]))
+            loadedQuestions = ids.map(id => byId.get(id)).filter(Boolean) as MCQQuestion[]
+          } else {
+            setActiveSessionQuestionIds(null)
+          }
+        } else {
+          setActiveSessionQuestionIds(null)
+        }
+
         setQuestions(loadedQuestions)
         // Shuffle questions for test/challenge modes
         setShuffledQuestions(shuffleArray(loadedQuestions))

@@ -12,6 +12,8 @@ export default function MCQEditPage({ params }: { params: { id: string } }) {
   const [mcqSet, setMcqSet] = useState<any>(null)
   const [questions, setQuestions] = useState<MCQQuestionData[]>([])
   const [accessToken, setAccessToken] = useState<string>('')
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([])
+  const [startingSelection, setStartingSelection] = useState(false)
 
   useEffect(() => {
     const loadMCQSet = async () => {
@@ -66,6 +68,37 @@ export default function MCQEditPage({ params }: { params: { id: string } }) {
     }
   }
 
+  const handleStudySelected = async () => {
+    if (!accessToken || selectedQuestionIds.length === 0) return
+    setStartingSelection(true)
+    try {
+      const orderedIds = questions
+        .map(q => q.id)
+        .filter(id => selectedQuestionIds.includes(id))
+
+      const res = await fetch(`/api/mcq/${params.id}/session`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'study',
+          questionIds: orderedIds,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to create session')
+      const sessionId = data.session?.id
+      if (!sessionId) throw new Error('Missing session id')
+      window.location.href = `/mcq/${params.id}?session=${sessionId}`
+    } catch (e) {
+      console.error('Failed to start selection session:', e)
+    } finally {
+      setStartingSelection(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -111,6 +144,16 @@ export default function MCQEditPage({ params }: { params: { id: string } }) {
             <FiPlay className="w-4 h-4" />
             Practice
           </Link>
+          {selectedQuestionIds.length > 0 && (
+            <button
+              onClick={handleStudySelected}
+              disabled={startingSelection}
+              className="btn-secondary"
+            >
+              {startingSelection ? <span className="spinner w-4 h-4" /> : <FiPlay className="w-4 h-4" />}
+              Study selected ({selectedQuestionIds.length})
+            </button>
+          )}
         </div>
       </header>
 
@@ -122,6 +165,8 @@ export default function MCQEditPage({ params }: { params: { id: string } }) {
             mcqSetId={params.id}
             accessToken={accessToken}
             onUpdate={handleQuestionsUpdate}
+            enableSelection={true}
+            onSelectionChange={setSelectedQuestionIds}
           />
         </div>
       </main>
