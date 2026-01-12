@@ -112,10 +112,11 @@ export default function MobileMCQViewerPage() {
 
   // Chat state
   const [chatOpen, setChatOpen] = useState(false)
-  const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; content: string }>>([])
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; content: string; audioUrl?: string }>>([])
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
+  const lastAutoPlayedAudioId = useRef<string | null>(null)
 
   // Touch handling
   const touchStartX = useRef<number>(0)
@@ -215,6 +216,18 @@ export default function MobileMCQViewerPage() {
     }
   }, [chatMessages, chatOpen])
 
+  // Auto-play last assistant audio
+  useEffect(() => {
+    const last = chatMessages[chatMessages.length - 1]
+    if (!last || last.role !== 'assistant' || !last.audioUrl) return
+    if (lastAutoPlayedAudioId.current === last.id) return
+    lastAutoPlayedAudioId.current = last.id
+    try {
+      const audio = new Audio(last.audioUrl)
+      audio.play().catch(() => {})
+    } catch {}
+  }, [chatMessages])
+
   const handleSendChat = async () => {
     if (!chatInput.trim() || chatSending) return
 
@@ -256,6 +269,7 @@ export default function MobileMCQViewerPage() {
             selectedOptions: Array.from(selectedOptions),
             hasChecked,
             isCorrect,
+            ttsLanguage,
           },
           conversationHistory: chatMessages.slice(-10),
         }),
@@ -268,6 +282,7 @@ export default function MobileMCQViewerPage() {
           id: `assistant-${Date.now()}`,
           role: 'assistant' as const,
           content: data.response,
+          audioUrl: data?.tts?.audioUrl,
         }
         setChatMessages(prev => [...prev, assistantMessage])
       } else {
@@ -1350,6 +1365,21 @@ export default function MobileMCQViewerPage() {
                           {message.content}
                         </ReactMarkdown>
                       </div>
+                    )}
+                    {message.role === 'assistant' && message.audioUrl && (
+                      <button
+                        type="button"
+                        className="mt-2 flex items-center gap-2 text-xs border border-[var(--color-border)] px-3 py-2"
+                        onClick={() => {
+                          try {
+                            const a = new Audio(message.audioUrl!)
+                            a.play().catch(() => {})
+                          } catch {}
+                        }}
+                      >
+                        <FiVolume2 className="w-4 h-4" strokeWidth={1.5} />
+                        Play audio
+                      </button>
                     )}
                   </div>
                 ))

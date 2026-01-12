@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
+import { generateTtsAudioUrl, makeTtsReadyText } from '@/lib/tts'
 
 // Create a Supabase client with service role for server-side operations
 function createServerClient() {
@@ -103,6 +104,7 @@ ${currentQuestion.lesson_card.keyPoints?.length ? `- Key Points: ${currentQuesti
 `
     }
 
+    const ttsLanguage: 'en' | 'fr' = userState?.ttsLanguage === 'fr' ? 'fr' : 'en'
     const stateContext = userState ? `
 Student state (real-time):
 - Mode: ${userState.mode || 'unknown'}
@@ -117,6 +119,18 @@ Student state (real-time):
 
 ${questionContext ? `The student is currently looking at this question:\n${questionContext}` : ''}
 ${stateContext}
+
+ABSOLUTE FORMAT RULES (MUST FOLLOW):
+- You MUST assume the student is looking at the MCQ right now and wants you to explain it fully.
+- You MUST use the correct answer(s) provided above (from the app). Never invent a different answer key.
+- You MUST start with the correct option(s) first, then cover the incorrect options.
+- For EACH option (A, B, C, ...):
+  1) Explain what the option means (in your own words).
+  2) State whether it is correct/incorrect.
+  3) Explain WHY it is correct/incorrect.
+  4) Rewrite the idea in simpler language (very easy).
+- If the question is MCQ (multiple correct), explain why each correct option is correct and why each incorrect option is incorrect.
+- Respond in ${ttsLanguage === 'fr' ? 'French' : 'English'}.
 
 Your capabilities:
 - Explain why the correct answer is correct
@@ -156,13 +170,23 @@ Guidelines:
       model: 'gpt-4.1',
       messages,
       max_tokens: 1500,
-      temperature: 0.7,
+      temperature: 0.4,
     })
 
     const assistantResponse = completion.choices[0]?.message?.content || 'I apologize, but I could not generate a response.'
 
+    // Generate TTS automatically for the assistant response
+    const ttsReadyText = await makeTtsReadyText(assistantResponse, getOpenAI(), ttsLanguage)
+    const tts = await generateTtsAudioUrl({ text: ttsReadyText, language: ttsLanguage, voice: 'male' })
+
     return NextResponse.json({
       response: assistantResponse,
+      tts: {
+        audioUrl: tts.audioUrl,
+        language: tts.language,
+        voiceId: tts.voiceId,
+        ttsText: ttsReadyText,
+      }
     })
   } catch (error) {
     console.error('MCQ Chat POST error:', error)

@@ -62,6 +62,7 @@ interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  audioUrl?: string
 }
 
 interface SessionStats {
@@ -105,6 +106,7 @@ export default function MCQViewer({
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
+  const lastAutoPlayedAudioId = useRef<string | null>(null)
   
   const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({})
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -310,6 +312,20 @@ export default function MCQViewer({
     }
   }, [chatMessages, showChatSidebar])
 
+  // Auto-play the last assistant audio (when provided)
+  useEffect(() => {
+    const last = chatMessages[chatMessages.length - 1]
+    if (!last || last.role !== 'assistant' || !last.audioUrl) return
+    if (lastAutoPlayedAudioId.current === last.id) return
+    lastAutoPlayedAudioId.current = last.id
+    try {
+      const audio = new Audio(last.audioUrl)
+      audio.play().catch(() => {})
+    } catch {
+      // ignore
+    }
+  }, [chatMessages])
+
   const handleSendChat = async () => {
     if (!chatInput.trim() || chatSending || !mcqSetId) return
 
@@ -355,6 +371,7 @@ export default function MCQViewer({
             selectedOptions: Array.from(selectedOptions),
             hasChecked,
             isCorrect,
+            ttsLanguage,
           },
           conversationHistory: chatMessages.slice(-10),
         }),
@@ -367,6 +384,7 @@ export default function MCQViewer({
           id: `assistant-${Date.now()}`,
           role: 'assistant',
           content: data.response,
+          audioUrl: data?.tts?.audioUrl,
         }
         setChatMessages(prev => [...prev, assistantMessage])
       } else {
@@ -939,6 +957,23 @@ export default function MCQViewer({
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {message.content}
                           </ReactMarkdown>
+                        </div>
+                      )}
+                      {message.role === 'assistant' && message.audioUrl && (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs"
+                            onClick={() => {
+                              try {
+                                const a = new Audio(message.audioUrl!)
+                                a.play().catch(() => {})
+                              } catch {}
+                            }}
+                          >
+                            <FiVolume2 className="w-3.5 h-3.5" />
+                            Play audio
+                          </button>
                         </div>
                       )}
                     </div>
