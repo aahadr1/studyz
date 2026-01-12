@@ -313,6 +313,10 @@ export default function MCQViewer({
   const handleSendChat = async () => {
     if (!chatInput.trim() || chatSending || !mcqSetId) return
 
+    // mcqSetId is also used as a localStorage key; for "study selected" we suffix it with :sessionId.
+    // The API route expects the real MCQ set UUID only.
+    const apiMcqSetId = mcqSetId.includes(':') ? mcqSetId.split(':')[0] : mcqSetId
+
     const userMessage = chatInput.trim()
     setChatInput('')
     setChatSending(true)
@@ -335,7 +339,7 @@ export default function MCQViewer({
         return
       }
 
-      const response = await fetch(`/api/mcq/${mcqSetId}/chat`, {
+      const response = await fetch(`/api/mcq/${apiMcqSetId}/chat`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
