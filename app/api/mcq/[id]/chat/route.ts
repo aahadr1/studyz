@@ -50,10 +50,14 @@ export async function POST(
     }
 
     // Parse request body
-    const { message, currentQuestion, conversationHistory = [] } = await request.json()
+    const { message, currentQuestion, conversationHistory = [], userState } = await request.json()
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: 'AI is not configured on the server (missing OPENAI_API_KEY)' }, { status: 500 })
     }
 
     // Verify MCQ set ownership
@@ -71,6 +75,13 @@ export async function POST(
     // Build context about the current question
     let questionContext = ''
     if (currentQuestion) {
+      const correctOptions: string[] =
+        Array.isArray(currentQuestion.correctOptions) && currentQuestion.correctOptions.length > 0
+          ? currentQuestion.correctOptions
+          : (currentQuestion.correctOption ? [currentQuestion.correctOption] : [])
+      const questionType: 'scq' | 'mcq' =
+        currentQuestion.questionType === 'mcq' || correctOptions.length > 1 ? 'mcq' : 'scq'
+
       questionContext = `
 Current Question:
 "${currentQuestion.question}"
@@ -78,7 +89,8 @@ Current Question:
 Options:
 ${currentQuestion.options?.map((opt: any) => `${opt.label}. ${opt.text}`).join('\n') || 'No options available'}
 
-Correct Answer: ${currentQuestion.correctOption || 'Unknown'}
+Question Type: ${questionType.toUpperCase()}
+Correct Answer(s): ${correctOptions.length > 0 ? correctOptions.join(', ') : 'Unknown'}
 
 ${currentQuestion.explanation ? `Explanation: ${currentQuestion.explanation}` : ''}
 
@@ -91,10 +103,20 @@ ${currentQuestion.lesson_card.keyPoints?.length ? `- Key Points: ${currentQuesti
 `
     }
 
+    const stateContext = userState ? `
+Student state (real-time):
+- Mode: ${userState.mode || 'unknown'}
+- Progress: ${typeof userState.currentIndex === 'number' ? (userState.currentIndex + 1) : '?'} / ${userState.totalQuestions ?? '?'}
+- Selected option(s): ${Array.isArray(userState.selectedOptions) ? userState.selectedOptions.join(', ') : 'none'}
+- Has checked answer: ${userState.hasChecked ? 'yes' : 'no'}
+- Was correct: ${typeof userState.isCorrect === 'boolean' ? (userState.isCorrect ? 'yes' : 'no') : 'unknown'}
+` : ''
+
     // Build messages array for OpenAI
     const systemPrompt = `You are Studyz, an expert AI study assistant helping students understand multiple choice questions. You're currently helping with "${mcqSet.name}".
 
 ${questionContext ? `The student is currently looking at this question:\n${questionContext}` : ''}
+${stateContext}
 
 Your capabilities:
 - Explain why the correct answer is correct
@@ -131,7 +153,7 @@ Guidelines:
 
     // Get response from OpenAI
     const completion = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1',
       messages,
       max_tokens: 1500,
       temperature: 0.7,
@@ -144,7 +166,10 @@ Guidelines:
     })
   } catch (error) {
     console.error('MCQ Chat POST error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Internal server error', details: (error as any)?.message },
+      { status: 500 }
+    )
   }
 }
 

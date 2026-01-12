@@ -104,6 +104,7 @@ export default function MCQViewer({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
   
   const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({})
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -315,6 +316,7 @@ export default function MCQViewer({
     const userMessage = chatInput.trim()
     setChatInput('')
     setChatSending(true)
+    setChatError(null)
 
     const tempMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -327,7 +329,11 @@ export default function MCQViewer({
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       
-      if (!session) return
+      if (!session) {
+        setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
+        setChatError('Not authenticated')
+        return
+      }
 
       const response = await fetch(`/api/mcq/${mcqSetId}/chat`, {
         method: 'POST',
@@ -338,6 +344,14 @@ export default function MCQViewer({
         body: JSON.stringify({
           message: userMessage,
           currentQuestion: currentQuestion,
+          userState: {
+            mode,
+            currentIndex,
+            totalQuestions: activeQuestions.length,
+            selectedOptions: Array.from(selectedOptions),
+            hasChecked,
+            isCorrect,
+          },
           conversationHistory: chatMessages.slice(-10),
         }),
       })
@@ -353,10 +367,12 @@ export default function MCQViewer({
         setChatMessages(prev => [...prev, assistantMessage])
       } else {
         setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
+        setChatError(data?.error || data?.details || 'AI assistant failed to respond')
       }
     } catch (error) {
       console.error('Chat error:', error)
       setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
+      setChatError((error as any)?.message || 'AI assistant failed to respond')
     } finally {
       setChatSending(false)
     }
@@ -939,6 +955,11 @@ export default function MCQViewer({
 
               {/* Chat Input */}
               <div className="p-4 border-t border-border">
+                {chatError && (
+                  <div className="mb-3 p-2 border border-error/30 bg-error/10 text-error text-xs">
+                    {chatError}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <textarea
                     ref={chatInputRef}
