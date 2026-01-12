@@ -132,6 +132,11 @@ ABSOLUTE FORMAT RULES (MUST FOLLOW):
 - If the question is MCQ (multiple correct), explain why each correct option is correct and why each incorrect option is incorrect.
 - Respond in ${ttsLanguage === 'fr' ? 'French' : 'English'}.
 
+FR/EN VOCABULARY RULE (CRITICAL WHEN RESPONDING IN FRENCH):
+- If you respond in French, ALWAYS keep technical vocabulary in English in parentheses right after the French term.
+  Example: "résistance (resistance)", "pression artérielle (blood pressure)", "débit (flow rate)".
+- If the MCQ text is in English, prefer quoting the exact English technical term (in parentheses) so the student can pass an exam in English.
+
 Your capabilities:
 - Explain why the correct answer is correct
 - Break down complex concepts into simple terms

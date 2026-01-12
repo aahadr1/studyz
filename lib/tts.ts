@@ -73,9 +73,10 @@ Transforme un texte (potentiellement avec du markdown) en texte oral fluide et n
 RÈGLES STRICTES:
 - Supprime tout le markdown (titres, listes, code, etc.)
 - Remplace les listes par des phrases complètes
-- Garde uniquement une ponctuation simple: . , ? !
+- Garde une ponctuation simple: . , ? ! et autorise les parenthèses ( ) quand elles contiennent du vocabulaire important.
 - Pas d'emojis, pas de symboles spéciaux
 - Garde le sens, mais rends-le très naturel à l'oral
+- IMPORTANT: si le texte contient des termes techniques en anglais entre parenthèses, CONSERVE-LES (ex: "résistance (resistance)").
 
 Retourne UNIQUEMENT le texte final.`
               : `You are an expert at preparing text for text-to-speech.
@@ -84,9 +85,10 @@ Turn potentially-markdown text into natural spoken text.
 STRICT RULES:
 - Remove all markdown (headings, lists, code, etc.)
 - Convert lists into full sentences
-- Keep only simple punctuation: . , ? !
+- Keep simple punctuation: . , ? ! and allow parentheses ( ) when they contain important vocabulary.
 - No emojis, no special symbols
 - Keep the meaning but make it very natural for speech
+- IMPORTANT: if the text contains English technical terms in parentheses, KEEP them (e.g. "résistance (resistance)").
 
 Return ONLY the final text.`,
         },
