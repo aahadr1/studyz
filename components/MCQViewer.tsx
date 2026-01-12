@@ -109,6 +109,7 @@ export default function MCQViewer({
   const [chatSending, setChatSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const lastAutoPlayedAudioId = useRef<string | null>(null)
+  const chatAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({})
   const [chatRecording, setChatRecording] = useState(false)
   const [chatRecordingSeconds, setChatRecordingSeconds] = useState(0)
   const chatRecordingTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -328,14 +329,31 @@ export default function MCQViewer({
     if (lastAutoPlayedAudioId.current === last.id) return
     lastAutoPlayedAudioId.current = last.id
     try {
-      const audio = new Audio(last.audioUrl)
       const base = Number(last.audioSpeed) || 1.3
-      audio.playbackRate = ttsSpeed / base
-      audio.play().catch(() => {})
+      const el = chatAudioRefs.current[last.id]
+      if (el) {
+        el.dataset.baseSpeed = String(base)
+        el.playbackRate = ttsSpeed / base
+        el.play().catch(() => {})
+      } else {
+        const audio = new Audio(last.audioUrl)
+        audio.playbackRate = ttsSpeed / base
+        audio.play().catch(() => {})
+      }
     } catch {
       // ignore
     }
   }, [chatMessages, ttsSpeed])
+
+  // Apply speed changes live to any rendered chat audio elements
+  useEffect(() => {
+    for (const id of Object.keys(chatAudioRefs.current)) {
+      const el = chatAudioRefs.current[id]
+      if (!el) continue
+      const base = Number(el.dataset.baseSpeed) || 1.3
+      el.playbackRate = ttsSpeed / base
+    }
+  }, [ttsSpeed])
 
   const handleSendChat = async (messageOverride?: string) => {
     const message = (typeof messageOverride === 'string' ? messageOverride : chatInput).trim()
@@ -1109,21 +1127,26 @@ export default function MCQViewer({
                       )}
                       {message.role === 'assistant' && message.audioUrl && (
                         <div className="mt-2">
-                          <button
-                            type="button"
-                            className="btn-secondary text-xs"
-                            onClick={() => {
-                              try {
-                                const a = new Audio(message.audioUrl!)
-                                const base = Number(message.audioSpeed) || 1.3
-                                a.playbackRate = ttsSpeed / base
-                                a.play().catch(() => {})
-                              } catch {}
+                          <audio
+                            controls
+                            preload="none"
+                            src={message.audioUrl}
+                            ref={(el) => {
+                              chatAudioRefs.current[message.id] = el
+                              if (el) el.dataset.baseSpeed = String(Number(message.audioSpeed) || 1.3)
                             }}
-                          >
-                            <FiVolume2 className="w-3.5 h-3.5" />
-                            Play audio
-                          </button>
+                            onPlay={(e) => {
+                              const el = e.currentTarget
+                              const base = Number(el.dataset.baseSpeed) || 1.3
+                              el.playbackRate = ttsSpeed / base
+                            }}
+                            onLoadedMetadata={(e) => {
+                              const el = e.currentTarget
+                              const base = Number(el.dataset.baseSpeed) || 1.3
+                              el.playbackRate = ttsSpeed / base
+                            }}
+                            className="w-full"
+                          />
                         </div>
                       )}
                     </div>

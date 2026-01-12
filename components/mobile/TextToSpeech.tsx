@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { FiVolume2, FiVolumeX, FiLoader } from 'react-icons/fi'
+import { FiVolume2, FiVolumeX, FiLoader, FiPlay, FiPause } from 'react-icons/fi'
 
 // ============================================
 // Types
@@ -11,6 +11,7 @@ type VoiceGender = 'male' | 'female'
 
 interface TTSState {
   isPlaying: boolean
+  isPaused: boolean
   isLoading: boolean
   error: string | null
 }
@@ -24,6 +25,7 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
   const [speed, setSpeed] = useState<number>(1.3)
   const [state, setState] = useState<TTSState>({
     isPlaying: false,
+    isPaused: false,
     isLoading: false,
     error: null,
   })
@@ -50,15 +52,37 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
       audioRef.current.currentTime = 0
       audioRef.current = null
     }
-    setState(prev => ({ ...prev, isPlaying: false }))
+    setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
+  }, [])
+
+  const pauseAudio = useCallback(() => {
+    if (!audioRef.current) return
+    try {
+      audioRef.current.pause()
+    } catch {}
+    setState(prev => ({ ...prev, isPlaying: false, isPaused: true }))
+  }, [])
+
+  const resumeAudio = useCallback(() => {
+    if (!audioRef.current) return
+    try {
+      audioRef.current.play()
+      setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
+    } catch {}
   }, [])
 
   const speak = useCallback(async (text: string) => {
     if (!text || text.trim().length === 0) return
 
-    // If already playing, stop
+    // If already playing, pause (so user can resume)
     if (state.isPlaying) {
-      stopAudio()
+      pauseAudio()
+      return
+    }
+
+    // If paused, resume (do not regenerate)
+    if (state.isPaused) {
+      resumeAudio()
       return
     }
 
@@ -99,7 +123,7 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
       synthSpeedRef.current = Number(data?.speed) || requestedSpeed
 
       audio.onended = () => {
-        setState(prev => ({ ...prev, isPlaying: false }))
+        setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
       }
 
       audio.onerror = (e) => {
@@ -108,6 +132,7 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
           ...prev, 
           isLoading: false,
           isPlaying: false,
+          isPaused: false,
           error: 'Failed to play audio' 
         }))
       }
@@ -121,7 +146,8 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
         setState(prev => ({ 
           ...prev, 
           isLoading: false, 
-          isPlaying: true 
+          isPlaying: true,
+          isPaused: false,
         }))
       }
 
@@ -136,7 +162,7 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
         error: error.message 
       }))
     }
-  }, [language, voiceGender, speed, state.isPlaying, stopAudio])
+  }, [language, voiceGender, speed, state.isPlaying, state.isPaused, pauseAudio, resumeAudio, stopAudio])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -151,6 +177,8 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
   return {
     speak,
     stopAudio,
+    pauseAudio,
+    resumeAudio,
     language,
     setLanguage,
     voiceGender,
@@ -159,6 +187,7 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
     setSpeed,
     isPlaying: state.isPlaying,
     isLoading: state.isLoading,
+    isPaused: state.isPaused,
     error: state.error,
   }
 }
@@ -181,7 +210,7 @@ export function SpeakButton({
   showLanguageToggle?: boolean
   speed?: number
 }) {
-  const { speak, stopAudio, isPlaying, isLoading, language, setLanguage, setSpeed } = useTextToSpeech(propLanguage || 'en')
+  const { speak, stopAudio, pauseAudio, isPlaying, isPaused, isLoading, language, setLanguage, setSpeed } = useTextToSpeech(propLanguage || 'en')
 
   useEffect(() => {
     if (typeof propSpeed === 'number' && Number.isFinite(propSpeed)) setSpeed(propSpeed)
@@ -214,7 +243,7 @@ export function SpeakButton({
         </button>
       )}
       <button
-        onClick={() => isPlaying ? stopAudio() : speak(text)}
+        onClick={() => (isPlaying ? pauseAudio() : speak(text))}
         disabled={isLoading || !text}
         className={`${sizeClasses[size]} flex items-center justify-center rounded-[var(--radius,0)] 
           border border-[var(--color-border,#262626)] 
@@ -223,12 +252,14 @@ export function SpeakButton({
             : 'text-[var(--color-text-secondary,#a3a3a3)] hover:text-[var(--color-text,#fff)] hover:border-[var(--color-border-light,#363636)]'
           }
           disabled:opacity-40 transition-colors`}
-        title={isPlaying ? 'Stop' : 'Listen'}
+        title={isPlaying ? 'Pause' : isPaused ? 'Resume' : 'Listen'}
       >
         {isLoading ? (
           <FiLoader className={`${iconSizes[size]} animate-spin`} strokeWidth={1.5} />
         ) : isPlaying ? (
-          <FiVolumeX className={iconSizes[size]} strokeWidth={1.5} />
+          <FiPause className={iconSizes[size]} strokeWidth={1.5} />
+        ) : isPaused ? (
+          <FiPlay className={iconSizes[size]} strokeWidth={1.5} />
         ) : (
           <FiVolume2 className={iconSizes[size]} strokeWidth={1.5} />
         )}
@@ -257,6 +288,7 @@ export default function TextToSpeech({
     speed,
     setSpeed,
     isPlaying, 
+    isPaused,
     isLoading,
     error 
   } = useTextToSpeech()
@@ -299,7 +331,7 @@ export default function TextToSpeech({
       )}
       
       <button
-        onClick={() => isPlaying ? stopAudio() : speak(text)}
+        onClick={() => speak(text)}
         disabled={isLoading || !text}
         className={`flex items-center gap-2 px-3 py-2 border transition-colors
           ${isPlaying 
@@ -316,7 +348,12 @@ export default function TextToSpeech({
         ) : isPlaying ? (
           <>
             <FiVolumeX className="w-4 h-4" strokeWidth={1.5} />
-            <span className="text-xs uppercase tracking-wider font-medium">{language === 'fr' ? 'Stop' : 'Stop'}</span>
+            <span className="text-xs uppercase tracking-wider font-medium">{language === 'fr' ? 'Pause' : 'Pause'}</span>
+          </>
+        ) : isPaused ? (
+          <>
+            <FiPlay className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-xs uppercase tracking-wider font-medium">{language === 'fr' ? 'Reprendre' : 'Resume'}</span>
           </>
         ) : (
           <>
