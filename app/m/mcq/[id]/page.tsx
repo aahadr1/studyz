@@ -21,7 +21,9 @@ import {
   FiVolume2,
   FiGlobe,
   FiMessageCircle,
-  FiSend
+  FiSend,
+  FiMic,
+  FiStopCircle
 } from 'react-icons/fi'
 import { SpeakButton } from '@/components/mobile/TextToSpeech'
 import ReactMarkdown from 'react-markdown'
@@ -117,6 +119,13 @@ export default function MobileMCQViewerPage() {
   const [chatSending, setChatSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const lastAutoPlayedAudioId = useRef<string | null>(null)
+  const [chatRecording, setChatRecording] = useState(false)
+  const [chatRecordingSeconds, setChatRecordingSeconds] = useState(0)
+  const chatRecordingTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const chatMediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chatMediaStreamRef = useRef<MediaStream | null>(null)
+  const chatRecordedChunksRef = useRef<BlobPart[]>([])
+  const chatInputAtRecordingStartRef = useRef<string>('')
 
   // Touch handling
   const touchStartX = useRef<number>(0)
@@ -228,10 +237,11 @@ export default function MobileMCQViewerPage() {
     } catch {}
   }, [chatMessages])
 
-  const handleSendChat = async () => {
-    if (!chatInput.trim() || chatSending) return
+  const handleSendChat = async (messageOverride?: string) => {
+    const message = (typeof messageOverride === 'string' ? messageOverride : chatInput).trim()
+    if (!message || chatSending) return
 
-    const userMessage = chatInput.trim()
+    const userMessage = message
     setChatInput('')
     setChatSending(true)
     setChatError(null)
@@ -297,6 +307,119 @@ export default function MobileMCQViewerPage() {
       setChatSending(false)
     }
   }
+
+  const formatChatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const stopChatRecording = useCallback(() => {
+    try {
+      if (chatMediaRecorderRef.current && chatMediaRecorderRef.current.state !== 'inactive') {
+        chatMediaRecorderRef.current.stop()
+      }
+    } catch {}
+    try {
+      chatMediaStreamRef.current?.getTracks()?.forEach(t => t.stop())
+    } catch {}
+    chatMediaStreamRef.current = null
+    chatMediaRecorderRef.current = null
+    if (chatRecordingTimerRef.current) {
+      clearInterval(chatRecordingTimerRef.current)
+      chatRecordingTimerRef.current = null
+    }
+    setChatRecording(false)
+    setChatRecordingSeconds(0)
+  }, [])
+
+  const transcribeChatAudioBlob = useCallback(async (blob: Blob) => {
+    const audioBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(new Error('Failed to read audio'))
+      reader.onload = () => resolve(String(reader.result))
+      reader.readAsDataURL(blob)
+    })
+
+    const resp = await fetch('/api/stt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audioBase64,
+        mimeType: blob.type,
+        language: ttsLanguage === 'fr' ? 'fr' : 'en',
+      }),
+    })
+
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      throw new Error(data?.error || data?.details || 'Failed to transcribe audio')
+    }
+    return String(data?.text || '').trim()
+  }, [ttsLanguage])
+
+  const startChatRecording = useCallback(async () => {
+    if (chatRecording || chatSending) return
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setChatError('Voice input is not supported in this browser.')
+      return
+    }
+
+    chatInputAtRecordingStartRef.current = chatInput
+    chatRecordedChunksRef.current = []
+    setChatError(null)
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    chatMediaStreamRef.current = stream
+
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+    const mimeType = candidates.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t))
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    chatMediaRecorderRef.current = recorder
+
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chatRecordedChunksRef.current.push(e.data)
+    }
+
+    recorder.onstop = async () => {
+      try {
+        const blob = new Blob(chatRecordedChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        if (blob.size < 1024) return
+        const transcript = await transcribeChatAudioBlob(blob)
+        if (!transcript) return
+
+        const inputAtStart = chatInputAtRecordingStartRef.current.trim()
+        if (!inputAtStart) {
+          await handleSendChat(transcript)
+        } else {
+          setChatInput(prev => (prev.trim().length ? `${prev.trim()} ${transcript}` : transcript))
+          chatInputRef.current?.focus()
+        }
+      } catch (e: any) {
+        setChatError(e?.message || 'Failed to transcribe audio')
+      }
+    }
+
+    recorder.start(250)
+    setChatRecording(true)
+    setChatRecordingSeconds(0)
+    chatRecordingTimerRef.current = setInterval(() => setChatRecordingSeconds(s => s + 1), 1000)
+  }, [chatRecording, chatSending, chatInput, transcribeChatAudioBlob])
+
+  // Cleanup voice recording on unmount
+  useEffect(() => {
+    return () => {
+      try {
+        if (chatMediaRecorderRef.current && chatMediaRecorderRef.current.state !== 'inactive') {
+          chatMediaRecorderRef.current.stop()
+        }
+      } catch {}
+      try {
+        chatMediaStreamRef.current?.getTracks()?.forEach(t => t.stop())
+      } catch {}
+      if (chatRecordingTimerRef.current) clearInterval(chatRecordingTimerRef.current)
+    }
+  }, [])
 
   const loadMCQSet = async () => {
     const supabase = createClient()
@@ -1405,24 +1528,43 @@ export default function MobileMCQViewerPage() {
                 </div>
               )}
               <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => (chatRecording ? stopChatRecording() : startChatRecording())}
+                  disabled={chatSending}
+                  className={`w-12 h-12 flex items-center justify-center border ${
+                    chatRecording
+                      ? 'bg-[var(--color-error)] text-white border-[var(--color-error)] animate-pulse'
+                      : 'bg-[var(--color-bg)] text-[var(--color-text)] border-[var(--color-border)]'
+                  } disabled:opacity-30`}
+                  title={chatRecording ? 'Stop recording' : 'Voice input'}
+                >
+                  {chatRecording ? <FiStopCircle className="w-4 h-4" strokeWidth={1.5} /> : <FiMic className="w-4 h-4" strokeWidth={1.5} />}
+                </button>
                 <textarea
                   ref={chatInputRef}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault()
+                      if (chatRecording) stopChatRecording()
+                      else startChatRecording()
+                      return
+                    }
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
                       handleSendChat()
                     }
                   }}
-                  placeholder="Ask a question..."
+                  placeholder={chatRecording ? `Listening… ${formatChatRecordingTime(chatRecordingSeconds)}` : 'Ask a question...'}
                   rows={1}
                   className="flex-1 px-4 py-3 border border-[var(--color-border)] bg-[var(--color-bg)] text-sm resize-none focus:outline-none focus:border-[var(--color-text)]"
                   disabled={chatSending}
                   style={{ minHeight: '48px', maxHeight: '100px' }}
                 />
                 <button
-                  onClick={handleSendChat}
+                  onClick={() => handleSendChat()}
                   disabled={!chatInput.trim() || chatSending}
                   className="w-12 h-12 bg-[var(--color-text)] text-[var(--color-bg)] flex items-center justify-center disabled:opacity-30"
                 >
