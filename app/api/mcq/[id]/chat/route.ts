@@ -126,6 +126,7 @@ ${questionContext ? `The student is currently looking at this question:\n${quest
 ${stateContext}
 
 ABSOLUTE FORMAT RULES (MUST FOLLOW):
+- The student is on the CURRENT QUESTION shown above. If conversation history mentions another question, IGNORE it and answer for the CURRENT QUESTION only.
 - You MUST assume the student is looking at the MCQ right now and wants you to explain it fully.
 - You MUST use the correct answer(s) provided above (from the app). Never invent a different answer key.
 - You MUST start with the correct option(s) first, then cover the incorrect options.

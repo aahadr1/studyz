@@ -178,6 +178,7 @@ export default function MCQViewer({
 
   const activeQuestions = getActiveQuestions()
   const currentQuestion = activeQuestions[currentIndex]
+  const lastChatQuestionIdRef = useRef<string | null>(null)
   const effectiveCorrectOptions: string[] = (() => {
     if (!currentQuestion) return []
     if (Array.isArray(currentQuestion.correctOptions) && currentQuestion.correctOptions.length > 0) {
@@ -227,6 +228,25 @@ export default function MCQViewer({
     }
     setQuestionStartTime(Date.now())
   }, [currentIndex, mode])
+
+  // Keep assistant context in sync with the currently displayed question.
+  // We reset chat thread when question changes to avoid the model continuing the previous question thread.
+  useEffect(() => {
+    const qid = currentQuestion?.id || null
+    if (!qid) return
+    if (lastChatQuestionIdRef.current === null) {
+      lastChatQuestionIdRef.current = qid
+      return
+    }
+    if (lastChatQuestionIdRef.current !== qid) {
+      lastChatQuestionIdRef.current = qid
+      setChatInput('')
+      setChatError(null)
+      setChatMessages([])
+      lastAutoPlayedAudioId.current = null
+      chatAudioRefs.current = {}
+    }
+  }, [currentQuestion?.id])
 
   useEffect(() => {
     if (hasLessonCards) {

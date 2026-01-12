@@ -120,6 +120,7 @@ export default function MobileMCQViewerPage() {
   const [chatSending, setChatSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const lastAutoPlayedAudioId = useRef<string | null>(null)
+  const lastChatQuestionIdRef = useRef<string | null>(null)
   const chatAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({})
   const [chatRecording, setChatRecording] = useState(false)
   const [chatRecordingSeconds, setChatRecordingSeconds] = useState(0)
@@ -512,6 +513,25 @@ export default function MobileMCQViewerPage() {
 
   const activeQuestions = getActiveQuestions()
   const currentQuestion = activeQuestions[currentIndex]
+  
+  // Keep assistant context in sync with the currently displayed question.
+  // Reset the chat thread when question changes so the assistant doesn't continue the previous question.
+  useEffect(() => {
+    const qid = currentQuestion?.id || null
+    if (!qid) return
+    if (lastChatQuestionIdRef.current === null) {
+      lastChatQuestionIdRef.current = qid
+      return
+    }
+    if (lastChatQuestionIdRef.current !== qid) {
+      lastChatQuestionIdRef.current = qid
+      setChatInput('')
+      setChatError(null)
+      setChatMessages([])
+      lastAutoPlayedAudioId.current = null
+      chatAudioRefs.current = {}
+    }
+  }, [currentQuestion?.id])
   const effectiveCorrectOptions: string[] = (() => {
     if (!currentQuestion) return []
     if (Array.isArray(currentQuestion.correctOptions) && currentQuestion.correctOptions.length > 0) return currentQuestion.correctOptions
