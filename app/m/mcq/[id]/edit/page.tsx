@@ -38,6 +38,7 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
   const [accessToken, setAccessToken] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [startingSelection, setStartingSelection] = useState(false)
+  const [rangeInput, setRangeInput] = useState('')
   
   // Editing state
   const [editingQuestion, setEditingQuestion] = useState<MCQQuestion | null>(null)
@@ -203,6 +204,22 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  const applyRangeSelection = () => {
+    const cleaned = rangeInput.trim().replace(/\s+/g, '')
+    const m = cleaned.match(/^(\d+)[-–—:](\d+)$/)
+    if (!m) return
+    const start = parseInt(m[1], 10)
+    const end = parseInt(m[2], 10)
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start <= 0 || end <= 0) return
+    const a = Math.min(start, end)
+    const b = Math.max(start, end)
+    const startIdx = Math.max(0, a - 1)
+    const endIdx = Math.min(questions.length - 1, b - 1)
+    if (questions.length === 0 || startIdx > endIdx) return
+    const ids = questions.slice(startIdx, endIdx + 1).map(q => q.id)
+    setSelectedIds(new Set(ids))
+  }
+
   if (loading) {
     return (
       <div className="mobile-app flex items-center justify-center">
@@ -246,6 +263,23 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
           <p className="text-sm text-[var(--color-text-secondary)]">
             {questions.length} question{questions.length !== 1 ? 's' : ''}
           </p>
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              type="text"
+              value={rangeInput}
+              onChange={(e) => setRangeInput(e.target.value)}
+              placeholder="Range (e.g. 20-50)"
+              className="flex-1 px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm"
+            />
+            <button
+              type="button"
+              onClick={applyRangeSelection}
+              disabled={!rangeInput.trim()}
+              className="btn-secondary text-xs disabled:opacity-50"
+            >
+              Select
+            </button>
+          </div>
         </div>
 
         {/* Questions List */}

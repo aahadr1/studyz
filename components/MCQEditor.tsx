@@ -40,9 +40,30 @@ export default function MCQEditor({
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [rangeInput, setRangeInput] = useState('')
 
   const emitSelection = (next: Set<string>) => {
     onSelectionChange?.(Array.from(next))
+  }
+
+  const applyRangeSelection = () => {
+    const cleaned = rangeInput.trim().replace(/\s+/g, '')
+    const m = cleaned.match(/^(\d+)[-–—:](\d+)$/)
+    if (!m) return
+    const start = parseInt(m[1], 10)
+    const end = parseInt(m[2], 10)
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start <= 0 || end <= 0) return
+
+    const a = Math.min(start, end)
+    const b = Math.max(start, end)
+    const startIdx = Math.max(0, a - 1)
+    const endIdx = Math.min(questions.length - 1, b - 1)
+    if (questions.length === 0 || startIdx > endIdx) return
+
+    const ids = questions.slice(startIdx, endIdx + 1).map(q => q.id)
+    const next = new Set(ids)
+    setSelectedIds(next)
+    emitSelection(next)
   }
 
   const handleEdit = (question: MCQQuestionData) => {
@@ -203,6 +224,23 @@ export default function MCQEditor({
         </h2>
         {enableSelection && questions.length > 0 && (
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={rangeInput}
+                onChange={(e) => setRangeInput(e.target.value)}
+                placeholder="Range (e.g. 20-50)"
+                className="px-2 py-1 bg-elevated border border-border rounded-lg text-xs text-text-primary w-36"
+              />
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                onClick={applyRangeSelection}
+                disabled={!rangeInput.trim()}
+              >
+                Select range
+              </button>
+            </div>
             <button
               type="button"
               className="btn-secondary text-xs"
