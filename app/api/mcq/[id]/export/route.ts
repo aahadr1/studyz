@@ -6,17 +6,23 @@ import { PassThrough, Readable } from 'stream'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+function serializeError(err: any) {
+  return {
+    name: err?.name ?? null,
+    message: err?.message ?? String(err ?? ''),
+    status: err?.status ?? err?.response?.status ?? null,
+    code: err?.code ?? err?.error?.code ?? null,
+  }
+}
+
 function createServerClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  )
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url) throw new Error('Missing env: NEXT_PUBLIC_SUPABASE_URL')
+  if (!key) throw new Error('Missing env: SUPABASE_SERVICE_ROLE_KEY')
+  return createSupabaseClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
 }
 
 function sanitizeFilename(name: string) {
@@ -50,32 +56,33 @@ function parseMode(req: NextRequest): ExportMode {
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id: mcqSetId } = await params
-  const supabase = createServerClient()
+  try {
+    const { id: mcqSetId } = await params
+    const supabase = createServerClient()
 
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  const token = authHeader.replace('Bearer ', '')
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized', details: authError?.message }, { status: 401 })
+    }
 
-  const mode = parseMode(request)
-  const includeAnswers = mode === 'with_answers'
+    const mode = parseMode(request)
+    const includeAnswers = mode === 'with_answers'
 
-  const { data: mcqSet, error: setError } = await supabase
-    .from('mcq_sets')
-    .select('id, user_id, name, created_at')
-    .eq('id', mcqSetId)
-    .eq('user_id', user.id)
-    .single()
+    const { data: mcqSet, error: setError } = await supabase
+      .from('mcq_sets')
+      .select('id, user_id, name, created_at')
+      .eq('id', mcqSetId)
+      .eq('user_id', user.id)
+      .single()
 
-  if (setError || !mcqSet) {
-    return NextResponse.json({ error: 'MCQ set not found' }, { status: 404 })
-  }
+    if (setError || !mcqSet) {
+      return NextResponse.json({ error: 'MCQ set not found', details: setError?.message }, { status: 404 })
+    }
 
   // Robust ordering: prefer exact document order (page_number, page_question_index) if available,
   // otherwise fall back to a stable order (created_at, id).
@@ -114,16 +121,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
   }
 
-  if (qError) {
-    console.error('MCQ export: failed to load questions', { mcqSetId, qError })
-    return NextResponse.json(
-      { error: 'Failed to load questions', details: qError?.message || qError },
-      { status: 500 }
-    )
-  }
+    if (qError) {
+      console.error('MCQ export: failed to load questions', { mcqSetId, qError })
+      return NextResponse.json(
+        { error: 'Failed to load questions', details: qError?.message || qError },
+        { status: 500 }
+      )
+    }
 
-  const safeName = sanitizeFilename(mcqSet.name || 'mcq')
-  const filename = `${safeName}-${includeAnswers ? 'with-answers' : 'no-answers'}.pdf`
+    const safeName = sanitizeFilename(mcqSet.name || 'mcq')
+    const filename = `${safeName}-${includeAnswers ? 'with-answers' : 'no-answers'}.pdf`
 
   // Create PDF stream (no buffering to memory)
   const pass = new PassThrough()
@@ -240,13 +247,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   doc.end()
 
-  const webStream = Readable.toWeb(pass) as unknown as ReadableStream
-  return new NextResponse(webStream, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Cache-Control': 'no-store, max-age=0',
-    },
-  })
+    // Convert Node stream -> Web stream (Node runtime only)
+    const webStream = Readable.toWeb(pass) as unknown as ReadableStream
+    return new NextResponse(webStream, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
+  } catch (err: any) {
+    console.error('MCQ export: unhandled error', err)
+    return NextResponse.json(
+      { error: 'Export failed', details: serializeError(err) },
+      { status: 500 }
+    )
+  }
 }
 

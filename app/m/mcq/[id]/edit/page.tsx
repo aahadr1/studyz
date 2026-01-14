@@ -215,7 +215,11 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
       })
       if (!res.ok) {
         const data = await res.json().catch(() => null)
-        throw new Error(data?.error || 'Failed to export PDF')
+        const details = data?.details
+        const msg =
+          (data?.error || 'Failed to export PDF') +
+          (details ? `\n\nDetails: ${typeof details === 'string' ? details : JSON.stringify(details)}` : '')
+        throw new Error(msg)
       }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
