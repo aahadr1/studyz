@@ -14,6 +14,7 @@ const nextConfig = {
       'pdf-to-png-converter',
       'canvas',
       'pdfjs-dist',
+      'pdfkit',
     ],
   },
   // Also exclude from webpack for API routes
@@ -23,6 +24,7 @@ const nextConfig = {
       config.externals.push({
         'pdf-to-png-converter': 'commonjs pdf-to-png-converter',
         'canvas': 'commonjs canvas',
+        'pdfkit': 'commonjs pdfkit',
       })
     }
     return config
