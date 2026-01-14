@@ -189,10 +189,14 @@ For LOW QUALITY, BLURRY, or DIFFICULT-TO-READ content:
    - Otherwise set "questionType" to "scq".
 4. **Correct Answer(s)**: Look for:
    - Checkmarks, circles, or highlights
+   - COLOR CUES: if an option is highlighted/filled in GREEN (or has a green checkmark/green background), that option is CORRECT
+     - Treat green-highlighted choices as the PRIMARY and AUTHORITATIVE correctness signal.
+     - If multiple options are green-highlighted, this is a MULTI-CORRECT question: set "questionType" to "mcq" and include ALL such labels in "correctOptions".
+     - Do NOT “guess” a different answer when green markings exist. Only use expert knowledge if there are NO explicit correctness markings anywhere.
    - "Correct:", "Answer:", or similar markers
    - Underlined or bold correct options
    - Answer keys (which may list MULTIPLE correct options)
-   - If not marked, use your expert knowledge to determine the most likely correct answer(s)
+   - Only if NOTHING is explicitly marked (no highlights, no checkmarks, no answer key): use your expert knowledge to determine the most likely correct answer(s)
 5. **Explanation**:
    - If the source provides an explanation, include it.
    - If no explanation is provided, you may return an empty string.
@@ -332,7 +336,14 @@ ${constraints}`,
     content.push({
       type: 'image_url',
       // Reduce payload/compute: keep anchor page at high, neighbors at low.
-      image_url: { url: p.imageUrl, detail: p.pageNumber === anchorPageNumber ? 'high' : 'low' },
+      // NOTE: we keep next page in HIGH too because answer keys / correctness markings are often there and color matters (e.g., green highlights).
+      image_url: {
+        url: p.imageUrl,
+        detail:
+          p.pageNumber === anchorPageNumber || p.pageNumber === anchorPageNumber + 1
+            ? 'high'
+            : 'low',
+      },
     })
   }
 

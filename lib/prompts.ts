@@ -39,10 +39,14 @@ Documents may contain a MIX of different content types - you MUST extract from A
 
 3. **Correct Answer Identification**: Identify the correct answer by looking for:
    - Explicit markings (checkmarks, circles, highlights)
+   - COLOR CUES: if an option is highlighted/filled in GREEN (or has a green checkmark/green background), that option is CORRECT
+     - Treat green-highlighted choices as the PRIMARY and AUTHORITATIVE correctness signal.
+     - If multiple options are green-highlighted, this is a MULTI-CORRECT question: include ALL such labels.
+     - Do NOT “guess” a different answer when green markings exist. Only use expert knowledge if there are NO explicit correctness markings anywhere.
    - Answer keys anywhere on the page
    - "Correct answer:" labels
    - Bold or underlined correct options
-   - If no answer is marked, use your expert knowledge to determine the correct answer
+   - Only if NOTHING is explicitly marked: use your expert knowledge to determine the correct answer
 
 4. **Explanation Generation**: Provide a clear, educational explanation for EACH question
 
