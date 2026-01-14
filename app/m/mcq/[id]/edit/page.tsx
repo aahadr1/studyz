@@ -13,6 +13,7 @@ import {
   FiX,
   FiEdit2,
   FiPlay,
+  FiDownload,
   FiAlertCircle
 } from 'react-icons/fi'
 
@@ -39,6 +40,7 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [startingSelection, setStartingSelection] = useState(false)
   const [rangeInput, setRangeInput] = useState('')
+  const [exporting, setExporting] = useState<'with_answers' | 'no_answers' | null>(null)
   
   // Editing state
   const [editingQuestion, setEditingQuestion] = useState<MCQQuestion | null>(null)
@@ -204,6 +206,34 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  const downloadExport = async (mode: 'with_answers' | 'no_answers') => {
+    if (!accessToken || exporting) return
+    setExporting(mode)
+    try {
+      const res = await fetch(`/api/mcq/${mcqSetId}/export?mode=${mode}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'Failed to export PDF')
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${mcqSet?.name || 'mcq'}-${mode === 'with_answers' ? 'with-answers' : 'no-answers'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Export failed:', e)
+      alert((e as any)?.message || 'Export failed')
+    } finally {
+      setExporting(null)
+    }
+  }
+
   const applyRangeSelection = () => {
     const cleaned = rangeInput.trim().replace(/\s+/g, '')
     const m = cleaned.match(/^(\d+)[-–—:](\d+)$/)
@@ -235,6 +265,14 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
         backHref={`/m/mcq/${mcqSetId}`}
         rightAction={
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => downloadExport('with_answers')}
+              className="mobile-header-action"
+              title="Export PDF (with answers)"
+              disabled={!!exporting}
+            >
+              <FiDownload className="w-5 h-5" />
+            </button>
             {selectedIds.size > 0 && (
               <button
                 onClick={handleStudySelected}

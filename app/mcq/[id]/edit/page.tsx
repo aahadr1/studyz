@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiLoader, FiArrowLeft, FiPlay } from 'react-icons/fi'
+import { FiLoader, FiArrowLeft, FiPlay, FiDownload } from 'react-icons/fi'
 import Link from 'next/link'
 import MCQEditor, { MCQQuestionData } from '@/components/MCQEditor'
 
@@ -14,6 +14,8 @@ export default function MCQEditPage({ params }: { params: { id: string } }) {
   const [accessToken, setAccessToken] = useState<string>('')
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([])
   const [startingSelection, setStartingSelection] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exporting, setExporting] = useState<'with_answers' | 'no_answers' | null>(null)
 
   useEffect(() => {
     const loadMCQSet = async () => {
@@ -99,6 +101,37 @@ export default function MCQEditPage({ params }: { params: { id: string } }) {
     }
   }
 
+  const downloadExport = async (mode: 'with_answers' | 'no_answers') => {
+    if (!accessToken) return
+    setExporting(mode)
+    try {
+      const res = await fetch(`/api/mcq/${params.id}/export?mode=${mode}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'Failed to export PDF')
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${mcqSet?.name || 'mcq'}-${mode === 'with_answers' ? 'with-answers' : 'no-answers'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Export failed:', e)
+      alert((e as any)?.message || 'Export failed')
+    } finally {
+      setExporting(null)
+      setExportOpen(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -140,10 +173,47 @@ export default function MCQEditPage({ params }: { params: { id: string } }) {
               </p>
             </div>
           </div>
-          <Link href={`/mcq/${params.id}`} className="btn-primary">
-            <FiPlay className="w-4 h-4" />
-            Practice
-          </Link>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setExportOpen(v => !v)}
+                disabled={!accessToken || exporting !== null}
+                title="Export PDF"
+              >
+                {exporting ? <span className="spinner w-4 h-4" /> : <FiDownload className="w-4 h-4" />}
+                Export
+              </button>
+              {exportOpen && (
+                <div
+                  className="absolute right-0 mt-2 w-56 rounded-xl border border-border bg-sidebar shadow-lg p-2 z-50"
+                  onMouseLeave={() => setExportOpen(false)}
+                >
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-elevated text-sm text-text-primary"
+                    onClick={() => downloadExport('with_answers')}
+                    disabled={exporting !== null}
+                  >
+                    Export PDF (with answers)
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-elevated text-sm text-text-primary"
+                    onClick={() => downloadExport('no_answers')}
+                    disabled={exporting !== null}
+                  >
+                    Export PDF (without answers)
+                  </button>
+                </div>
+              )}
+            </div>
+            <Link href={`/mcq/${params.id}`} className="btn-primary">
+              <FiPlay className="w-4 h-4" />
+              Practice
+            </Link>
+          </div>
           {selectedQuestionIds.length > 0 && (
             <button
               onClick={handleStudySelected}
