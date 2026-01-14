@@ -33,6 +33,7 @@ function asText(v: any) {
 }
 
 function normalizeCorrectOptions(q: any): string[] {
+  // Supabase returns DB column names as-is (snake_case).
   const fromArray = Array.isArray(q?.correct_options) ? q.correct_options : null
   if (fromArray && fromArray.length > 0) return fromArray.map(String)
   if (q?.correct_option) return [String(q.correct_option)]
@@ -76,15 +77,49 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'MCQ set not found' }, { status: 404 })
   }
 
-  const { data: questions, error: qError } = await supabase
-    .from('mcq_questions')
-    .select('id, question, options, correct_option, correct_options, question_type, explanation, page_number, page_question_index, created_at')
-    .eq('mcq_set_id', mcqSetId)
-    .order('page_number', { ascending: true })
-    .order('page_question_index', { ascending: true })
+  // Robust ordering: prefer exact document order (page_number, page_question_index) if available,
+  // otherwise fall back to a stable order (created_at, id).
+  let questions: any[] | null = null
+  let qError: any | null = null
+
+  {
+    const res = await supabase
+      .from('mcq_questions')
+      .select('*')
+      .eq('mcq_set_id', mcqSetId)
+      .order('page_number', { ascending: true })
+      .order('page_question_index', { ascending: true })
+    questions = (res as any).data ?? null
+    qError = (res as any).error ?? null
+  }
 
   if (qError) {
-    return NextResponse.json({ error: 'Failed to load questions' }, { status: 500 })
+    const msg = String(qError?.message || '').toLowerCase()
+    const looksLikeMissingColumn =
+      msg.includes('page_question_index') ||
+      msg.includes('does not exist') ||
+      msg.includes('unknown column') ||
+      msg.includes('column')
+
+    if (looksLikeMissingColumn) {
+      const fallback = await supabase
+        .from('mcq_questions')
+        .select('*')
+        .eq('mcq_set_id', mcqSetId)
+        .order('page_number', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+      questions = (fallback as any).data ?? null
+      qError = (fallback as any).error ?? null
+    }
+  }
+
+  if (qError) {
+    console.error('MCQ export: failed to load questions', { mcqSetId, qError })
+    return NextResponse.json(
+      { error: 'Failed to load questions', details: qError?.message || qError },
+      { status: 500 }
+    )
   }
 
   const safeName = sanitizeFilename(mcqSet.name || 'mcq')
