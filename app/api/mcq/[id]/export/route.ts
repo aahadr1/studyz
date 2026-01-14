@@ -38,6 +38,12 @@ function asText(v: any) {
   return String(v)
 }
 
+function normalizeInlineText(v: any) {
+  // Export PDFs should not preserve random newlines from OCR; make it readable.
+  // Keep it simple and robust: collapse all whitespace (incl. newlines) to single spaces.
+  return asText(v).replace(/\s+/g, ' ').trim()
+}
+
 function normalizeCorrectOptions(q: any): string[] {
   // Supabase returns DB column names as-is (snake_case).
   const fromArray = Array.isArray(q?.correct_options) ? q.correct_options : null
@@ -147,6 +153,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const pageWidth = doc.page.width
   const contentWidth = pageWidth - doc.page.margins.left - doc.page.margins.right
+    const left = doc.page.margins.left
 
   const ensureSpace = (neededHeight: number) => {
     const bottom = doc.page.height - doc.page.margins.bottom
@@ -181,53 +188,61 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   qs.forEach((q: any, idx: number) => {
     const qNum = idx + 1
-    const questionText = asText(q?.question).trim()
+      const questionText = normalizeInlineText(q?.question)
     const options: Array<{ label: string; text: string }> = Array.isArray(q?.options) ? q.options : []
     const correctOptions = normalizeCorrectOptions(q)
-    const explanation = asText(q?.explanation).trim()
+      const explanation = normalizeInlineText(q?.explanation)
 
-    // Question
-    doc.fillColor('#111827').font('Helvetica-Bold').fontSize(12)
-    const qLabel = `${qNum}. `
-    const qLabelWidth = doc.widthOfString(qLabel)
-    const qHeight = doc.heightOfString(questionText || '(empty question)', { width: contentWidth - qLabelWidth })
-    ensureSpace(qHeight + 18)
-    doc.text(qLabel, { continued: true, width: qLabelWidth })
-    doc.font('Helvetica').text(questionText || '(empty question)', { width: contentWidth - qLabelWidth })
-    doc.moveDown(0.4)
+      // Question (render label and body in separate boxes; avoid `continued` to prevent tiny-width wrapping)
+      doc.fillColor('#111827').fontSize(12)
+      const label = `${qNum}.`
+      doc.font('Helvetica-Bold')
+      const labelWidth = Math.max(18, doc.widthOfString(label + ' ') + 2)
+      const bodyX = left + labelWidth
+      const bodyWidth = Math.max(50, contentWidth - labelWidth)
+      const qBody = questionText || '(empty question)'
+      const qHeight = doc.heightOfString(qBody, { width: bodyWidth, lineGap: 2 })
+      ensureSpace(qHeight + 18)
+      const y0 = doc.y
+      doc.text(label, left, y0, { width: labelWidth, lineGap: 2 })
+      doc.font('Helvetica').text(qBody, bodyX, y0, { width: bodyWidth, lineGap: 2 })
+      doc.y = y0 + qHeight
+      doc.moveDown(0.45)
 
     // Options
-    doc.font('Helvetica').fontSize(11).fillColor('#111827')
+      doc.fontSize(11).fillColor('#111827')
     options.forEach((opt) => {
-      const label = asText(opt?.label || '').trim() || '?'
-      const text = asText(opt?.text || '').trim()
-      const bullet = `${label}) `
-      const bulletWidth = doc.widthOfString(bullet)
-      const optHeight = doc.heightOfString(text || '(empty)', { width: contentWidth - 18 - bulletWidth })
-      ensureSpace(optHeight + 6)
-      doc.fillColor('#111827').text(' ', doc.page.margins.left, doc.y, { width: 18 })
-      doc.fillColor('#111827').font('Helvetica-Bold').text(bullet, doc.page.margins.left + 18, doc.y, {
-        continued: true,
-        width: bulletWidth,
-      })
-      doc.font('Helvetica').text(text || '(empty)', {
-        width: contentWidth - 18 - bulletWidth,
-      })
-      doc.moveDown(0.15)
+        const optLabel = normalizeInlineText(opt?.label) || '?'
+        const optText = normalizeInlineText(opt?.text) || '(empty)'
+        const indent = 18
+        doc.font('Helvetica-Bold')
+        const bullet = `${optLabel})`
+        const bulletWidth = Math.max(16, doc.widthOfString(bullet + ' ') + 2)
+        const textX = left + indent + bulletWidth
+        const textWidth = Math.max(50, contentWidth - indent - bulletWidth)
+        const optHeight = doc.heightOfString(optText, { width: textWidth, lineGap: 2 })
+        ensureSpace(optHeight + 8)
+        const y = doc.y
+        doc.text(bullet, left + indent, y, { width: bulletWidth, lineGap: 2 })
+        doc.font('Helvetica').text(optText, textX, y, { width: textWidth, lineGap: 2 })
+        doc.y = y + optHeight
+        doc.moveDown(0.15)
     })
 
     if (includeAnswers) {
       doc.moveDown(0.2)
       const answerLine = correctOptions.length > 0 ? correctOptions.join(', ') : 'Unknown'
-      const answerHeight = doc.heightOfString(`Correct answer(s): ${answerLine}`, { width: contentWidth })
+        const answerHeight = doc.heightOfString(`Correct answer(s): ${answerLine}`, { width: contentWidth, lineGap: 2 })
       ensureSpace(answerHeight + 10)
       doc.fillColor('#065F46').font('Helvetica-Bold').fontSize(10).text(`Correct answer(s): ${answerLine}`, {
         width: contentWidth,
+          lineGap: 2,
       })
       if (explanation) {
         doc.moveDown(0.15)
-        doc.fillColor('#374151').font('Helvetica').fontSize(10).text(`Explanation: ${explanation}`, {
+          doc.fillColor('#374151').font('Helvetica').fontSize(10).text(`Explanation: ${explanation}`, {
           width: contentWidth,
+            lineGap: 2,
         })
       }
     }
