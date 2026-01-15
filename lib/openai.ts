@@ -115,6 +115,20 @@ export interface ExtractedMcqPage {
   questions: ExtractedMcqQuestion[]
 }
 
+export interface ExtractedAnswerKey {
+  answers: Array<{
+    /**
+     * 1-based question number in the answer key ("Q1", "1.", etc.).
+     * This is mapped onto the ordered questions list (index + 1).
+     */
+    number: number
+    /**
+     * Option labels like ["A"] or ["A","C"].
+     */
+    correctOptions: string[]
+  }>
+}
+
 export interface McqExtractionConfig {
   extractionInstructions?: string | null
   expectedTotalQuestions?: number | null
@@ -196,10 +210,15 @@ For LOW QUALITY, BLURRY, or DIFFICULT-TO-READ content:
    - "Correct:", "Answer:", or similar markers
    - Underlined or bold correct options
    - Answer keys (which may list MULTIPLE correct options)
-   - Only if NOTHING is explicitly marked (no highlights, no checkmarks, no answer key): use your expert knowledge to determine the most likely correct answer(s)
+   - Only if NOTHING is explicitly marked (no highlights, no checkmarks, no "correct/answer" label, and no answer key): use your expert knowledge to determine the most likely correct answer(s)
+   - If there IS any explicit correctness signal, you MUST follow it and you MUST NOT override it with your own knowledge.
 5. **Explanation**:
    - If the source provides an explanation, include it.
    - If no explanation is provided, you may return an empty string.
+6. **ORDER (CRITICAL)**:
+   - Return questions in the EXACT same order as the original document/page: top-to-bottom, left-to-right.
+   - Do NOT reorder questions or options.
+   - Do NOT group/merge/sort questions by topic or perceived numbering; preserve the source order.
 
 ## SPECIAL CASES
 
@@ -397,6 +416,77 @@ ${constraints}`,
   }
 
   return await run()
+}
+
+const ANSWER_KEY_EXTRACTION_PROMPT = `You are an expert at reading MCQ answer keys.
+
+Your job: extract the "answer key" mapping from the provided document pages.
+
+## WHAT TO EXTRACT
+- A list of answers in the form: question number -> correct option letters.
+- Support BOTH single-correct and multi-correct keys.
+
+## IMPORTANT NORMALIZATION
+- Normalize labels to uppercase letters A-J only.
+- If the key uses a/b/c/d or A., B), etc. normalize to A/B/C/D.
+- If the key uses numbers 1-10 for options, normalize 1->A, 2->B, ... 10->J.
+- If a question has multiple correct answers, return ALL of them in correctOptions.
+- If the key expresses multiple answers as "AC", "A,C", "A & C", "A/C", etc, normalize to ["A","C"].
+
+## OUTPUT FORMAT
+Return JSON exactly in this shape:
+{
+  "answers": [
+    { "number": 1, "correctOptions": ["B"] },
+    { "number": 2, "correctOptions": ["A", "C"] }
+  ]
+}
+
+Do NOT include any other fields. Do NOT include commentary.`
+
+export async function extractAnswerKeyFromImages(
+  pages: Array<{ pageNumber: number; imageUrl: string }>
+): Promise<ExtractedAnswerKey> {
+  const openai = getOpenAI()
+
+  const content: any[] = [
+    {
+      type: 'text',
+      text: `Extract the answer key mapping from these pages. Return JSON only.`,
+    },
+  ]
+
+  for (const p of pages) {
+    content.push({ type: 'text', text: `Page ${p.pageNumber}:` })
+    content.push({
+      type: 'image_url',
+      image_url: {
+        url: p.imageUrl,
+        detail: 'high',
+      },
+    })
+  }
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4.1',
+    messages: [
+      { role: 'system', content: ANSWER_KEY_EXTRACTION_PROMPT },
+      { role: 'user', content },
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: 4096,
+    temperature: 0.1,
+  })
+
+  const raw = response.choices[0]?.message?.content
+  if (!raw) return { answers: [] }
+  try {
+    const parsed = JSON.parse(raw) as ExtractedAnswerKey
+    return parsed && Array.isArray((parsed as any).answers) ? parsed : { answers: [] }
+  } catch (e) {
+    console.error('Failed to parse answer key extraction response:', e)
+    return { answers: [] }
+  }
 }
 
 /**

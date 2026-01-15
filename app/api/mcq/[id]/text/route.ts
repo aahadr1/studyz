@@ -106,7 +106,8 @@ Your task is to extract ALL questions from the provided text, supporting BOTH:
 3. **Correct Answer Identification**: Identify the correct answer(s) by looking for:
    - Explicit markings (asterisks, "correct:", etc.)
    - Answer keys
-   - If no correct answer is marked, make your best educated guess based on subject matter expertise
+   - If there IS any explicit correctness signal, you MUST follow it and you MUST NOT override it with your own knowledge.
+   - Only if NOTHING is explicitly marked (no asterisks, no "correct/answer" label, and no answer key): make your best educated guess based on subject matter expertise
 
 4. **Explanations**:
    - If the source includes an explanation, include it.
@@ -120,6 +121,10 @@ Your task is to extract ALL questions from the provided text, supporting BOTH:
 6. **SCQ vs MCQ**:
    - If question says "select all that apply", "choose X correct", or if the answer key lists multiple answers, set "questionType" to "mcq" and return multiple correctOptions.
    - Otherwise set "questionType" to "scq" and return a single correctOptions entry.
+
+7. **ORDER (CRITICAL)**:
+   - Return questions in the EXACT same order as they appear in the text (top-to-bottom).
+   - Do NOT reorder questions or options.
 
 ## OUTPUT FORMAT
 

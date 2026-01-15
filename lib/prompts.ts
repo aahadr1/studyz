@@ -46,7 +46,14 @@ Documents may contain a MIX of different content types - you MUST extract from A
    - Answer keys anywhere on the page
    - "Correct answer:" labels
    - Bold or underlined correct options
-   - Only if NOTHING is explicitly marked: use your expert knowledge to determine the correct answer
+   - Only if NOTHING is explicitly marked (no highlights, no checkmarks, no "correct/answer" label, and no answer key): use your expert knowledge to determine the correct answer
+   - If there IS any explicit correctness signal, you MUST follow it and you MUST NOT override it with your own knowledge.
+
+## ORDER (CRITICAL)
+
+- Return questions in the EXACT same order as the original document/page: top-to-bottom, left-to-right.
+- Do NOT reorder questions or options.
+- Do NOT group/merge/sort questions by topic or perceived numbering; preserve the source order.
 
 4. **Explanation Generation**: Provide a clear, educational explanation for EACH question
 

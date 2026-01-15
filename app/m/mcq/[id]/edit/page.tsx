@@ -14,8 +14,10 @@ import {
   FiEdit2,
   FiPlay,
   FiDownload,
+  FiRefreshCw,
   FiAlertCircle
 } from 'react-icons/fi'
+import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
 interface MCQQuestion {
   id: string
@@ -41,6 +43,10 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
   const [startingSelection, setStartingSelection] = useState(false)
   const [rangeInput, setRangeInput] = useState('')
   const [exporting, setExporting] = useState<'with_answers' | 'no_answers' | null>(null)
+  const [recorrectOpen, setRecorrectOpen] = useState(false)
+  const [recorrectFile, setRecorrectFile] = useState<File | null>(null)
+  const [recorrecting, setRecorrecting] = useState(false)
+  const [recorrectError, setRecorrectError] = useState<string | null>(null)
   
   // Editing state
   const [editingQuestion, setEditingQuestion] = useState<MCQQuestion | null>(null)
@@ -89,6 +95,58 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
       console.error('Error loading MCQ set:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    })
+
+  const handleRecorrect = async () => {
+    if (!accessToken || !recorrectFile || recorrecting) return
+    setRecorrectError(null)
+    setRecorrecting(true)
+    try {
+      const file = recorrectFile
+      let pages: Array<{ pageNumber: number; dataUrl: string }> = []
+
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        const imgs = await convertPdfToImagesClient(file, 1.4, 0.75)
+        const capped = imgs.slice(0, 20)
+        pages = capped.map(p => ({ pageNumber: p.pageNumber, dataUrl: p.dataUrl }))
+      } else if (file.type.startsWith('image/')) {
+        const dataUrl = await readFileAsDataUrl(file)
+        pages = [{ pageNumber: 1, dataUrl }]
+      } else {
+        throw new Error('Unsupported file type. Please upload a PDF or an image.')
+      }
+
+      const res = await fetch(`/api/mcq/${mcqSetId}/recorrect`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pages }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        const details = data?.details
+        throw new Error((data?.error || 'Failed to recorrect') + (details ? `: ${details}` : ''))
+      }
+
+      await loadMCQSet()
+      setRecorrectOpen(false)
+      setRecorrectFile(null)
+    } catch (e: any) {
+      console.error('Recorrect failed:', e)
+      setRecorrectError(e?.message || 'Recorrect failed')
+    } finally {
+      setRecorrecting(false)
     }
   }
 
@@ -269,6 +327,17 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
         backHref={`/m/mcq/${mcqSetId}`}
         rightAction={
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setRecorrectError(null)
+                setRecorrectOpen(true)
+              }}
+              className="mobile-header-action"
+              title="Recorrect from answer key"
+              disabled={recorrecting || !!exporting}
+            >
+              <FiRefreshCw className="w-5 h-5" />
+            </button>
             <button
               onClick={() => downloadExport('with_answers')}
               className="mobile-header-action"
@@ -492,6 +561,65 @@ export default function MobileMCQEditPage({ params }: { params: Promise<{ id: st
                 <>
                   <FiSave className="w-4 h-4" />
                   Save
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* Recorrect Sheet */}
+      <BottomSheet
+        isOpen={recorrectOpen}
+        onClose={() => !recorrecting && setRecorrectOpen(false)}
+        title="Recorrect from Answer Key"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Upload a PDF/image that contains the correct answers (answer key). We’ll extract Q1→A… and update this set.
+          </p>
+
+          <input
+            type="file"
+            accept="application/pdf,image/*"
+            onChange={(e) => {
+              const f = e.target.files?.[0] || null
+              setRecorrectFile(f)
+              setRecorrectError(null)
+            }}
+            disabled={recorrecting}
+            className="w-full"
+          />
+
+          {recorrectError && (
+            <div className="p-3 rounded-xl bg-[var(--color-error-soft)] text-[var(--color-error)] text-sm flex gap-2">
+              <FiAlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{recorrectError}</span>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setRecorrectOpen(false)}
+              className="btn-mobile btn-secondary-mobile flex-1"
+              disabled={recorrecting}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleRecorrect}
+              disabled={recorrecting || !recorrectFile}
+              className="btn-mobile btn-primary-mobile flex-1"
+            >
+              {recorrecting ? (
+                <>
+                  <div className="spinner-mobile w-4 h-4" style={{ borderWidth: '2px' }} />
+                  Applying...
+                </>
+              ) : (
+                <>
+                  <FiRefreshCw className="w-4 h-4" />
+                  Apply
                 </>
               )}
             </button>
