@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { FiCheck, FiX, FiArrowRight, FiArrowLeft, FiBook, FiCommand, FiVolume2, FiMessageCircle, FiSend, FiTrash2, FiMic, FiStopCircle } from 'react-icons/fi'
 import LessonCard, { LessonCardData } from './LessonCard'
 import ScoreTracker from './ScoreTracker'
@@ -34,6 +34,24 @@ export interface MCQQuestion {
   explanation?: string
   section_id?: string
   lesson_card?: LessonCardData
+}
+
+function buildQuestionTtsText(question: MCQQuestion | undefined | null, language: 'en' | 'fr'): string {
+  if (!question) return ''
+
+  const questionText = String(question.question || '').trim()
+  const options = Array.isArray(question.options) ? question.options : []
+
+  const normalizedOptions = options
+    .map((o) => ({ label: String(o?.label || '').trim(), text: String(o?.text || '').trim() }))
+    .filter((o) => o.label.length > 0 && o.text.length > 0)
+
+  if (normalizedOptions.length === 0) return questionText
+
+  const header = language === 'fr' ? 'Propositions :' : 'Options:'
+  const optionLines = normalizedOptions.map((o) => `${o.label}. ${o.text}`)
+
+  return [questionText, header, ...optionLines].filter(Boolean).join('\n')
 }
 
 export interface LessonSection {
@@ -179,6 +197,7 @@ export default function MCQViewer({
   const activeQuestions = getActiveQuestions()
   const currentQuestion = activeQuestions[currentIndex]
   const lastChatQuestionIdRef = useRef<string | null>(null)
+  const questionTtsText = useMemo(() => buildQuestionTtsText(currentQuestion, ttsLanguage), [currentQuestion, ttsLanguage])
   const effectiveCorrectOptions: string[] = (() => {
     if (!currentQuestion) return []
     if (Array.isArray(currentQuestion.correctOptions) && currentQuestion.correctOptions.length > 0) {
@@ -845,7 +864,7 @@ export default function MCQViewer({
                   {currentQuestion.question}
                 </h2>
                 <SpeakButton 
-                  text={currentQuestion.question} 
+                  text={questionTtsText} 
                   language={ttsLanguage}
                   speed={ttsSpeed}
                   size="md"
