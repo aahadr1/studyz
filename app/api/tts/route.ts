@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import OpenAI from 'openai'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -17,6 +18,93 @@ const VOICES = {
 
 // Cache for model version
 let cachedVersion: string | null = null
+
+// Lazy initialization of OpenAI client
+let openaiInstance: OpenAI | null = null
+function getOpenAI(): OpenAI {
+  if (!openaiInstance) {
+    openaiInstance = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return openaiInstance
+}
+
+// Small in-memory cache for translations (best-effort; may reset between deploys)
+const translationCache = new Map<string, string>()
+const MAX_TRANSLATION_CACHE_ENTRIES = 200
+
+function hashForCacheKey(input: string): string {
+  // djb2-ish hash; short + stable
+  let h = 5381
+  for (let i = 0; i < input.length; i++) {
+    h = ((h << 5) + h) ^ input.charCodeAt(i)
+  }
+  // Force unsigned 32-bit
+  return (h >>> 0).toString(16)
+}
+
+async function translateToFrenchIfNeeded(params: {
+  text: string
+  translate: boolean
+  language: string
+}): Promise<string> {
+  const { text, translate, language } = params
+  if (!translate) return text
+  if (language !== 'fr') return text
+
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    console.warn('[TTS] Translation requested but OPENAI_API_KEY is not set; speaking original text with FR voice.')
+    return text
+  }
+
+  const input = text.trim().slice(0, 9000)
+  if (!input) return ''
+
+  const cacheKey = `${input.length}:${hashForCacheKey(input)}`
+  const cached = translationCache.get(cacheKey)
+  if (cached) return cached
+
+  try {
+    const completion = await getOpenAI().chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.1,
+      max_tokens: 2000,
+      messages: [
+        {
+          role: 'system',
+          content: `You are a translation engine.
+Translate the user's text into French.
+
+STRICT RULES:
+- Preserve line breaks and overall formatting.
+- Preserve MCQ option labels exactly (e.g. "A.", "B.", "C.", "D.") and do NOT translate the letters/labels.
+- Do NOT add commentary, quotes, or explanations.
+- If the text is already French, return it unchanged.
+
+Return ONLY the translated text.`,
+        },
+        { role: 'user', content: input },
+      ],
+    })
+
+    const translated = completion.choices[0]?.message?.content?.trim()
+    const out = (translated && translated.length > 0 ? translated : input).slice(0, 10000)
+
+    // Best-effort eviction to avoid unbounded growth
+    if (translationCache.size >= MAX_TRANSLATION_CACHE_ENTRIES) {
+      const firstKey = translationCache.keys().next().value
+      if (firstKey) translationCache.delete(firstKey)
+    }
+    translationCache.set(cacheKey, out)
+
+    return out
+  } catch (err: any) {
+    console.error('[TTS] Translation failed; speaking original text with FR voice:', err?.message || err)
+    return input.slice(0, 10000)
+  }
+}
 
 async function getLatestVersion(apiToken: string): Promise<string> {
   if (cachedVersion) return cachedVersion
@@ -61,6 +149,7 @@ export async function POST(request: NextRequest) {
       language = 'en', 
       voice = 'male',
       speed = 1.3,
+      translate = false,
     } = body
 
     if (!text || text.trim().length === 0) {
@@ -68,6 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
     const trimmedText = text.trim().substring(0, 10000)
+    const ttsText = await translateToFrenchIfNeeded({ text: trimmedText, translate: !!translate, language })
     const voiceId = VOICES[language as keyof typeof VOICES]?.[voice as keyof typeof VOICES.en] || VOICES.en.male
     const languageBoost = language === 'fr' ? 'French' : 'English'
     const safeSpeed = (() => {
@@ -76,7 +166,7 @@ export async function POST(request: NextRequest) {
       return Math.max(0.5, Math.min(2.5, n))
     })()
 
-    console.log(`[TTS] Starting: "${trimmedText.substring(0, 40)}..." voice=${voiceId}`)
+    console.log(`[TTS] Starting: "${ttsText.substring(0, 40)}..." voice=${voiceId} translate=${!!translate}`)
 
     // Get latest version
     const version = await getLatestVersion(apiToken)
@@ -91,7 +181,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         version: version,  // Use version, not model!
         input: {
-          text: trimmedText,
+          text: ttsText,
           voice_id: voiceId,
           speed: safeSpeed,
           emotion: 'auto',

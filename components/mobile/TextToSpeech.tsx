@@ -99,6 +99,9 @@ export function useTextToSpeech(defaultLanguage: Language = 'en') {
           voice: voiceGender,
           speed: requestedSpeed,
           emotion: 'auto',
+          // When user selects French, translate the text to French before generating French TTS.
+          // English remains unchanged.
+          translate: language === 'fr',
         }),
       })
 
