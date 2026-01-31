@@ -95,7 +95,7 @@ RÈGLES :
 3. Structure logique : progression du simple au complexe
 4. Équilibre entre les chapitres
 
-Retourne un JSON :
+Retourne un objet json :
 {
   "title": "Titre accrocheur du podcast",
   "description": "Description en 2-3 phrases",
@@ -129,7 +129,7 @@ RULES:
 3. Logical structure: progress from simple to complex
 4. Balance between chapters
 
-Return JSON:
+Return a json object:
 {
   "title": "Catchy podcast title",
   "description": "Description in 2-3 sentences",
@@ -237,7 +237,7 @@ RÈGLES CRITIQUES :
 5. Ajoute de la personnalité : réactions, questions, exemples concrets
 6. Progression logique des concepts
 
-STRUCTURE DES SEGMENTS :
+STRUCTURE DES SEGMENTS (json) :
 {
   "segments": [
     {
@@ -280,7 +280,7 @@ CRITICAL RULES:
 5. Add personality: reactions, questions, concrete examples
 6. Logical progression of concepts
 
-SEGMENT STRUCTURE:
+SEGMENT STRUCTURE (json format):
 {
   "segments": [
     {
@@ -395,7 +395,7 @@ TYPES DE QUESTIONS :
 
 Pour chaque question, fournis une réponse CONCISE (2-3 phrases max).
 
-Retourne JSON :
+Retourne un objet json :
 {
   "questions": [
     {
@@ -420,7 +420,7 @@ QUESTION TYPES:
 
 For each question, provide a CONCISE answer (2-3 sentences max).
 
-Return JSON:
+Return a json object:
 {
   "questions": [
     {

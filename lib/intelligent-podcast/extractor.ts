@@ -87,7 +87,7 @@ Pour CHAQUE concept, fournis :
 3. Un niveau de difficulté (easy/medium/hard)
 4. Des concepts liés (s'il y en a)
 
-Retourne un JSON avec cette structure :
+Retourne un objet json avec cette structure :
 {
   "concepts": [
     {
@@ -111,7 +111,7 @@ For EACH concept, provide:
 3. A difficulty level (easy/medium/hard)
 4. Related concepts (if any)
 
-Return JSON with this structure:
+Return a json object with this structure:
 {
   "concepts": [
     {
@@ -176,7 +176,7 @@ Types de relations :
 - "opposite" : Concepts opposés ou contrastants
 - "example" : Concept A est un exemple de Concept B
 
-Retourne un JSON :
+Retourne un objet json :
 {
   "relationships": [
     {"from": "concept-1", "to": "concept-2", "type": "requires"}
@@ -194,7 +194,7 @@ Relationship types:
 - "opposite": Opposing or contrasting concepts
 - "example": Concept A is an example of Concept B
 
-Return JSON:
+Return a json object:
 {
   "relationships": [
     {"from": "concept-1", "to": "concept-2", "type": "requires"}
