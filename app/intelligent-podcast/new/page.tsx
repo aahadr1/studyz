@@ -1,35 +1,134 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
+
+interface UploadedFile {
+  file: File
+  id: string
+  name: string
+  size: number
+  status: 'pending' | 'uploading' | 'uploaded' | 'error'
+  url?: string
+  error?: string
+}
 
 export default function NewPodcastPage() {
   const router = useRouter()
-  const [documentIds, setDocumentIds] = useState<string[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [targetDuration, setTargetDuration] = useState(30)
   const [language, setLanguage] = useState('auto')
   const [style, setStyle] = useState('conversational')
   const [voiceProvider, setVoiceProvider] = useState('openai')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [progress, setProgress] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files) return
+
+    const newFiles: UploadedFile[] = Array.from(files).map((file) => ({
+      file,
+      id: Math.random().toString(36).substring(7),
+      name: file.name,
+      size: file.size,
+      status: 'pending',
+    }))
+
+    setUploadedFiles((prev) => [...prev, ...newFiles])
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    handleFileSelect(e.dataTransfer.files)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const removeFile = (id: string) => {
+    setUploadedFiles((prev) => prev.filter((f) => f.id !== id))
+  }
+
+  const uploadFiles = async () => {
+    const supabase = createClient()
+    const filesToUpload = uploadedFiles.filter((f) => f.status === 'pending')
+
+    for (const fileObj of filesToUpload) {
+      try {
+        // Update status to uploading
+        setUploadedFiles((prev) =>
+          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading' } : f))
+        )
+
+        // Upload to Supabase Storage
+        const filePath = `podcasts/${Date.now()}-${fileObj.file.name}`
+        const { data, error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(filePath, fileObj.file)
+
+        if (uploadError) throw uploadError
+
+        // Get public URL
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from('documents').getPublicUrl(filePath)
+
+        // Update status to uploaded
+        setUploadedFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileObj.id ? { ...f, status: 'uploaded', url: publicUrl } : f
+          )
+        )
+      } catch (err: any) {
+        console.error('Upload error:', err)
+        setUploadedFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileObj.id
+              ? { ...f, status: 'error', error: err.message }
+              : f
+          )
+        )
+      }
+    }
+  }
+
   const handleGenerate = async () => {
-    if (documentIds.length === 0) {
-      setError('Please add at least one document')
+    const uploadedDocs = uploadedFiles.filter((f) => f.status === 'uploaded')
+    
+    if (uploadedDocs.length === 0) {
+      setError('Please upload at least one document')
       return
+    }
+
+    // First, upload any pending files
+    const pendingFiles = uploadedFiles.filter((f) => f.status === 'pending')
+    if (pendingFiles.length > 0) {
+      await uploadFiles()
     }
 
     setIsGenerating(true)
     setError(null)
-    setProgress(0)
 
     try {
+      const documentUrls = uploadedFiles
+        .filter((f) => f.status === 'uploaded')
+        .map((f) => f.url)
+
       const response = await fetch('/api/intelligent-podcast/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          documentIds,
+          documentUrls,
           targetDuration,
           language,
           style,
@@ -54,18 +153,10 @@ export default function NewPodcastPage() {
     }
   }
 
-  const addDocumentId = () => {
-    setDocumentIds([...documentIds, ''])
-  }
-
-  const updateDocumentId = (index: number, value: string) => {
-    const updated = [...documentIds]
-    updated[index] = value
-    setDocumentIds(updated)
-  }
-
-  const removeDocumentId = (index: number) => {
-    setDocumentIds(documentIds.filter((_, i) => i !== index))
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
 
   return (
@@ -81,39 +172,90 @@ export default function NewPodcastPage() {
 
         {/* Generation form */}
         <div className="space-y-6">
-          {/* Documents */}
+          {/* Documents Upload */}
           <div className="bg-gray-900 rounded-lg p-6">
             <h3 className="text-xl font-semibold mb-4">Source Documents</h3>
             <p className="text-gray-400 text-sm mb-4">
-              Add document IDs or upload PDFs (for now, enter placeholder IDs)
+              Upload PDF documents to transform into an interactive podcast
             </p>
             
-            <div className="space-y-3">
-              {documentIds.map((id, index) => (
-                <div key={index} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={id}
-                    onChange={(e) => updateDocumentId(index, e.target.value)}
-                    placeholder="Document ID or path"
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 focus:outline-none focus:border-blue-500"
-                  />
-                  <button
-                    onClick={() => removeDocumentId(index)}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              
-              <button
-                onClick={addDocumentId}
-                className="w-full py-3 border-2 border-dashed border-gray-700 hover:border-blue-500 rounded-lg transition-colors"
-              >
-                + Add Document
-              </button>
+            {/* Drag & Drop Zone */}
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
+                isDragging
+                  ? 'border-blue-500 bg-blue-900/20'
+                  : 'border-gray-700 hover:border-gray-600 hover:bg-gray-800/50'
+              }`}
+            >
+              <div className="text-5xl mb-4">📄</div>
+              <p className="text-lg font-medium text-gray-300 mb-2">
+                {isDragging ? 'Drop files here' : 'Drag & drop PDFs here'}
+              </p>
+              <p className="text-sm text-gray-500">
+                or click to browse files
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                multiple
+                onChange={(e) => handleFileSelect(e.target.files)}
+                className="hidden"
+              />
             </div>
+
+            {/* Uploaded Files List */}
+            {uploadedFiles.length > 0 && (
+              <div className="mt-6 space-y-2">
+                <h4 className="text-sm font-medium text-gray-400 mb-3">
+                  Uploaded Files ({uploadedFiles.length})
+                </h4>
+                {uploadedFiles.map((file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center justify-between p-3 bg-gray-800 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="text-2xl">
+                        {file.status === 'uploaded' ? '✅' :
+                         file.status === 'uploading' ? '⏳' :
+                         file.status === 'error' ? '❌' : '📄'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">
+                          {file.name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatFileSize(file.size)}
+                          {file.status === 'uploading' && ' - Uploading...'}
+                          {file.status === 'error' && ` - Error: ${file.error}`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeFile(file.id)}
+                      className="px-3 py-1 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+
+                {/* Upload button for pending files */}
+                {uploadedFiles.some((f) => f.status === 'pending') && (
+                  <button
+                    onClick={uploadFiles}
+                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded mt-3"
+                  >
+                    Upload Files to Storage
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Configuration */}
@@ -212,7 +354,7 @@ export default function NewPodcastPage() {
           {/* Generate button */}
           <button
             onClick={handleGenerate}
-            disabled={isGenerating || documentIds.length === 0}
+            disabled={isGenerating || uploadedFiles.filter(f => f.status === 'uploaded').length === 0}
             className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed font-semibold text-lg rounded-lg transition-all"
           >
             {isGenerating ? 'Generating Podcast...' : '🎙️ Generate Intelligent Podcast'}
