@@ -44,7 +44,7 @@ export default function NewPodcastPage() {
     checkAuth()
   }, [router])
 
-  const handleFileSelect = (files: FileList | null) => {
+  const handleFileSelect = async (files: FileList | null) => {
     if (!files) return
 
     const newFiles: UploadedFile[] = Array.from(files).map((file) => ({
@@ -56,6 +56,60 @@ export default function NewPodcastPage() {
     }))
 
     setUploadedFiles((prev) => [...prev, ...newFiles])
+    
+    // Automatically upload files to storage
+    await uploadFilesInBackground(newFiles)
+  }
+  
+  const uploadFilesInBackground = async (filesToUpload: UploadedFile[]) => {
+    const supabase = createClient()
+
+    for (const fileObj of filesToUpload) {
+      try {
+        // Update status to uploading
+        setUploadedFiles((prev) =>
+          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading' } : f))
+        )
+
+        console.log(`[Upload] Auto-uploading ${fileObj.name}...`)
+
+        // Upload to Supabase Storage
+        const filePath = `podcasts/${Date.now()}-${fileObj.file.name}`
+        const { data, error: uploadError } = await supabase.storage
+          .from('podcast-documents')
+          .upload(filePath, fileObj.file)
+
+        if (uploadError) {
+          console.error(`[Upload] Error for ${fileObj.name}:`, uploadError)
+          throw uploadError
+        }
+
+        // Get public URL
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from('podcast-documents').getPublicUrl(filePath)
+
+        console.log(`[Upload] ✅ ${fileObj.name} → ${publicUrl}`)
+
+        // Update status to uploaded
+        setUploadedFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileObj.id
+              ? { ...f, status: 'uploaded', url: publicUrl }
+              : f
+          )
+        )
+      } catch (err: any) {
+        console.error('[Upload] Upload error:', err)
+        setUploadedFiles((prev) =>
+          prev.map((f) =>
+            f.id === fileObj.id
+              ? { ...f, status: 'error', error: err.message }
+              : f
+          )
+        )
+      }
+    }
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -147,22 +201,26 @@ export default function NewPodcastPage() {
     setError(null)
 
     try {
-      // STEP 1: Upload ALL pending files first
-      console.log('[Podcast] Step 1: Checking uploads...')
+      // Wait for any pending/uploading files to complete
+      console.log('[Podcast] Checking upload status...')
       
-      const pendingFiles = uploadedFiles.filter((f) => f.status === 'pending')
-      let uploadedResults: UploadedFile[] = []
+      // Wait up to 30 seconds for uploads to complete
+      const maxWaitTime = 30000 // 30 seconds
+      const startTime = Date.now()
       
-      if (pendingFiles.length > 0) {
-        console.log(`[Podcast] Uploading ${pendingFiles.length} pending files...`)
-        uploadedResults = await uploadFiles()
+      while (Date.now() - startTime < maxWaitTime) {
+        const pendingOrUploading = uploadedFiles.filter(
+          (f) => f.status === 'pending' || f.status === 'uploading'
+        )
+        
+        if (pendingOrUploading.length === 0) break
+        
+        console.log(`[Podcast] Waiting for ${pendingOrUploading.length} files to finish uploading...`)
+        await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second
       }
 
-      // STEP 2: Get all successfully uploaded files
-      const allUploadedFiles = [
-        ...uploadedFiles.filter((f) => f.status === 'uploaded'),
-        ...uploadedResults,
-      ]
+      // Get all successfully uploaded files
+      const allUploadedFiles = uploadedFiles.filter((f) => f.status === 'uploaded')
 
       console.log('[Podcast] Total uploaded files:', allUploadedFiles.length)
 
@@ -170,7 +228,7 @@ export default function NewPodcastPage() {
         throw new Error('No documents were successfully uploaded. Please check the errors and try again.')
       }
 
-      // STEP 3: Prepare document data with URLs
+      // Prepare document data with URLs
       const documentUrls = allUploadedFiles
         .filter((f) => f.url) // Extra safety check
         .map((f) => ({ 
@@ -178,9 +236,9 @@ export default function NewPodcastPage() {
           name: f.name 
         }))
 
-      console.log('[Podcast] Step 2: Sending to API:', documentUrls)
+      console.log('[Podcast] Sending to API:', documentUrls)
 
-      // STEP 4: Call generation API
+      // Call generation API
       const response = await fetch('/api/intelligent-podcast/generate', {
         method: 'POST',
         headers: { 
@@ -318,16 +376,6 @@ export default function NewPodcastPage() {
                     </button>
                   </div>
                 ))}
-
-                {/* Upload button for pending files */}
-                {uploadedFiles.some((f) => f.status === 'pending') && (
-                  <button
-                    onClick={uploadFiles}
-                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded mt-3"
-                  >
-                    Upload Files to Storage
-                  </button>
-                )}
               </div>
             )}
           </div>
