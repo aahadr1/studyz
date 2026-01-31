@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiLogOut, FiHome, FiBook, FiPlus, FiArrowRight, FiCheckSquare, FiZap } from 'react-icons/fi'
+import { FiLogOut, FiHome, FiBook, FiPlus, FiArrowRight, FiCheckSquare, FiZap, FiMic } from 'react-icons/fi'
 import Link from 'next/link'
 import type { Lesson, InteractiveLesson } from '@/types/db'
 import Logo from '@/components/Logo'
@@ -114,6 +114,10 @@ export default function DashboardPage() {
             <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Quiz Sets</span>
           </Link>
+          <Link href="/intelligent-podcast" className="sidebar-item">
+            <FiMic className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-sm">AI Podcasts</span>
+          </Link>
         </nav>
 
         <div className="border-t border-border p-4">
@@ -173,7 +177,7 @@ export default function DashboardPage() {
             </div>
             <div className="p-6 bg-elevated border border-border rounded-xl">
               <span className="block text-3xl font-semibold mono text-text-primary">0</span>
-              <span className="text-xs text-text-secondary uppercase tracking-wider">Day Streak</span>
+              <span className="text-xs text-text-secondary uppercase tracking-wider">Podcasts</span>
             </div>
           </div>
 
@@ -217,6 +221,51 @@ export default function DashboardPage() {
                 <FiArrowRight className="w-4 h-4 text-text-tertiary group-hover:text-text-primary transition-colors" strokeWidth={1.5} />
               </div>
             </Link>
+          </div>
+
+          {/* AI Podcast Feature Highlight */}
+          <div className="bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-blue-500/30 rounded-xl p-8 mb-10">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-600/20 border border-blue-500/40 rounded-full mb-4">
+                  <span className="text-xs font-medium text-blue-300 uppercase tracking-wider">✨ New Feature</span>
+                </div>
+                <h3 className="text-2xl font-semibold text-text-primary mb-3">
+                  🎙️ Intelligent Interactive Podcasts
+                </h3>
+                <p className="text-text-secondary mb-6 max-w-2xl">
+                  Transform your documents into engaging multi-voice podcasts with real-time Q&A powered by AI. 
+                  Ask questions during playback and get instant voice responses with <span className="text-blue-400 font-medium">&lt;1s latency</span>.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                  <span className="px-3 py-1 bg-surface border border-border rounded-full text-xs text-text-secondary">
+                    3 AI Voices
+                  </span>
+                  <span className="px-3 py-1 bg-surface border border-border rounded-full text-xs text-text-secondary">
+                    Real-time Q&A
+                  </span>
+                  <span className="px-3 py-1 bg-surface border border-border rounded-full text-xs text-text-secondary">
+                    Knowledge Graph
+                  </span>
+                  <span className="px-3 py-1 bg-surface border border-border rounded-full text-xs text-text-secondary">
+                    Chapter Navigation
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <Link href="/intelligent-podcast/new" className="btn-primary inline-flex">
+                    <FiPlus className="w-4 h-4" strokeWidth={1.5} />
+                    Create Podcast
+                  </Link>
+                  <Link href="/intelligent-podcast" className="btn-secondary inline-flex">
+                    <FiMic className="w-4 h-4" strokeWidth={1.5} />
+                    View All
+                  </Link>
+                </div>
+              </div>
+              <div className="hidden lg:block text-8xl opacity-20">
+                🎧
+              </div>
+            </div>
           </div>
 
           {/* Recent Lessons */}
