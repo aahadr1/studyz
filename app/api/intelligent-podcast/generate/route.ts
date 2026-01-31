@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { extractAndAnalyze } from '@/lib/intelligent-podcast/extractor'
 import { generateIntelligentScript } from '@/lib/intelligent-podcast/script-generator'
 import { generateMultiVoiceAudio, generatePredictedQuestionsAudio } from '@/lib/intelligent-podcast/audio-generator'
+import { extractTextFromPageImages } from '@/lib/intelligent-podcast/pdf-extractor'
 import { DocumentContent, VoiceProfile } from '@/types/intelligent-podcast'
 
 export const runtime = 'nodejs'
@@ -11,7 +12,7 @@ export const maxDuration = 300 // 5 minutes
 
 async function createAuthClient() {
   const cookieStore = await cookies()
-  
+
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -41,18 +42,17 @@ async function createAuthClient() {
 
 export async function POST(request: NextRequest) {
   try {
-    // Check environment variables first
     if (!process.env.OPENAI_API_KEY) {
       console.error('[Podcast] OPENAI_API_KEY is not set')
-      return NextResponse.json({ 
-        error: 'Server configuration error', 
-        details: 'OpenAI API key is not configured' 
+      return NextResponse.json({
+        error: 'Server configuration error',
+        details: 'OpenAI API key is not configured'
       }, { status: 500 })
     }
 
     const supabase = await createAuthClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
+
     if (authError || !user) {
       console.error('[Podcast] Auth error:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -60,83 +60,86 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const {
-      documentUrls,
+      documents,
       targetDuration = 30,
       language = 'auto',
       style = 'conversational',
       voiceProvider = 'openai',
     } = body as {
-      documentUrls?: Array<{ url: string; name: string }>
+      documents?: Array<{
+        name: string
+        page_images: Array<{ page_number: number; url: string }>
+      }>
       targetDuration?: number
       language?: string
       style?: 'educational' | 'conversational' | 'technical' | 'storytelling'
       voiceProvider?: 'openai' | 'elevenlabs' | 'playht'
     }
 
-    if (!documentUrls || documentUrls.length === 0) {
-      return NextResponse.json({ error: 'At least one document is required' }, { status: 400 })
+    if (!documents || documents.length === 0) {
+      return NextResponse.json({ error: 'At least one document with page_images is required' }, { status: 400 })
     }
 
-    console.log(`[Podcast] Starting generation for ${documentUrls.length} documents`)
+    console.log(`[Podcast] Starting generation for ${documents.length} document(s)`)
     console.log(`[Podcast] User: ${user.id}, Style: ${style}, Duration: ${targetDuration}min`)
 
-    // AUTOMATIC PDF EXTRACTION
-    const { extractTextFromPdfUrl } = await import('@/lib/intelligent-podcast/pdf-extractor')
-    
-    const documents: DocumentContent[] = []
-    
-    for (const doc of documentUrls) {
+    // STEP 1: Transcribe each document from page images (GPT-4 Vision only – same as MCQ flow)
+    const documentContents: DocumentContent[] = []
+
+    for (const doc of documents) {
+      if (!doc.page_images || doc.page_images.length === 0) {
+        console.warn(`[Podcast] Skipping ${doc.name}: no page_images`)
+        continue
+      }
+
       try {
-        console.log(`[Podcast] Extracting content from ${doc.name}...`)
-        console.log(`[Podcast] Document URL: ${doc.url}`)
-        
-        const { content, pageCount } = await extractTextFromPdfUrl(doc.url, doc.name)
-        
-        if (!content || content.trim().length < 50) {
+        console.log(`[Podcast] Transcribing ${doc.name} (${doc.page_images.length} pages)...`)
+        const { content, pageCount } = await extractTextFromPageImages(doc.name, doc.page_images)
+
+        if (!content || content.trim().length < 30) {
           throw new Error('Extracted content is too short or empty')
         }
-        
-        documents.push({
+
+        documentContents.push({
           id: crypto.randomUUID(),
-          title: doc.name.replace('.pdf', ''),
+          title: doc.name.replace(/\.pdf$/i, ''),
           content,
           pageCount,
-          language: 'auto', // Will be detected later
+          language: 'auto',
           extractedAt: new Date().toISOString(),
         })
-        
+
         console.log(`[Podcast] ✅ ${doc.name}: ${content.length} chars, ${pageCount} pages`)
       } catch (error: any) {
-        console.error(`[Podcast] Failed to extract ${doc.name}:`, error)
-        console.error(`[Podcast] Error stack:`, error.stack)
-        return NextResponse.json({ 
-          error: `Failed to extract content from ${doc.name}`, 
-          details: error.message || 'Unknown extraction error'
+        console.error(`[Podcast] Failed to transcribe ${doc.name}:`, error)
+        return NextResponse.json({
+          error: `Failed to transcribe ${doc.name}`,
+          details: error.message || 'Unknown error'
         }, { status: 500 })
       }
     }
-    
-    if (documents.length === 0) {
-      return NextResponse.json({ 
-        error: 'No documents were successfully processed',
-        details: 'All document extractions failed'
+
+    if (documentContents.length === 0) {
+      return NextResponse.json({
+        error: 'No documents were successfully transcribed',
+        details: 'Check that each document has page_images.'
       }, { status: 500 })
     }
 
-    // STEP 1: Extract and analyze (build knowledge graph)
-    console.log('[Podcast] Step 1/4: Extracting and analyzing content...')
-    const { knowledgeGraph, detectedLanguage } = await extractAndAnalyze(documents)
+    // STEP 2: Extract and analyze (knowledge graph)
+    console.log('[Podcast] Step 2/4: Building knowledge graph...')
+    const { knowledgeGraph, detectedLanguage } = await extractAndAnalyze(documentContents)
 
     const finalLanguage = language === 'auto' ? detectedLanguage : language
 
-    // STEP 2: Define voice profiles
+    // STEP 3: Voice profiles
     const voiceProfiles: VoiceProfile[] = [
       {
         id: 'host-voice',
         role: 'host',
         name: 'Sophie',
         provider: voiceProvider,
-        voiceId: voiceProvider === 'openai' ? 'nova' : '21m00Tcm4TlvDq8ikWAM', // ElevenLabs Rachel
+        voiceId: voiceProvider === 'openai' ? 'nova' : '21m00Tcm4TlvDq8ikWAM',
         description: 'Curious host who guides the conversation and asks clarifying questions',
       },
       {
@@ -144,7 +147,7 @@ export async function POST(request: NextRequest) {
         role: 'expert',
         name: 'Marcus',
         provider: voiceProvider,
-        voiceId: voiceProvider === 'openai' ? 'onyx' : 'pNInz6obpgDQGcFmaJgB', // ElevenLabs Adam
+        voiceId: voiceProvider === 'openai' ? 'onyx' : 'pNInz6obpgDQGcFmaJgB',
         description: 'Deep expert who provides detailed insights and technical knowledge',
       },
       {
@@ -152,15 +155,15 @@ export async function POST(request: NextRequest) {
         role: 'simplifier',
         name: 'Emma',
         provider: voiceProvider,
-        voiceId: voiceProvider === 'openai' ? 'shimmer' : 'EXAVITQu4vr4xnSDxMaL', // ElevenLabs Bella
+        voiceId: voiceProvider === 'openai' ? 'shimmer' : 'EXAVITQu4vr4xnSDxMaL',
         description: 'Friendly explainer who breaks down complex concepts into simple terms',
       },
     ]
 
-    // STEP 3: Generate intelligent script
-    console.log('[Podcast] Step 2/4: Generating intelligent script...')
+    // STEP 4: Generate script
+    console.log('[Podcast] Step 3/4: Generating script...')
     const { chapters, segments, predictedQuestions, title, description } = await generateIntelligentScript(
-      documents,
+      documentContents,
       knowledgeGraph,
       {
         targetDuration,
@@ -170,27 +173,26 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    // STEP 4: Generate audio for segments
-    console.log('[Podcast] Step 3/4: Generating multi-voice audio...')
+    // STEP 5: TTS – segments
+    console.log('[Podcast] Step 4/4: Generating audio (TTS)...')
     const segmentsWithAudio = await generateMultiVoiceAudio(segments, voiceProfiles, finalLanguage, (current, total, step) => {
       console.log(`[Podcast] ${step}`)
     })
 
-    // STEP 5: Pre-generate audio for predicted questions
-    console.log('[Podcast] Step 4/4: Pre-generating Q&A audio...')
+    // STEP 6: TTS – predicted Q&A
+    console.log('[Podcast] Pre-generating Q&A audio...')
     const questionsWithAudio = await generatePredictedQuestionsAudio(
       predictedQuestions,
       finalLanguage,
-      voiceProfiles[0], // Use host voice
+      voiceProfiles[0],
       (current, total) => {
         console.log(`[Podcast] Q&A audio: ${current}/${total}`)
       }
     )
 
-    // Calculate total duration
     const totalDuration = segmentsWithAudio.reduce((sum, seg) => sum + seg.duration, 0)
 
-    // Save to database
+    // Save to DB
     const { data: podcast, error: insertError } = await supabase
       .from('intelligent_podcasts')
       .insert({
@@ -199,7 +201,7 @@ export async function POST(request: NextRequest) {
         description,
         duration: Math.round(totalDuration),
         language: finalLanguage,
-        document_ids: documents.map(d => d.id),
+        document_ids: documentContents.map(d => d.id),
         knowledge_graph: knowledgeGraph,
         chapters,
         segments: segmentsWithAudio,
@@ -214,7 +216,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to save podcast' }, { status: 500 })
     }
 
-    console.log(`[Podcast] Generation completed successfully: ${podcast.id}`)
+    console.log(`[Podcast] ✅ Done: ${podcast.id}`)
 
     return NextResponse.json({
       id: podcast.id,

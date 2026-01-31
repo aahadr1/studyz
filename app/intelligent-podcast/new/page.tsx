@@ -3,14 +3,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
 interface UploadedFile {
   file: File
   id: string
   name: string
   size: number
-  status: 'pending' | 'uploading' | 'uploaded' | 'error'
-  url?: string
+  status: 'pending' | 'converting' | 'ready' | 'error'
+  pageImages?: Array<{ page_number: number; url: string }>
   error?: string
 }
 
@@ -57,50 +58,42 @@ export default function NewPodcastPage() {
 
     setUploadedFiles((prev) => [...prev, ...newFiles])
     
-    // Automatically upload files to storage
-    await uploadFilesInBackground(newFiles)
+    // Automatically convert PDFs to images (same as MCQ flow)
+    await convertFilesInBackground(newFiles)
   }
   
-  const uploadFilesInBackground = async (filesToUpload: UploadedFile[]) => {
-    const supabase = createClient()
-
-    for (const fileObj of filesToUpload) {
+  const convertFilesInBackground = async (filesToConvert: UploadedFile[]) => {
+    for (const fileObj of filesToConvert) {
       try {
-        // Update status to uploading
+        // Update status to converting
         setUploadedFiles((prev) =>
-          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading' } : f))
+          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'converting' } : f))
         )
 
-        console.log(`[Upload] Auto-uploading ${fileObj.name}...`)
+        console.log(`[Convert] Converting ${fileObj.name} to images...`)
 
-        // Upload to Supabase Storage
-        const filePath = `podcasts/${Date.now()}-${fileObj.file.name}`
-        const { data, error: uploadError } = await supabase.storage
-          .from('podcast-documents')
-          .upload(filePath, fileObj.file)
+        // Convert PDF to images in browser (same as MCQ flow)
+        const pageImages = await convertPdfToImagesClient(fileObj.file, 1.5)
+        
+        console.log(`[Convert] ✅ ${fileObj.name}: ${pageImages.length} pages`)
 
-        if (uploadError) {
-          console.error(`[Upload] Error for ${fileObj.name}:`, uploadError)
-          throw uploadError
-        }
-
-        // Get public URL
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from('podcast-documents').getPublicUrl(filePath)
-
-        console.log(`[Upload] ✅ ${fileObj.name} → ${publicUrl}`)
-
-        // Update status to uploaded
+        // Update status to ready with page images
         setUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === fileObj.id
-              ? { ...f, status: 'uploaded', url: publicUrl }
+              ? { 
+                  ...f, 
+                  status: 'ready',
+                  pageImages: pageImages.map(p => ({
+                    page_number: p.pageNumber,
+                    url: p.dataUrl
+                  }))
+                }
               : f
           )
         )
       } catch (err: any) {
-        console.error('[Upload] Upload error:', err)
+        console.error('[Convert] Conversion error:', err)
         setUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === fileObj.id
@@ -131,66 +124,6 @@ export default function NewPodcastPage() {
     setUploadedFiles((prev) => prev.filter((f) => f.id !== id))
   }
 
-  const uploadFiles = async (): Promise<UploadedFile[]> => {
-    const supabase = createClient()
-    const filesToUpload = uploadedFiles.filter((f) => f.status === 'pending')
-    const uploadedResults: UploadedFile[] = []
-
-    for (const fileObj of filesToUpload) {
-      try {
-        // Update status to uploading
-        setUploadedFiles((prev) =>
-          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading' } : f))
-        )
-
-        console.log(`[Upload] Uploading ${fileObj.name}...`)
-
-        // Upload to Supabase Storage
-        const filePath = `podcasts/${Date.now()}-${fileObj.file.name}`
-        const { data, error: uploadError } = await supabase.storage
-          .from('podcast-documents')
-          .upload(filePath, fileObj.file)
-
-        if (uploadError) {
-          console.error(`[Upload] Error for ${fileObj.name}:`, uploadError)
-          throw uploadError
-        }
-
-        // Get public URL
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from('podcast-documents').getPublicUrl(filePath)
-
-        console.log(`[Upload] ✅ ${fileObj.name} → ${publicUrl}`)
-
-        const uploadedFile: UploadedFile = {
-          ...fileObj,
-          status: 'uploaded',
-          url: publicUrl,
-        }
-
-        // Update status to uploaded
-        setUploadedFiles((prev) =>
-          prev.map((f) => (f.id === fileObj.id ? uploadedFile : f))
-        )
-
-        uploadedResults.push(uploadedFile)
-      } catch (err: any) {
-        console.error('[Upload] Upload error:', err)
-        setUploadedFiles((prev) =>
-          prev.map((f) =>
-            f.id === fileObj.id
-              ? { ...f, status: 'error', error: err.message }
-              : f
-          )
-        )
-        throw err // Propagate error to stop generation
-      }
-    }
-
-    return uploadedResults
-  }
-
   const handleGenerate = async () => {
     if (uploadedFiles.length === 0) {
       setError('Please add at least one PDF document')
@@ -201,42 +134,40 @@ export default function NewPodcastPage() {
     setError(null)
 
     try {
-      // Wait for any pending/uploading files to complete
-      console.log('[Podcast] Checking upload status...')
+      // Wait for any pending/converting files to complete
+      console.log('[Podcast] Checking conversion status...')
       
-      // Wait up to 30 seconds for uploads to complete
-      const maxWaitTime = 30000 // 30 seconds
+      // Wait up to 60 seconds for conversions to complete
+      const maxWaitTime = 60000 // 60 seconds
       const startTime = Date.now()
       
       while (Date.now() - startTime < maxWaitTime) {
-        const pendingOrUploading = uploadedFiles.filter(
-          (f) => f.status === 'pending' || f.status === 'uploading'
+        const pendingOrConverting = uploadedFiles.filter(
+          (f) => f.status === 'pending' || f.status === 'converting'
         )
         
-        if (pendingOrUploading.length === 0) break
+        if (pendingOrConverting.length === 0) break
         
-        console.log(`[Podcast] Waiting for ${pendingOrUploading.length} files to finish uploading...`)
+        console.log(`[Podcast] Waiting for ${pendingOrConverting.length} files to finish converting...`)
         await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second
       }
 
-      // Get all successfully uploaded files
-      const allUploadedFiles = uploadedFiles.filter((f) => f.status === 'uploaded')
+      // Get all successfully converted files
+      const readyFiles = uploadedFiles.filter((f) => f.status === 'ready' && f.pageImages)
 
-      console.log('[Podcast] Total uploaded files:', allUploadedFiles.length)
+      console.log('[Podcast] Total ready files:', readyFiles.length)
 
-      if (allUploadedFiles.length === 0) {
-        throw new Error('No documents were successfully uploaded. Please check the errors and try again.')
+      if (readyFiles.length === 0) {
+        throw new Error('No documents were successfully converted. Please check the errors and try again.')
       }
 
-      // Prepare document data with URLs
-      const documentUrls = allUploadedFiles
-        .filter((f) => f.url) // Extra safety check
-        .map((f) => ({ 
-          url: f.url!, 
-          name: f.name 
-        }))
+      // Prepare document data with page images (same as MCQ flow)
+      const documents = readyFiles.map((f) => ({ 
+        name: f.name,
+        page_images: f.pageImages!
+      }))
 
-      console.log('[Podcast] Sending to API:', documentUrls)
+      console.log('[Podcast] Sending to API:', documents.map(d => ({ name: d.name, pages: d.page_images.length })))
 
       // Call generation API
       const response = await fetch('/api/intelligent-podcast/generate', {
@@ -246,7 +177,7 @@ export default function NewPodcastPage() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          documentUrls,
+          documents,
           targetDuration,
           language,
           style,
@@ -353,8 +284,8 @@ export default function NewPodcastPage() {
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className="text-2xl">
-                        {file.status === 'uploaded' ? '✅' :
-                         file.status === 'uploading' ? '⏳' :
+                        {file.status === 'ready' ? '✅' :
+                         file.status === 'converting' ? '⏳' :
                          file.status === 'error' ? '❌' : '📄'}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -363,7 +294,8 @@ export default function NewPodcastPage() {
                         </p>
                         <p className="text-xs text-gray-500">
                           {formatFileSize(file.size)}
-                          {file.status === 'uploading' && ' - Uploading...'}
+                          {file.status === 'converting' && ' - Converting to images...'}
+                          {file.status === 'ready' && file.pageImages && ` - ${file.pageImages.length} pages ready`}
                           {file.status === 'error' && ` - Error: ${file.error}`}
                         </p>
                       </div>
@@ -476,7 +408,7 @@ export default function NewPodcastPage() {
           {/* Generate button */}
           <button
             onClick={handleGenerate}
-            disabled={isGenerating || uploadedFiles.filter(f => f.status === 'uploaded').length === 0}
+            disabled={isGenerating || uploadedFiles.filter(f => f.status === 'ready').length === 0}
             className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed font-semibold text-lg rounded-lg transition-all"
           >
             {isGenerating ? 'Generating Podcast...' : '🎙️ Generate Intelligent Podcast'}
