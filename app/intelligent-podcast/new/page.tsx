@@ -73,7 +73,7 @@ export default function NewPodcastPage() {
         // Upload to Supabase Storage
         const filePath = `podcasts/${Date.now()}-${fileObj.file.name}`
         const { data, error: uploadError } = await supabase.storage
-          .from('documents')
+          .from('podcast-documents') // Use podcast-documents bucket
           .upload(filePath, fileObj.file)
 
         if (uploadError) throw uploadError
@@ -81,7 +81,7 @@ export default function NewPodcastPage() {
         // Get public URL
         const {
           data: { publicUrl },
-        } = supabase.storage.from('documents').getPublicUrl(filePath)
+        } = supabase.storage.from('podcast-documents').getPublicUrl(filePath)
 
         // Update status to uploaded
         setUploadedFiles((prev) =>
