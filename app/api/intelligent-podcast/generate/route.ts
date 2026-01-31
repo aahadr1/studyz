@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { extractAndAnalyze } from '@/lib/intelligent-podcast/extractor'
 import { generateIntelligentScript } from '@/lib/intelligent-podcast/script-generator'
 import { generateMultiVoiceAudio, generatePredictedQuestionsAudio } from '@/lib/intelligent-podcast/audio-generator'
@@ -8,14 +9,31 @@ import { DocumentContent, VoiceProfile } from '@/types/intelligent-podcast'
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes
 
-function createServerClient() {
-  return createSupabaseClient(
+async function createAuthClient() {
+  const cookieStore = await cookies()
+  
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set(name, value, options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set(name, '', options)
+          } catch {
+            // Called from Server Component
+          }
+        },
       },
     }
   )
@@ -23,16 +41,8 @@ function createServerClient() {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient()
-    
-    // Get user from auth header
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized - No auth header' }, { status: 401 })
-    }
-    
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const supabase = await createAuthClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

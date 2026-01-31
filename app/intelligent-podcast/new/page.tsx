@@ -138,15 +138,6 @@ export default function NewPodcastPage() {
     setError(null)
 
     try {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        setError('Please log in to generate podcasts')
-        router.push('/login')
-        return
-      }
-
       const documentUrls = uploadedFiles
         .filter((f) => f.status === 'uploaded')
         .map((f) => f.url)
@@ -155,8 +146,8 @@ export default function NewPodcastPage() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`, // Add auth token
         },
+        credentials: 'include', // Important: include cookies for auth
         body: JSON.stringify({
           documentUrls,
           targetDuration,
