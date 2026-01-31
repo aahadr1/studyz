@@ -151,7 +151,7 @@ export default function InputArea({
           type="button"
           onClick={isRecording ? stopRecording : startRecording}
           disabled={isLoading}
-          className={`flex-shrink-0 w-10 h-10 flex items-center justify-center transition-colors disabled:opacity-40 ${
+          className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg transition-colors disabled:opacity-40 ${
             isRecording 
               ? 'bg-error text-white animate-pulse' 
               : 'bg-elevated border border-border text-text-secondary hover:text-text-primary hover:border-border-light'
@@ -175,7 +175,7 @@ export default function InputArea({
             placeholder={isRecording ? 'Listening...' : 'Ask about this page...'}
             rows={1}
             disabled={isLoading}
-            className="w-full px-4 py-2.5 bg-elevated border border-border text-text-primary placeholder-text-tertiary text-sm resize-none focus:outline-none focus:border-text-secondary disabled:opacity-50 transition-colors"
+            className="w-full px-4 py-2.5 bg-elevated border border-border rounded-lg text-text-primary placeholder-text-tertiary text-sm resize-none focus:outline-none focus:border-border-light focus:bg-hover disabled:opacity-50 transition-all"
             style={{ minHeight: '44px', maxHeight: '150px' }}
           />
           
@@ -199,7 +199,7 @@ export default function InputArea({
         <button
           type="submit"
           disabled={!input.trim() || isLoading}
-          className="flex-shrink-0 w-10 h-10 bg-mode-study text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+          className="flex-shrink-0 w-10 h-10 bg-mode-study text-white rounded-lg flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 hover:scale-105 active:scale-95 transition-all"
           title="Send message"
         >
           <FiSend className="w-5 h-5" />

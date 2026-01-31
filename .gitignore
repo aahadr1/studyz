@@ -33,3 +33,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# editor scratch / accidental secrets
+Untitled-*
+components/Untitled-*
+

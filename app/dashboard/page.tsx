@@ -118,7 +118,7 @@ export default function DashboardPage() {
 
         <div className="border-t border-border p-4">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-9 h-9 border border-border flex items-center justify-center text-sm font-medium mono">
+            <div className="w-9 h-9 border border-border rounded-lg flex items-center justify-center text-sm font-medium mono bg-elevated">
               {user?.fullName?.[0]?.toUpperCase() || 'S'}
             </div>
             <div className="flex-1 min-w-0">
@@ -158,31 +158,31 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-4 border border-border mb-10">
-            <div className="p-6 border-r border-border">
-              <span className="block text-3xl font-semibold mono">{recentLessons.length}</span>
+          <div className="grid grid-cols-4 gap-4 mb-10">
+            <div className="p-6 bg-elevated border border-border rounded-xl">
+              <span className="block text-3xl font-semibold mono text-text-primary">{recentLessons.length}</span>
               <span className="text-xs text-text-secondary uppercase tracking-wider">Lessons</span>
             </div>
-            <div className="p-6 border-r border-border">
-              <span className="block text-3xl font-semibold mono">{recentInteractive.length}</span>
+            <div className="p-6 bg-elevated border border-border rounded-xl">
+              <span className="block text-3xl font-semibold mono text-text-primary">{recentInteractive.length}</span>
               <span className="text-xs text-text-secondary uppercase tracking-wider">Interactive</span>
             </div>
-            <div className="p-6 border-r border-border">
-              <span className="block text-3xl font-semibold mono">{recentMcqs.length}</span>
+            <div className="p-6 bg-elevated border border-border rounded-xl">
+              <span className="block text-3xl font-semibold mono text-text-primary">{recentMcqs.length}</span>
               <span className="text-xs text-text-secondary uppercase tracking-wider">Quizzes</span>
             </div>
-            <div className="p-6">
-              <span className="block text-3xl font-semibold mono">0</span>
+            <div className="p-6 bg-elevated border border-border rounded-xl">
+              <span className="block text-3xl font-semibold mono text-text-primary">0</span>
               <span className="text-xs text-text-secondary uppercase tracking-wider">Day Streak</span>
             </div>
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-border mb-10">
-            <Link href="/lessons/new" className="bg-background p-6 group hover:bg-elevated transition-colors">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+            <Link href="/lessons/new" className="bg-elevated border border-border rounded-xl p-6 group hover:bg-hover hover:border-border-light hover:shadow-md transition-all">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="w-10 h-10 border border-border flex items-center justify-center mb-4 group-hover:border-text-primary transition-colors">
+                  <div className="w-12 h-12 border border-border rounded-xl flex items-center justify-center mb-4 group-hover:border-text-primary group-hover:bg-surface transition-all">
                     <FiPlus className="w-5 h-5" strokeWidth={1.5} />
                   </div>
                   <h3 className="text-lg font-medium text-text-primary mb-1">New Lesson</h3>
@@ -192,10 +192,10 @@ export default function DashboardPage() {
               </div>
             </Link>
 
-            <Link href="/interactive-lessons/new" className="bg-background p-6 group hover:bg-elevated transition-colors">
+            <Link href="/interactive-lessons/new" className="bg-elevated border border-border rounded-xl p-6 group hover:bg-hover hover:border-border-light hover:shadow-md transition-all">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="w-10 h-10 border border-border flex items-center justify-center mb-4 group-hover:border-text-primary transition-colors">
+                  <div className="w-12 h-12 border border-border rounded-xl flex items-center justify-center mb-4 group-hover:border-text-primary group-hover:bg-surface transition-all">
                     <FiZap className="w-5 h-5" strokeWidth={1.5} />
                   </div>
                   <h3 className="text-lg font-medium text-text-primary mb-1">Interactive Lesson</h3>
@@ -205,10 +205,10 @@ export default function DashboardPage() {
               </div>
             </Link>
 
-            <Link href="/mcq/new" className="bg-background p-6 group hover:bg-elevated transition-colors">
+            <Link href="/mcq/new" className="bg-elevated border border-border rounded-xl p-6 group hover:bg-hover hover:border-border-light hover:shadow-md transition-all">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="w-10 h-10 border border-border flex items-center justify-center mb-4 group-hover:border-text-primary transition-colors">
+                  <div className="w-12 h-12 border border-border rounded-xl flex items-center justify-center mb-4 group-hover:border-text-primary group-hover:bg-surface transition-all">
                     <FiCheckSquare className="w-5 h-5" strokeWidth={1.5} />
                   </div>
                   <h3 className="text-lg font-medium text-text-primary mb-1">New Quiz Set</h3>
@@ -229,15 +229,15 @@ export default function DashboardPage() {
               </div>
             
             {recentLessons.length > 0 ? (
-              <div className="border border-border divide-y divide-border">
+              <div className="border border-border rounded-xl overflow-hidden divide-y divide-border bg-elevated">
                 {recentLessons.map((lesson) => (
                   <Link
                     key={lesson.id}
                     href={`/lessons/${lesson.id}`}
-                    className="flex items-center justify-between p-4 hover:bg-elevated transition-colors"
+                    className="flex items-center justify-between p-4 hover:bg-hover transition-colors"
                   >
                     <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
+                      <div className="w-10 h-10 border border-border rounded-lg flex items-center justify-center text-text-tertiary bg-surface">
                         <FiBook className="w-4 h-4" strokeWidth={1.5} />
                     </div>
                       <div className="min-w-0">
@@ -252,8 +252,8 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="border border-border p-8 text-center">
-                <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
+              <div className="border border-border rounded-xl p-8 text-center bg-elevated">
+                <div className="w-12 h-12 border border-border rounded-xl flex items-center justify-center mx-auto mb-4 text-text-tertiary bg-surface">
                   <FiBook className="w-5 h-5" strokeWidth={1.5} />
                 </div>
                 <h4 className="font-medium text-text-primary mb-2">No lessons yet</h4>
@@ -276,15 +276,15 @@ export default function DashboardPage() {
             </div>
             
             {recentInteractive.length > 0 ? (
-              <div className="border border-border divide-y divide-border">
+              <div className="border border-border rounded-xl overflow-hidden divide-y divide-border bg-elevated">
                 {recentInteractive.map((lesson) => (
                   <Link
                     key={lesson.id}
                     href={`/interactive-lessons/${lesson.id}`}
-                    className="flex items-center justify-between p-4 hover:bg-elevated transition-colors"
+                    className="flex items-center justify-between p-4 hover:bg-hover transition-colors"
                   >
                     <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
+                      <div className="w-10 h-10 border border-border rounded-lg flex items-center justify-center text-text-tertiary bg-surface">
                         <FiZap className="w-4 h-4" strokeWidth={1.5} />
                       </div>
                       <div className="min-w-0">
@@ -299,8 +299,8 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="border border-border p-8 text-center">
-                <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
+              <div className="border border-border rounded-xl p-8 text-center bg-elevated">
+                <div className="w-12 h-12 border border-border rounded-xl flex items-center justify-center mx-auto mb-4 text-text-tertiary bg-surface">
                   <FiZap className="w-5 h-5" strokeWidth={1.5} />
                 </div>
                 <h4 className="font-medium text-text-primary mb-2">No interactive lessons yet</h4>
@@ -323,15 +323,15 @@ export default function DashboardPage() {
             </div>
             
             {recentMcqs.length > 0 ? (
-              <div className="border border-border divide-y divide-border">
+              <div className="border border-border rounded-xl overflow-hidden divide-y divide-border bg-elevated">
                 {recentMcqs.map((mcq) => (
                   <Link
                     key={mcq.id}
                     href={`/mcq/${mcq.id}`}
-                    className="flex items-center justify-between p-4 hover:bg-elevated transition-colors"
+                    className="flex items-center justify-between p-4 hover:bg-hover transition-colors"
                   >
                     <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-10 h-10 border border-border flex items-center justify-center text-text-tertiary">
+                      <div className="w-10 h-10 border border-border rounded-lg flex items-center justify-center text-text-tertiary bg-surface">
                         <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
                       </div>
                       <div className="min-w-0">
@@ -346,8 +346,8 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="border border-border p-8 text-center">
-                <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
+              <div className="border border-border rounded-xl p-8 text-center bg-elevated">
+                <div className="w-12 h-12 border border-border rounded-xl flex items-center justify-center mx-auto mb-4 text-text-tertiary bg-surface">
                   <FiCheckSquare className="w-5 h-5" strokeWidth={1.5} />
                 </div>
                 <h4 className="font-medium text-text-primary mb-2">No quizzes yet</h4>

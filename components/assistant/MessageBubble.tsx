@@ -148,7 +148,7 @@ export default function MessageBubble({
   return (
     <div className={`flex items-start gap-3 group ${isUser ? 'flex-row-reverse' : ''}`}>
       {/* Avatar */}
-      <div className={`w-8 h-8 flex-shrink-0 flex items-center justify-center ${
+      <div className={`w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg ${
         isUser ? 'bg-text-primary' : 'bg-mode-study'
       }`}>
         {isUser ? (
@@ -177,7 +177,7 @@ export default function MessageBubble({
 
         {/* Bubble */}
         <div className={`relative max-w-full ${isUser ? 'ml-8' : 'mr-8'}`}>
-          <div className={`px-4 py-3 ${
+          <div className={`px-4 py-3 rounded-2xl ${
             isUser 
               ? 'bg-text-primary text-background' 
               : message.isError
@@ -195,12 +195,12 @@ export default function MessageBubble({
                     // Custom code block with copy button
                     pre: ({ children, ...props }) => (
                       <div className="relative group/code">
-                        <pre className="!bg-background !border !border-border !p-3 overflow-x-auto" {...props}>
+                        <pre className="!bg-surface !border !border-border !p-3 overflow-x-auto !rounded-lg" {...props}>
                           {children}
                         </pre>
                         <button
                           onClick={handleCopy}
-                          className="absolute top-2 right-2 p-1.5 bg-elevated border border-border opacity-0 group-hover/code:opacity-100 transition-opacity"
+                          className="absolute top-2 right-2 p-1.5 bg-elevated border border-border rounded-md opacity-0 group-hover/code:opacity-100 transition-opacity"
                           title="Copy code"
                         >
                           {copied ? (
@@ -213,7 +213,7 @@ export default function MessageBubble({
                     ),
                     code: ({ inline, className, children, ...props }: any) => (
                       inline ? (
-                        <code className="!bg-background !px-1.5 !py-0.5 !text-text-primary mono text-xs" {...props}>
+                        <code className="!bg-elevated !px-1.5 !py-0.5 !text-text-primary mono text-xs !rounded" {...props}>
                           {children}
                         </code>
                       ) : (
@@ -260,7 +260,7 @@ export default function MessageBubble({
               {/* Copy */}
               <button
                 onClick={handleCopy}
-                className="p-1.5 text-text-tertiary hover:text-text-secondary hover:bg-elevated transition-colors"
+                className="p-1.5 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-elevated transition-colors"
                 title="Copy message"
               >
                 {copied ? <FiCheck className="w-3.5 h-3.5 text-success" /> : <FiCopy className="w-3.5 h-3.5" />}
@@ -269,7 +269,7 @@ export default function MessageBubble({
               {/* Speak */}
               <button
                 onClick={handleSpeak}
-                className={`p-1.5 transition-colors ${isSpeaking ? 'text-mode-study bg-mode-study/10' : 'text-text-tertiary hover:text-text-secondary hover:bg-elevated'}`}
+                className={`p-1.5 rounded-md transition-colors ${isSpeaking ? 'text-mode-study bg-mode-study/10' : 'text-text-tertiary hover:text-text-secondary hover:bg-elevated'}`}
                 title={isSpeaking ? 'Stop speaking' : 'Read aloud'}
               >
                 {isSpeaking ? <FiVolumeX className="w-3.5 h-3.5" /> : <FiVolume2 className="w-3.5 h-3.5" />}
@@ -278,7 +278,7 @@ export default function MessageBubble({
               {/* Bookmark */}
               <button
                 onClick={onBookmark}
-                className={`p-1.5 transition-colors ${message.isBookmarked ? 'text-warning' : 'text-text-tertiary hover:text-text-secondary hover:bg-elevated'}`}
+                className={`p-1.5 rounded-md transition-colors ${message.isBookmarked ? 'text-warning' : 'text-text-tertiary hover:text-text-secondary hover:bg-elevated'}`}
                 title={message.isBookmarked ? 'Remove bookmark' : 'Bookmark'}
               >
                 <FiBookmark className={`w-3.5 h-3.5 ${message.isBookmarked ? 'fill-current' : ''}`} />
@@ -288,14 +288,14 @@ export default function MessageBubble({
               <div className="flex items-center gap-0.5 ml-2 border-l border-border pl-2">
                 <button
                   onClick={() => setReaction(reaction === 'up' ? null : 'up')}
-                  className={`p-1.5 transition-colors ${reaction === 'up' ? 'text-success bg-success-muted' : 'text-text-tertiary hover:text-text-secondary hover:bg-elevated'}`}
+                  className={`p-1.5 rounded-md transition-colors ${reaction === 'up' ? 'text-success bg-success-muted' : 'text-text-tertiary hover:text-text-secondary hover:bg-elevated'}`}
                   title="Helpful"
                 >
                   <FiThumbsUp className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => setReaction(reaction === 'down' ? null : 'down')}
-                  className={`p-1.5 transition-colors ${reaction === 'down' ? 'text-error bg-error-muted' : 'text-text-tertiary hover:text-text-secondary hover:bg-elevated'}`}
+                  className={`p-1.5 rounded-md transition-colors ${reaction === 'down' ? 'text-error bg-error-muted' : 'text-text-tertiary hover:text-text-secondary hover:bg-elevated'}`}
                   title="Not helpful"
                 >
                   <FiThumbsDown className="w-3.5 h-3.5" />
