@@ -41,10 +41,20 @@ async function createAuthClient() {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check environment variables first
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('[Podcast] OPENAI_API_KEY is not set')
+      return NextResponse.json({ 
+        error: 'Server configuration error', 
+        details: 'OpenAI API key is not configured' 
+      }, { status: 500 })
+    }
+
     const supabase = await createAuthClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
+      console.error('[Podcast] Auth error:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -68,6 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[Podcast] Starting generation for ${documentUrls.length} documents`)
+    console.log(`[Podcast] User: ${user.id}, Style: ${style}, Duration: ${targetDuration}min`)
 
     // AUTOMATIC PDF EXTRACTION
     const { extractTextFromPdfUrl } = await import('@/lib/intelligent-podcast/pdf-extractor')
@@ -77,7 +88,13 @@ export async function POST(request: NextRequest) {
     for (const doc of documentUrls) {
       try {
         console.log(`[Podcast] Extracting content from ${doc.name}...`)
+        console.log(`[Podcast] Document URL: ${doc.url}`)
+        
         const { content, pageCount } = await extractTextFromPdfUrl(doc.url, doc.name)
+        
+        if (!content || content.trim().length < 50) {
+          throw new Error('Extracted content is too short or empty')
+        }
         
         documents.push({
           id: crypto.randomUUID(),
@@ -91,11 +108,19 @@ export async function POST(request: NextRequest) {
         console.log(`[Podcast] ✅ ${doc.name}: ${content.length} chars, ${pageCount} pages`)
       } catch (error: any) {
         console.error(`[Podcast] Failed to extract ${doc.name}:`, error)
+        console.error(`[Podcast] Error stack:`, error.stack)
         return NextResponse.json({ 
           error: `Failed to extract content from ${doc.name}`, 
-          details: error.message 
+          details: error.message || 'Unknown extraction error'
         }, { status: 500 })
       }
+    }
+    
+    if (documents.length === 0) {
+      return NextResponse.json({ 
+        error: 'No documents were successfully processed',
+        details: 'All document extractions failed'
+      }, { status: 500 })
     }
 
     // STEP 1: Extract and analyze (build knowledge graph)

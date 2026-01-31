@@ -1,4 +1,3 @@
-import OpenAI from 'openai'
 import {
   DocumentContent,
   KnowledgeGraph,
@@ -7,17 +6,7 @@ import {
   PredictedQuestion,
   VoiceProfile,
 } from '@/types/intelligent-podcast'
-
-let openaiInstance: OpenAI | null = null
-
-function getOpenAI(): OpenAI {
-  if (!openaiInstance) {
-    openaiInstance = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    })
-  }
-  return openaiInstance
-}
+import { getOpenAI } from './openai-client'
 
 interface ScriptGenerationResult {
   chapters: PodcastChapter[]

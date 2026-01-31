@@ -1,55 +1,38 @@
-// Dynamic imports to avoid build-time evaluation
+// Fallback to image-based extraction if needed
 let pdfjsLib: any = null
 let createCanvas: any = null
-let canvasFactory: any = null
+let pdfParse: any = null
 
-async function initPdfJs() {
+async function initPdfParse() {
+  if (!pdfParse) {
+    try {
+      // Dynamic import for pdf-parse (CommonJS module)
+      const pdfParseModule: any = await import('pdf-parse')
+      pdfParse = pdfParseModule.default || pdfParseModule
+      console.log('[PDF] pdf-parse initialized successfully')
+    } catch (error: any) {
+      console.error('[PDF] Failed to initialize pdf-parse:', error)
+      throw new Error(`pdf-parse initialization failed: ${error.message}`)
+    }
+  }
+  return pdfParse
+}
+
+async function initPdfJsForImages() {
   if (!pdfjsLib) {
     try {
-      // Dynamic import using the LEGACY build for Node.js environments
-      // pdfjs-dist v5.x requires legacy build for Node.js (no DOMMatrix etc.)
-      // @ts-ignore - dynamic import typing doesn't match the ESM export
-      const pdfjsModule: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
-      pdfjsLib = pdfjsModule.default || pdfjsModule
-      
-      console.log('pdfjs-dist (legacy) loaded, version:', pdfjsLib.version)
-
-      // Configure PDF.js to use the legacy worker
-      // Use import.meta.url to get a reliable path that works in both local and Vercel environments
-      const url = await import('url')
-      const path = await import('path')
-      const currentDir = path.dirname(url.fileURLToPath(import.meta.url))
-      const workerPath = path.resolve(currentDir, '../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
-      // @ts-ignore - pdfjs-dist types don't match the actual module structure
-      pdfjsLib.GlobalWorkerOptions.workerSrc = url.pathToFileURL(workerPath).href
-      console.log('Worker configured:', workerPath)
-
-      // Import canvas dynamically
+      // Import canvas for image rendering
       const canvasModule = await import('canvas')
       createCanvas = canvasModule.createCanvas
-      console.log('canvas module loaded')
-
-      // Custom canvas factory for Node.js environment
-      canvasFactory = {
-        create: (width: number, height: number) => {
-          const canvas = createCanvas(width, height)
-          return {
-            canvas,
-            context: canvas.getContext('2d'),
-          }
-        },
-        reset: (canvasAndContext: { canvas: any; context: any }, width: number, height: number) => {
-          canvasAndContext.canvas.width = width
-          canvasAndContext.canvas.height = height
-        },
-        destroy: (canvasAndContext: { canvas: any; context: any }) => {
-          canvasAndContext.canvas.width = 0
-          canvasAndContext.canvas.height = 0
-        },
-      }
-    } catch (initError: any) {
-      console.error('Failed to initialize PDF.js:', initError)
-      throw new Error(`PDF.js initialization failed: ${initError.message}`)
+      
+      // Import pdfjs-dist for image rendering
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+      pdfjsLib = pdfjs
+      
+      console.log('[PDF] PDF.js initialized for image rendering')
+    } catch (error: any) {
+      console.error('[PDF] Failed to initialize PDF.js:', error)
+      throw new Error(`PDF.js initialization failed: ${error.message}`)
     }
   }
 }
@@ -62,7 +45,44 @@ export interface PageImage {
 }
 
 /**
+ * Extract text content from PDF using pdf-parse (text-based extraction)
+ * This is much faster and more reliable than image-based extraction
+ */
+export async function extractPdfText(pdfBuffer: Buffer): Promise<{ text: string; numPages: number }> {
+  console.log('[PDF] Extracting text from PDF, buffer length:', pdfBuffer.length)
+  
+  // Validate buffer
+  if (!pdfBuffer || pdfBuffer.length === 0) {
+    throw new Error('PDF buffer is empty')
+  }
+
+  // Check if it looks like a PDF (starts with %PDF-)
+  const header = pdfBuffer.slice(0, 5).toString('ascii')
+  if (!header.startsWith('%PDF-')) {
+    console.error('[PDF] Invalid PDF header:', header)
+    throw new Error('File does not appear to be a valid PDF (invalid header)')
+  }
+
+  try {
+    // Initialize pdf-parse dynamically
+    const parser = await initPdfParse()
+    const data = await parser(pdfBuffer)
+    
+    console.log(`[PDF] Successfully extracted ${data.numpages} pages, ${data.text.length} characters`)
+    
+    return {
+      text: data.text,
+      numPages: data.numpages,
+    }
+  } catch (error: any) {
+    console.error('[PDF] Text extraction failed:', error)
+    throw new Error(`Failed to extract PDF text: ${error.message}`)
+  }
+}
+
+/**
  * Convert a PDF buffer to an array of PNG image buffers (one per page)
+ * Only used as fallback when text extraction fails
  * @param pdfBuffer - The PDF file as a Buffer
  * @param scale - Scale factor for rendering (default 1.5 for good quality)
  * @returns Array of page images with their buffers and dimensions
@@ -71,11 +91,11 @@ export async function convertPdfToImages(
   pdfBuffer: Buffer,
   scale: number = 1.5
 ): Promise<PageImage[]> {
-  console.log('convertPdfToImages called, buffer length:', pdfBuffer.length)
+  console.log('[PDF] Converting PDF to images, buffer length:', pdfBuffer.length)
   
   // Initialize PDF.js at runtime
-  await initPdfJs()
-  console.log('PDF.js initialized successfully')
+  await initPdfJsForImages()
+  console.log('[PDF] PDF.js initialized successfully')
 
   // Validate buffer
   if (!pdfBuffer || pdfBuffer.length === 0) {
@@ -85,28 +105,25 @@ export async function convertPdfToImages(
   // Check if it looks like a PDF (starts with %PDF-)
   const header = pdfBuffer.slice(0, 5).toString('ascii')
   if (!header.startsWith('%PDF-')) {
-    console.error('Invalid PDF header:', header)
+    console.error('[PDF] Invalid PDF header:', header)
     throw new Error('File does not appear to be a valid PDF (invalid header)')
   }
 
   // Load the PDF document
   let pdfDoc: any
   try {
-    console.log('Creating getDocument task...')
+    console.log('[PDF] Creating getDocument task...')
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(pdfBuffer),
-      // @ts-ignore - canvasFactory type mismatch
-      canvasFactory,
       useSystemFonts: true,
-      standardFontDataUrl: undefined,
       disableFontFace: true,
     })
 
-    console.log('Waiting for PDF to load...')
+    console.log('[PDF] Waiting for PDF to load...')
     pdfDoc = await loadingTask.promise
-    console.log('PDF loaded successfully, pages:', pdfDoc.numPages)
+    console.log('[PDF] PDF loaded successfully, pages:', pdfDoc.numPages)
   } catch (loadError: any) {
-    console.error('Failed to load PDF document:', loadError)
+    console.error('[PDF] Failed to load PDF document:', loadError)
     throw new Error(`Failed to load PDF: ${loadError.message}`)
   }
 
@@ -116,7 +133,7 @@ export async function convertPdfToImages(
   // Process each page
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
     try {
-      console.log(`Processing page ${pageNum}/${numPages}...`)
+      console.log(`[PDF] Processing page ${pageNum}/${numPages}...`)
       const page = await pdfDoc.getPage(pageNum)
       const viewport = page.getViewport({ scale })
 
@@ -126,7 +143,6 @@ export async function convertPdfToImages(
 
       // Render the page to canvas
       await page.render({
-        // @ts-ignore - canvas context type mismatch between node-canvas and pdfjs
         canvasContext: context,
         viewport,
       }).promise
@@ -140,9 +156,9 @@ export async function convertPdfToImages(
         width: Math.round(viewport.width),
         height: Math.round(viewport.height),
       })
-      console.log(`Page ${pageNum} converted successfully`)
+      console.log(`[PDF] Page ${pageNum} converted successfully`)
     } catch (pageError: any) {
-      console.error(`Failed to process page ${pageNum}:`, pageError)
+      console.error(`[PDF] Failed to process page ${pageNum}:`, pageError)
       throw new Error(`Failed to process page ${pageNum}: ${pageError.message}`)
     }
   }
@@ -151,16 +167,16 @@ export async function convertPdfToImages(
 }
 
 /**
- * Get the number of pages in a PDF
+ * Get the number of pages in a PDF using fast text-based parsing
  */
 export async function getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
-  // Initialize PDF.js at runtime
-  await initPdfJs()
-
-  const loadingTask = pdfjsLib.getDocument({
-    data: new Uint8Array(pdfBuffer),
-  })
-  const pdfDoc = await loadingTask.promise
-  return pdfDoc.numPages
+  try {
+    const parser = await initPdfParse()
+    const data = await parser(pdfBuffer)
+    return data.numpages
+  } catch (error: any) {
+    console.error('[PDF] Failed to get page count:', error)
+    throw new Error(`Failed to get PDF page count: ${error.message}`)
+  }
 }
 

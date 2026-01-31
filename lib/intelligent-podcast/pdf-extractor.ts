@@ -1,25 +1,47 @@
-import { convertPdfToImages } from '../pdf-to-images'
-import OpenAI from 'openai'
-
-let openaiInstance: OpenAI | null = null
-
-function getOpenAI(): OpenAI {
-  if (!openaiInstance) {
-    openaiInstance = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    })
-  }
-  return openaiInstance
-}
+import { extractPdfText, convertPdfToImages } from '../pdf-to-images'
+import { getOpenAI } from './openai-client'
 
 /**
- * Extract text content from a PDF file using OCR (GPT-4 Vision)
+ * Extract text content from a PDF file (text-based, much faster)
  */
 export async function extractTextFromPdf(
   pdfBuffer: Buffer,
   filename: string
 ): Promise<{ content: string; pageCount: number }> {
   console.log(`[PDF Extractor] Processing ${filename}...`)
+
+  try {
+    // First, try text-based extraction (fast and reliable)
+    console.log('[PDF Extractor] Attempting text-based extraction...')
+    const { text, numPages } = await extractPdfText(pdfBuffer)
+    
+    if (text && text.trim().length > 100) {
+      // Text extraction successful
+      console.log(`[PDF Extractor] ✅ Text extraction successful: ${text.length} chars, ${numPages} pages`)
+      return {
+        content: text,
+        pageCount: numPages,
+      }
+    }
+    
+    console.log('[PDF Extractor] Text extraction returned minimal content, falling back to OCR...')
+  } catch (textError: any) {
+    console.error('[PDF Extractor] Text extraction failed:', textError.message)
+    console.log('[PDF Extractor] Falling back to OCR extraction...')
+  }
+
+  // Fallback to image-based OCR extraction if text extraction fails
+  return extractTextFromPdfWithOCR(pdfBuffer, filename)
+}
+
+/**
+ * Extract text from PDF using OCR (GPT-4 Vision) - slower but works on scanned PDFs
+ */
+async function extractTextFromPdfWithOCR(
+  pdfBuffer: Buffer,
+  filename: string
+): Promise<{ content: string; pageCount: number }> {
+  console.log(`[PDF Extractor] Using OCR extraction for ${filename}...`)
 
   // Convert PDF to images
   const pageImages = await convertPdfToImages(pdfBuffer, 1.5)
@@ -105,13 +127,42 @@ export async function extractTextFromPdfUrl(
 ): Promise<{ content: string; pageCount: number }> {
   console.log(`[PDF Extractor] Downloading from URL: ${url}`)
 
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to download PDF: ${response.statusText}`)
+  try {
+    // Add timeout to fetch
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'StudyzPodcastGenerator/1.0',
+      },
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error(`Failed to download PDF: ${response.status} ${response.statusText}`)
+    }
+
+    const contentType = response.headers.get('content-type')
+    console.log(`[PDF Extractor] Content-Type: ${contentType}`)
+
+    const arrayBuffer = await response.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    console.log(`[PDF Extractor] Downloaded ${buffer.length} bytes`)
+
+    if (buffer.length === 0) {
+      throw new Error('Downloaded file is empty')
+    }
+
+    return extractTextFromPdf(buffer, filename)
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('PDF download timed out after 30 seconds')
+    }
+    console.error(`[PDF Extractor] Download error:`, error)
+    throw new Error(`Failed to download PDF: ${error.message}`)
   }
-
-  const arrayBuffer = await response.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-
-  return extractTextFromPdf(buffer, filename)
 }

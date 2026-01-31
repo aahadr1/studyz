@@ -1,16 +1,5 @@
-import OpenAI from 'openai'
 import { DocumentContent, KnowledgeGraph, ConceptNode } from '@/types/intelligent-podcast'
-
-let openaiInstance: OpenAI | null = null
-
-function getOpenAI(): OpenAI {
-  if (!openaiInstance) {
-    openaiInstance = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    })
-  }
-  return openaiInstance
-}
+import { getOpenAI } from './openai-client'
 
 /**
  * Extract and analyze content from documents to build a knowledge graph
