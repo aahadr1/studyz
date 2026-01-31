@@ -138,13 +138,25 @@ export default function NewPodcastPage() {
     setError(null)
 
     try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        setError('Please log in to generate podcasts')
+        router.push('/login')
+        return
+      }
+
       const documentUrls = uploadedFiles
         .filter((f) => f.status === 'uploaded')
         .map((f) => f.url)
 
       const response = await fetch('/api/intelligent-podcast/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`, // Add auth token
+        },
         body: JSON.stringify({
           documentUrls,
           targetDuration,
