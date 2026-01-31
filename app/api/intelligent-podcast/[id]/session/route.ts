@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const body = await request.json()
     const {
-      currentTime,
+      currentTime, // Frontend uses currentTime
       playbackRate = 1.0,
       isPlaying = false,
       completedSegments = [],
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const { data: session, error } = await supabase
         .from('podcast_sessions')
         .update({
-          current_time: currentTime,
+          current_position: currentTime, // Map currentTime to current_position
           playback_rate: playbackRate,
           is_playing: isPlaying,
           completed_segments: completedSegments,
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         .insert({
           podcast_id: params.id,
           user_id: user.id,
-          current_time: currentTime || 0,
+          current_position: currentTime || 0, // Map currentTime to current_position
           playback_rate: playbackRate,
           is_playing: isPlaying,
           completed_segments: completedSegments,

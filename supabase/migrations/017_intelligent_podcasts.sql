@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS podcast_sessions (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   
   -- Playback state
-  current_time REAL NOT NULL DEFAULT 0, -- Current playback position in seconds
+  current_position REAL NOT NULL DEFAULT 0, -- Current playback position in seconds
   playback_rate REAL NOT NULL DEFAULT 1.0,
   is_playing BOOLEAN NOT NULL DEFAULT false,
   
