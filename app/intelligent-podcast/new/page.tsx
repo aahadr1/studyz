@@ -140,7 +140,9 @@ export default function NewPodcastPage() {
     try {
       const documentUrls = uploadedFiles
         .filter((f) => f.status === 'uploaded')
-        .map((f) => f.url)
+        .map((f) => ({ url: f.url!, name: f.name }))
+
+      console.log('Sending documents:', documentUrls)
 
       const response = await fetch('/api/intelligent-podcast/generate', {
         method: 'POST',

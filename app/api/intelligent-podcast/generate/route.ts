@@ -50,36 +50,53 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const {
-      documentIds,
+      documentUrls,
       targetDuration = 30,
       language = 'auto',
       style = 'conversational',
       voiceProvider = 'openai',
     } = body as {
-      documentIds?: string[]
+      documentUrls?: Array<{ url: string; name: string }>
       targetDuration?: number
       language?: string
       style?: 'educational' | 'conversational' | 'technical' | 'storytelling'
       voiceProvider?: 'openai' | 'elevenlabs' | 'playht'
     }
 
-    if (!documentIds || documentIds.length === 0) {
+    if (!documentUrls || documentUrls.length === 0) {
       return NextResponse.json({ error: 'At least one document is required' }, { status: 400 })
     }
 
-    console.log(`[Podcast] Starting generation for ${documentIds.length} documents`)
+    console.log(`[Podcast] Starting generation for ${documentUrls.length} documents`)
 
-    // For now, use placeholder documents
-    // TODO: Fetch actual documents from database
-    const documents: DocumentContent[] = documentIds.map((id) => ({
-      id,
-      title: `Document ${id}`,
-      content:
-        'This is placeholder content. In production, this would be the actual extracted PDF content with OCR if needed.',
-      pageCount: 10,
-      language: 'en',
-      extractedAt: new Date().toISOString(),
-    }))
+    // AUTOMATIC PDF EXTRACTION
+    const { extractTextFromPdfUrl } = await import('@/lib/intelligent-podcast/pdf-extractor')
+    
+    const documents: DocumentContent[] = []
+    
+    for (const doc of documentUrls) {
+      try {
+        console.log(`[Podcast] Extracting content from ${doc.name}...`)
+        const { content, pageCount } = await extractTextFromPdfUrl(doc.url, doc.name)
+        
+        documents.push({
+          id: crypto.randomUUID(),
+          title: doc.name.replace('.pdf', ''),
+          content,
+          pageCount,
+          language: 'auto', // Will be detected later
+          extractedAt: new Date().toISOString(),
+        })
+        
+        console.log(`[Podcast] ✅ ${doc.name}: ${content.length} chars, ${pageCount} pages`)
+      } catch (error: any) {
+        console.error(`[Podcast] Failed to extract ${doc.name}:`, error)
+        return NextResponse.json({ 
+          error: `Failed to extract content from ${doc.name}`, 
+          details: error.message 
+        }, { status: 500 })
+      }
+    }
 
     // STEP 1: Extract and analyze (build knowledge graph)
     console.log('[Podcast] Step 1/4: Extracting and analyzing content...')
@@ -157,7 +174,7 @@ export async function POST(request: NextRequest) {
         description,
         duration: Math.round(totalDuration),
         language: finalLanguage,
-        document_ids: documentIds,
+        document_ids: documents.map(d => d.id),
         knowledge_graph: knowledgeGraph,
         chapters,
         segments: segmentsWithAudio,
