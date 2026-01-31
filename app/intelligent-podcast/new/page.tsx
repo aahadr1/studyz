@@ -77,9 +77,10 @@ export default function NewPodcastPage() {
     setUploadedFiles((prev) => prev.filter((f) => f.id !== id))
   }
 
-  const uploadFiles = async () => {
+  const uploadFiles = async (): Promise<UploadedFile[]> => {
     const supabase = createClient()
     const filesToUpload = uploadedFiles.filter((f) => f.status === 'pending')
+    const uploadedResults: UploadedFile[] = []
 
     for (const fileObj of filesToUpload) {
       try {
@@ -88,27 +89,40 @@ export default function NewPodcastPage() {
           prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading' } : f))
         )
 
+        console.log(`[Upload] Uploading ${fileObj.name}...`)
+
         // Upload to Supabase Storage
         const filePath = `podcasts/${Date.now()}-${fileObj.file.name}`
         const { data, error: uploadError } = await supabase.storage
-          .from('podcast-documents') // Use podcast-documents bucket
+          .from('podcast-documents')
           .upload(filePath, fileObj.file)
 
-        if (uploadError) throw uploadError
+        if (uploadError) {
+          console.error(`[Upload] Error for ${fileObj.name}:`, uploadError)
+          throw uploadError
+        }
 
         // Get public URL
         const {
           data: { publicUrl },
         } = supabase.storage.from('podcast-documents').getPublicUrl(filePath)
 
+        console.log(`[Upload] ✅ ${fileObj.name} → ${publicUrl}`)
+
+        const uploadedFile: UploadedFile = {
+          ...fileObj,
+          status: 'uploaded',
+          url: publicUrl,
+        }
+
         // Update status to uploaded
         setUploadedFiles((prev) =>
-          prev.map((f) =>
-            f.id === fileObj.id ? { ...f, status: 'uploaded', url: publicUrl } : f
-          )
+          prev.map((f) => (f.id === fileObj.id ? uploadedFile : f))
         )
+
+        uploadedResults.push(uploadedFile)
       } catch (err: any) {
-        console.error('Upload error:', err)
+        console.error('[Upload] Upload error:', err)
         setUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === fileObj.id
@@ -116,40 +130,63 @@ export default function NewPodcastPage() {
               : f
           )
         )
+        throw err // Propagate error to stop generation
       }
     }
+
+    return uploadedResults
   }
 
   const handleGenerate = async () => {
-    const uploadedDocs = uploadedFiles.filter((f) => f.status === 'uploaded')
-    
-    if (uploadedDocs.length === 0) {
-      setError('Please upload at least one document')
+    if (uploadedFiles.length === 0) {
+      setError('Please add at least one PDF document')
       return
-    }
-
-    // First, upload any pending files
-    const pendingFiles = uploadedFiles.filter((f) => f.status === 'pending')
-    if (pendingFiles.length > 0) {
-      await uploadFiles()
     }
 
     setIsGenerating(true)
     setError(null)
 
     try {
-      const documentUrls = uploadedFiles
-        .filter((f) => f.status === 'uploaded')
-        .map((f) => ({ url: f.url!, name: f.name }))
+      // STEP 1: Upload ALL pending files first
+      console.log('[Podcast] Step 1: Checking uploads...')
+      
+      const pendingFiles = uploadedFiles.filter((f) => f.status === 'pending')
+      let uploadedResults: UploadedFile[] = []
+      
+      if (pendingFiles.length > 0) {
+        console.log(`[Podcast] Uploading ${pendingFiles.length} pending files...`)
+        uploadedResults = await uploadFiles()
+      }
 
-      console.log('Sending documents:', documentUrls)
+      // STEP 2: Get all successfully uploaded files
+      const allUploadedFiles = [
+        ...uploadedFiles.filter((f) => f.status === 'uploaded'),
+        ...uploadedResults,
+      ]
 
+      console.log('[Podcast] Total uploaded files:', allUploadedFiles.length)
+
+      if (allUploadedFiles.length === 0) {
+        throw new Error('No documents were successfully uploaded. Please check the errors and try again.')
+      }
+
+      // STEP 3: Prepare document data with URLs
+      const documentUrls = allUploadedFiles
+        .filter((f) => f.url) // Extra safety check
+        .map((f) => ({ 
+          url: f.url!, 
+          name: f.name 
+        }))
+
+      console.log('[Podcast] Step 2: Sending to API:', documentUrls)
+
+      // STEP 4: Call generation API
       const response = await fetch('/api/intelligent-podcast/generate', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // Important: include cookies for auth
+        credentials: 'include',
         body: JSON.stringify({
           documentUrls,
           targetDuration,
@@ -159,17 +196,19 @@ export default function NewPodcastPage() {
         }),
       })
 
+      const responseData = await response.json()
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate podcast')
+        console.error('[Podcast] API error response:', responseData)
+        throw new Error(responseData.error || responseData.details || 'Failed to generate podcast')
       }
 
-      const result = await response.json()
+      console.log('[Podcast] ✅ Success:', responseData)
       
       // Redirect to podcast player
-      router.push(`/intelligent-podcast/${result.id}`)
+      router.push(`/intelligent-podcast/${responseData.id}`)
     } catch (err: any) {
-      console.error('Generation error:', err)
+      console.error('[Podcast] Generation error:', err)
       setError(err.message || 'Failed to generate podcast')
     } finally {
       setIsGenerating(false)
