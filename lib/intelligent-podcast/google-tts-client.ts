@@ -147,11 +147,11 @@ export async function generateGeminiConversationAudio(
 
   // Create conversation style prompt
   const stylePrompt = conversationPrompt || 
-    `Generate this as a natural, engaging conversation between ${[...new Set(segments.map(s => s.speaker))].join(' and ')}. Make it sound like real people having a friendly, educational discussion with natural pacing and appropriate emotions.`
+    `Generate this as a natural, engaging conversation between ${Array.from(new Set(segments.map(s => s.speaker))).join(' and ')}. Make it sound like real people having a friendly, educational discussion with natural pacing and appropriate emotions.`
 
   try {
     // Get unique speakers and map to Gemini voices
-    const uniqueSpeakers = [...new Set(segments.map(s => s.speaker))]
+    const uniqueSpeakers = Array.from(new Set(segments.map(s => s.speaker)))
     const speakerVoiceConfigs = uniqueSpeakers.map((speaker, index) => {
       const segment = segments.find(s => s.speaker === speaker)!
       const geminiVoice = mapVoiceProfileToGemini(segment.voiceProfile, language)

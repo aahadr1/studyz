@@ -49,7 +49,7 @@ async function generateGeminiConversation(
     })
 
     // Create conversation prompt
-    const speakers = [...new Set(segments.map(s => s.speaker))]
+    const speakers = Array.from(new Set(segments.map(s => s.speaker)))
     const conversationPrompt = `Generate this as a natural, engaging educational podcast conversation between ${speakers.join(' and ')}. 
 
 The conversation should feel authentic with:
