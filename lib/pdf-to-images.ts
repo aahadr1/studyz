@@ -24,6 +24,16 @@ async function initPdfJsForImages() {
       // Import canvas for image rendering
       const canvasModule = await import('canvas')
       createCanvas = canvasModule.createCanvas
+
+      // pdfjs-dist expects DOMMatrix / Path2D in some runtimes (even in "legacy" build).
+      // In Node, we polyfill these from node-canvas if available.
+      const g: any = globalThis as any
+      if (!g.DOMMatrix && (canvasModule as any).DOMMatrix) g.DOMMatrix = (canvasModule as any).DOMMatrix
+      if (!g.DOMPoint && (canvasModule as any).DOMPoint) g.DOMPoint = (canvasModule as any).DOMPoint
+      if (!g.DOMRect && (canvasModule as any).DOMRect) g.DOMRect = (canvasModule as any).DOMRect
+      if (!g.Path2D && (canvasModule as any).Path2D) g.Path2D = (canvasModule as any).Path2D
+      if (!g.ImageData && (canvasModule as any).ImageData) g.ImageData = (canvasModule as any).ImageData
+      if (!g.Image && (canvasModule as any).Image) g.Image = (canvasModule as any).Image
       
       // Import pdfjs-dist for image rendering
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
