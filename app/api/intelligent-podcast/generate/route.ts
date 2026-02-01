@@ -120,7 +120,12 @@ export async function POST(request: NextRequest) {
 
     if (insertError || !podcast) {
       console.error('[Podcast] Failed to create podcast record:', insertError)
-      return NextResponse.json({ error: 'Failed to create podcast' }, { status: 500 })
+      console.error('[Podcast] Insert error details:', JSON.stringify(insertError, null, 2))
+      return NextResponse.json({ 
+        error: 'Failed to create podcast', 
+        details: insertError?.message || insertError?.hint || 'Database insert failed',
+        code: insertError?.code
+      }, { status: 500 })
     }
 
     console.log(`[Podcast] Created podcast ${podcast.id}, starting background generation`)
