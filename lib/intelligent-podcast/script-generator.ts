@@ -113,7 +113,9 @@ async function generateChapters(
   config: { targetDuration: number; language: string; style: string; userPrompt?: string }
 ): Promise<{ chapters: PodcastChapter[]; title: string; description: string }> {
   const targetSeconds = Math.max(1, Math.round((config.targetDuration || 1) * 60))
-  const targetChapters = Math.min(10, Math.max(3, Math.round(config.targetDuration / 8))) // ~1 chapter per 8 min
+  // Allow more chapters for longer content, with better scaling
+  const baseChaptersFor60Min = 8 // ~7.5 min per chapter for 60min content
+  const targetChapters = Math.max(3, Math.round(config.targetDuration / 7.5)) // ~1 chapter per 7.5 min, no upper limit
 
   const documentsSummary = documents
     // Provide more source material; Gemini has a large context window.
@@ -289,7 +291,7 @@ async function generateSegments(
     const ratio = targetWords > 0 ? currentWords / targetWords : 1
 
     // If we’re close enough, keep as-is.
-    if (ratio >= 0.9 && params.currentSegments.length >= params.minSegments) return params.currentSegments
+    if (ratio >= 0.75 && params.currentSegments.length >= params.minSegments) return params.currentSegments
 
     const systemInstruction =
       params.language === 'fr'
@@ -378,11 +380,8 @@ ${JSON.stringify({ segments: params.currentSegments }, null, 2)}
       .join('\n')
 
     const chapterSeconds = Math.max(60, Math.round(chapter.endTime - chapter.startTime))
-    const chapterTargetWords = Math.max(250, Math.round((chapterSeconds / 60) * 160)) // ~160 wpm baseline
-    const targetSegmentsForChapter = Math.min(
-      18,
-      Math.max(6, Math.round(chapterSeconds / 75)) // ~1 segment per 60-90s of audio
-    )
+    const chapterTargetWords = Math.max(250, Math.round((chapterSeconds / 60) * 135)) // ~135 wpm for more natural pacing
+    const targetSegmentsForChapter = Math.max(6, Math.round(chapterSeconds / 45)) // ~1 segment per 45s for more granular content
 
     const systemPrompt =
       config.language === 'fr'
@@ -436,7 +435,7 @@ STRUCTURE DES SEGMENTS (json) :
   ]
 }
 
-Crée environ ${targetSegmentsForChapter} segments (min 6, max 18) pour couvrir tous les concepts du chapitre.`
+Crée environ ${targetSegmentsForChapter} segments (min 6, max 50) pour couvrir tous les concepts du chapitre.`
         : `You are an expert scriptwriter for educational conversational podcasts.
 
 USER DEMAND (follow as closely as possible):
@@ -487,7 +486,7 @@ SEGMENT STRUCTURE (json format):
   ]
 }
 
-Create about ${targetSegmentsForChapter} segments (min 6, max 18) to cover all chapter concepts.`
+Create about ${targetSegmentsForChapter} segments (min 6, max 50) to cover all chapter concepts.`
 
     try {
       const raw = await runGemini3Flash({
@@ -500,23 +499,39 @@ Create about ${targetSegmentsForChapter} segments (min 6, max 18) to cover all c
       })
       const parsed = parseJsonObject<any>(raw)
       const initialSegments: RawSegment[] = Array.isArray(parsed.segments) ? parsed.segments : []
-      const expandedSegments = await expandChapterSegmentsIfNeeded({
-        chapterTitle: chapter.title,
-        chapterSummary: chapter.summary,
-        chapterSeconds,
-        chapterTargetWords,
-        conceptsDescription,
-        currentSegments: initialSegments,
-        minSegments: Math.max(6, Math.min(18, targetSegmentsForChapter)),
-        maxSegments: 18,
-        language: config.language,
-        userPrompt: config.userPrompt,
-      })
+      // Multiple expansion rounds for better depth
+      let expandedSegments = initialSegments
+      const maxExpansionRounds = 3
+      
+      for (let round = 0; round < maxExpansionRounds; round++) {
+        const newSegments = await expandChapterSegmentsIfNeeded({
+          chapterTitle: chapter.title,
+          chapterSummary: chapter.summary,
+          chapterSeconds,
+          chapterTargetWords,
+          conceptsDescription,
+          currentSegments: expandedSegments,
+          minSegments: Math.max(6, Math.min(30, targetSegmentsForChapter)),
+          maxSegments: 50, // Increased from 18 to allow much longer chapters
+          language: config.language,
+          userPrompt: config.userPrompt,
+        })
+        
+        // If no significant expansion happened, stop
+        const currentWords = expandedSegments.reduce((sum, s) => sum + countWords(s.text || ''), 0)
+        const newWords = newSegments.reduce((sum, s) => sum + countWords(s.text || ''), 0)
+        const expansionRatio = currentWords > 0 ? newWords / currentWords : 1
+        
+        expandedSegments = newSegments
+        
+        // Stop if we got good expansion or hit our target
+        if (expansionRatio < 1.2 || newWords >= chapterTargetWords * 0.9) break
+      }
 
-      // Sanitize output and cap segment count.
+      // Sanitize output and cap segment count. Increased cap from 18 to 50
       const chapterSegments: RawSegment[] = (expandedSegments || [])
         .filter((s) => s && typeof s === 'object')
-        .slice(0, 18)
+        .slice(0, 50)
 
       // Timestamps/durations will be recalculated later from audio duration,
       // but we still set placeholder values here.
