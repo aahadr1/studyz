@@ -9,6 +9,14 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '50mb',
     },
+    // Vercel/Next output file tracing can miss PDF.js worker files because they are loaded dynamically.
+    // Force-include them so server-side PDF rendering works in production.
+    outputFileTracingIncludes: {
+      '/api/intelligent-podcast/[id]/process': [
+        './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+        './node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs',
+      ],
+    },
     // Exclude native modules from webpack bundling
     serverComponentsExternalPackages: [
       'pdf-to-png-converter',
