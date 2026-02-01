@@ -239,16 +239,27 @@ OUTPUT:
       await updateProgress(10, 'Transcription: preparing documents...')
 
       // Load (or create) source documents for this podcast
-      let { data: docRows } = await supabase
+      let { data: docRows, error: docRowsError } = await supabase
         .from('intelligent_podcast_documents')
         .select('id,name,storage_path,page_count')
         .eq('podcast_id', podcastId)
         .eq('user_id', user.id)
         .order('created_at', { ascending: true })
 
+      if (docRowsError) {
+        const looksLikeMissingMigration =
+          (docRowsError as any).code === '42P01' ||
+          /relation\s+"intelligent_podcast_documents"\s+does not exist/i.test(String(docRowsError.message || ''))
+        throw new Error(
+          looksLikeMissingMigration
+            ? 'Missing table intelligent_podcast_documents. Apply migration 020_intelligent_podcast_documents_and_transcriptions.sql as postgres/supabase_admin.'
+            : `Failed to load podcast documents: ${docRowsError.message}`
+        )
+      }
+
       // Best-effort: if none exist yet but request provided documents, create them now.
       if ((!docRows || docRows.length === 0) && documents && documents.length > 0) {
-        await supabase
+        const { error: insertDocsError } = await supabase
           .from('intelligent_podcast_documents')
           .insert(
             documents.map((d) => ({
@@ -260,6 +271,17 @@ OUTPUT:
             }))
           )
 
+        if (insertDocsError) {
+          const looksLikeMissingMigration =
+            (insertDocsError as any).code === '42P01' ||
+            /relation\s+"intelligent_podcast_documents"\s+does not exist/i.test(String(insertDocsError.message || ''))
+          throw new Error(
+            looksLikeMissingMigration
+              ? 'Missing table intelligent_podcast_documents. Apply migration 020_intelligent_podcast_documents_and_transcriptions.sql as postgres/supabase_admin.'
+              : `Failed to create podcast documents: ${insertDocsError.message}`
+          )
+        }
+
         const refetch = await supabase
           .from('intelligent_podcast_documents')
           .select('id,name,storage_path,page_count')
@@ -270,7 +292,9 @@ OUTPUT:
       }
 
       if (!docRows || docRows.length === 0) {
-        throw new Error('No source documents found for this podcast. Please re-upload your PDFs.')
+        throw new Error(
+          'No source documents found for this podcast. If you just uploaded PDFs, hard refresh and re-upload. If you are self-hosting, also ensure migration 020_intelligent_podcast_documents_and_transcriptions.sql was applied.'
+        )
       }
 
       // Ensure page_count is known for each document (store for resumability)
@@ -299,11 +323,24 @@ OUTPUT:
       if (totalPages <= 0) throw new Error('Could not determine total PDF pages')
 
       // Load existing transcriptions (to resume)
-      const { data: existingPages } = await supabase
+      const { data: existingPages, error: existingPagesError } = await supabase
         .from('intelligent_podcast_page_transcriptions')
         .select('document_id,page_number')
         .eq('podcast_id', podcastId)
         .eq('user_id', user.id)
+
+      if (existingPagesError) {
+        const looksLikeMissingMigration =
+          (existingPagesError as any).code === '42P01' ||
+          /relation\s+"intelligent_podcast_page_transcriptions"\s+does not exist/i.test(
+            String(existingPagesError.message || '')
+          )
+        throw new Error(
+          looksLikeMissingMigration
+            ? 'Missing table intelligent_podcast_page_transcriptions. Apply migration 020_intelligent_podcast_documents_and_transcriptions.sql as postgres/supabase_admin.'
+            : `Failed to load transcriptions: ${existingPagesError.message}`
+        )
+      }
 
       const doneByDoc = new Map<string, Set<number>>()
       for (const d of docRows) doneByDoc.set(d.id, new Set<number>())

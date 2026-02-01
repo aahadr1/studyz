@@ -89,6 +89,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'At least one document is required' }, { status: 400 })
     }
 
+    // Fail fast if the client is sending the legacy payload (page_images) instead of storage_path.
+    const missingStoragePath = documents.filter((d: any) => typeof d?.storage_path !== 'string' || d.storage_path.trim().length === 0)
+    if (missingStoragePath.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Invalid documents payload',
+          details:
+            'This endpoint expects PDFs already uploaded to Supabase Storage. Please hard refresh the page and re-upload your PDFs (documents[].storage_path is required).',
+        },
+        { status: 400 }
+      )
+    }
+
     console.log(`[Podcast] Starting generation for ${documents.length} document(s)`)
     console.log(`[Podcast] User: ${user.id}, Style: ${style}, Duration: ${targetDuration}min`)
 
@@ -126,23 +139,39 @@ export async function POST(request: NextRequest) {
     console.log(`[Podcast] Created podcast ${podcast.id} with pending status`)
 
     // Persist source document references (for resumability)
-    try {
-      const { error: docsError } = await supabase
-        .from('intelligent_podcast_documents')
-        .insert(
-          documents.map((d) => ({
-            podcast_id: podcast.id,
-            user_id: user.id,
-            name: d.name,
-            storage_path: d.storage_path,
-            page_count: 0,
-          }))
-        )
-      if (docsError) {
-        console.warn('[Podcast] Failed to create document rows:', docsError.message)
-      }
-    } catch (e: any) {
-      console.warn('[Podcast] Failed to create document rows:', e?.message || e)
+    const { error: docsError } = await supabase
+      .from('intelligent_podcast_documents')
+      .insert(
+        documents.map((d) => ({
+          podcast_id: podcast.id,
+          user_id: user.id,
+          name: d.name,
+          storage_path: d.storage_path,
+          page_count: 0,
+        }))
+      )
+
+    if (docsError) {
+      console.error('[Podcast] Failed to create document rows:', docsError)
+
+      // Mark podcast errored so UI doesn't keep retrying blindly
+      await supabase
+        .from('intelligent_podcasts')
+        .update({ status: 'error', description: `Erreur: ${docsError.message}` })
+        .eq('id', podcast.id)
+
+      const looksLikeMissingMigration =
+        docsError.code === '42P01' || /relation\s+"intelligent_podcast_documents"\s+does not exist/i.test(docsError.message || '')
+
+      return NextResponse.json(
+        {
+          error: 'Database is missing required tables',
+          details: looksLikeMissingMigration
+            ? 'Missing table intelligent_podcast_documents. Apply migration 020_intelligent_podcast_documents_and_transcriptions.sql as the postgres/supabase_admin role.'
+            : docsError.message,
+        },
+        { status: 500 }
+      )
     }
 
     // Return immediately with podcast ID and processing config
