@@ -33,12 +33,28 @@ export async function POST(
   const { id: podcastId } = await params
   const supabase = await createAuthClient()
   
-  const updateProgress = async (progress: number, message: string) => {
-    await supabase
-      .from('intelligent_podcasts')
-      .update({ generation_progress: progress, description: message, status: 'generating' })
-      .eq('id', podcastId)
+  const updateProgress = async (progress: number, message: string, forceUpdate: boolean = false) => {
+    // Always log progress
     console.log(`[Podcast ${podcastId}] ${progress}% - ${message}`)
+    
+    // Update database immediately for real-time feedback
+    try {
+      const { error: updateError } = await supabase
+        .from('intelligent_podcasts')
+        .update({ 
+          generation_progress: progress, 
+          description: message, 
+          status: 'generating',
+          updated_at: new Date().toISOString() // Force timestamp update
+        })
+        .eq('id', podcastId)
+      
+      if (updateError) {
+        console.error(`[Podcast ${podcastId}] Progress update failed:`, updateError)
+      }
+    } catch (e) {
+      console.error(`[Podcast ${podcastId}] Progress update error:`, e)
+    }
   }
 
   const voiceProfilesForProvider = (provider: 'openai' | 'elevenlabs' | 'playht'): VoiceProfile[] => {
@@ -609,6 +625,18 @@ OUTPUT:
     
     console.log(`[Podcast ${podcastId}] Progress: ${currentProgress}%, Audio: ${completed}/${segments.length}`)
 
+    // Test OpenAI connection before starting batch
+    try {
+      console.log(`[Podcast ${podcastId}] Testing OpenAI connection...`)
+      const openai = getOpenAI()
+      // Simple test to verify API key works
+      await openai.models.list()
+      console.log(`[Podcast ${podcastId}] ✅ OpenAI connection verified`)
+    } catch (connectionError: any) {
+      console.error(`[Podcast ${podcastId}] ❌ OpenAI connection failed:`, connectionError)
+      throw new Error(`OpenAI connection failed: ${connectionError.message}`)
+    }
+
     let batchWithAudio: PodcastSegment[]
     try {
       console.log(`[Podcast ${podcastId}] Starting audio generation for ${validBatch.length} valid segments...`)
@@ -616,11 +644,13 @@ OUTPUT:
         validBatch,
         voiceProfiles,
         finalLanguage,
-        (currentIdx, total, step) => {
+        async (currentIdx, total, step) => {
           console.log(`[Podcast ${podcastId}] Audio progress: ${currentIdx}/${total} - ${step}`)
           const withinBatch = total > 0 ? currentIdx / total : 0
-          const pct = 65 + Math.round((pctAudio + withinBatch * (BATCH_SIZE / Math.max(1, segments.length))) * 27)
-          void updateProgress(Math.min(92, pct), step)
+          const pct = 65 + Math.round((pctAudio + withinBatch * (validBatch.length / Math.max(1, segments.length))) * 27)
+          const progressPct = Math.min(92, pct)
+          const detailedMessage = `Audio: ${completed + currentIdx}/${segments.length} segments (${step})`
+          await updateProgress(progressPct, detailedMessage, true) // Force immediate update
         }
       )
       console.log(`[Podcast ${podcastId}] Audio generation completed for batch`)
@@ -667,6 +697,10 @@ OUTPUT:
     const newRemaining = timings.segments.filter((s: any) => !(typeof s?.audioUrl === 'string' && s.audioUrl.length > 0))
     const newCompleted = timings.segments.length - newRemaining.length
     const newPctAudio = timings.segments.length > 0 ? newCompleted / timings.segments.length : 0
+    
+    // Log progress changes
+    const progressChange = newCompleted - completed
+    console.log(`[Podcast ${podcastId}] Progress update: +${progressChange} completed (${newCompleted}/${timings.segments.length})`)
 
     await supabase
       .from('intelligent_podcasts')

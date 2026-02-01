@@ -9,27 +9,47 @@ export async function generateMultiVoiceAudio(
   segments: PodcastSegment[],
   voiceProfiles: VoiceProfile[],
   language: string,
-  onProgress?: (current: number, total: number, step: string) => void
+  onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
   console.log(`[Audio] Starting audio generation for ${segments.length} segments`)
+
+  if (segments.length === 0) {
+    console.warn(`[Audio] No segments provided for audio generation`)
+    return []
+  }
 
   const processedSegments: PodcastSegment[] = []
 
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i]
+    const segmentNumber = i + 1
 
+    console.log(`[Audio] Processing segment ${segmentNumber}/${segments.length}: ${segment.id}`)
+
+    // Update progress before starting
     if (onProgress) {
-      onProgress(i + 1, segments.length, `Generating audio for segment ${i + 1}/${segments.length}`)
+      const step = `Generating audio for segment ${segmentNumber}/${segments.length} (${segment.speaker})`
+      await onProgress(i, segments.length, step)
+    }
+
+    // Validate segment
+    if (!segment.text || segment.text.trim().length === 0) {
+      console.warn(`[Audio] Segment ${segmentNumber} has empty text, skipping`)
+      processedSegments.push(segment)
+      continue
     }
 
     // Find the appropriate voice profile for this speaker
     const voiceProfile = voiceProfiles.find((v) => v.role === segment.speaker) || voiceProfiles[0]
+    console.log(`[Audio] Using voice profile: ${voiceProfile.role} (${voiceProfile.provider})`)
 
     try {
       // Generate audio based on provider
       let audioUrl: string
       let actualDuration: number
 
+      console.log(`[Audio] Starting TTS for segment ${segmentNumber}...`)
+      
       if (voiceProfile.provider === 'elevenlabs') {
         const result = await generateElevenLabsAudio(segment.text, voiceProfile, language)
         audioUrl = result.audioUrl
@@ -51,15 +71,47 @@ export async function generateMultiVoiceAudio(
         duration: actualDuration,
       })
 
-      console.log(`[Audio] Segment ${i + 1} completed: ${actualDuration.toFixed(1)}s`)
-    } catch (error) {
-      console.error(`[Audio] Failed to generate audio for segment ${i + 1}:`, error)
-      // Add segment without audio
-      processedSegments.push(segment)
+      console.log(`[Audio] ✅ Segment ${segmentNumber} completed: ${actualDuration.toFixed(1)}s, audio length: ${audioUrl.length} chars`)
+
+      // Update progress after completion
+      if (onProgress) {
+        const step = `Segment ${segmentNumber}/${segments.length} audio generated`
+        await onProgress(segmentNumber, segments.length, step)
+      }
+
+    } catch (error: any) {
+      console.error(`[Audio] ❌ Failed to generate audio for segment ${segmentNumber}:`, error)
+      console.error(`[Audio] Segment details:`, {
+        id: segment.id,
+        speaker: segment.speaker,
+        textLength: segment.text?.length || 0,
+        textPreview: segment.text?.slice(0, 100) + '...'
+      })
+      
+      // Add segment without audio but don't fail the entire process
+      processedSegments.push({
+        ...segment,
+        audioUrl: '', // Empty audio URL indicates failure
+        duration: 0
+      })
+
+      // Still update progress to show we attempted this segment
+      if (onProgress) {
+        const step = `Segment ${segmentNumber}/${segments.length} failed (continuing...)`
+        await onProgress(segmentNumber, segments.length, step)
+      }
+    }
+
+    // Small delay between segments to avoid rate limiting
+    if (i < segments.length - 1) {
+      console.log(`[Audio] Waiting 200ms before next segment...`)
+      await new Promise(resolve => setTimeout(resolve, 200))
     }
   }
 
-  console.log('[Audio] All segments processed successfully')
+  const successCount = processedSegments.filter(s => s.audioUrl && s.audioUrl.length > 0).length
+  console.log(`[Audio] Batch completed: ${successCount}/${segments.length} segments successful`)
+  
   return processedSegments
 }
 
@@ -217,23 +269,34 @@ async function generateOpenAIAudio(
   const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'alloy'
 
   try {
-    console.log(`[Audio] Calling OpenAI TTS with voice: ${voice}`)
-    const response = await openai.audio.speech.create({
-      model: 'tts-1', // Use standard model for reliability (was tts-1-hd)
+    console.log(`[Audio] Calling OpenAI TTS with voice: ${voice}, text length: ${cleanedText.length}`)
+    
+    // Add timeout wrapper for the TTS call
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('TTS timeout after 30 seconds')), 30000)
+    })
+    
+    const ttsPromise = openai.audio.speech.create({
+      model: 'tts-1', // Use standard model for reliability
       voice: voice as any,
       input: cleanedText,
       speed: 1.0,
     })
 
+    const response = await Promise.race([ttsPromise, timeoutPromise]) as any
+    console.log(`[Audio] OpenAI TTS response received`)
+
     const audioBuffer = await response.arrayBuffer()
+    console.log(`[Audio] Audio buffer size: ${audioBuffer.byteLength} bytes`)
+    
     const audioBase64 = Buffer.from(audioBuffer).toString('base64')
     const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
 
-    // Estimate duration
-    const wordCount = cleanedText.split(/\s+/).length
-    const estimatedDuration = (wordCount / 135) * 60 // Updated to match our new WPM
+    // Estimate duration more accurately
+    const wordCount = cleanedText.split(/\s+/).filter(Boolean).length
+    const estimatedDuration = Math.max(1, (wordCount / 135) * 60) // Ensure minimum 1 second
 
-    console.log(`[Audio] OpenAI TTS completed, duration: ${estimatedDuration.toFixed(1)}s`)
+    console.log(`[Audio] OpenAI TTS completed successfully - Words: ${wordCount}, Duration: ${estimatedDuration.toFixed(1)}s`)
 
     return {
       audioUrl,
@@ -241,7 +304,13 @@ async function generateOpenAIAudio(
     }
   } catch (ttsError: any) {
     console.error(`[Audio] OpenAI TTS failed:`, ttsError)
-    throw new Error(`OpenAI TTS failed: ${ttsError.message}`)
+    console.error(`[Audio] Error details:`, {
+      message: ttsError.message,
+      code: ttsError.code,
+      type: ttsError.type,
+      status: ttsError.status
+    })
+    throw new Error(`OpenAI TTS failed: ${ttsError.message || 'Unknown error'}`)
   }
 }
 
