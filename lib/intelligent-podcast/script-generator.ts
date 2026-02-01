@@ -207,8 +207,9 @@ Return a json object:
 
 IMPORTANT: Concept IDs must match those provided in the list.`
 
+  let raw: string
   try {
-    const raw = await runGemini3Flash({
+    raw = await runGemini3Flash({
       prompt: `Documents:\n${documentsSummary}\n\nAvailable concepts:\n${conceptsSummary}`,
       systemInstruction,
       thinkingLevel: 'high',
@@ -216,51 +217,61 @@ IMPORTANT: Concept IDs must match those provided in the list.`
       topP: 0.95,
       maxOutputTokens: 8000,
     })
-    const parsed = parseJsonObject<any>(raw)
+  } catch (err) {
+    console.error('Failed to generate chapters (LLM call):', err)
+    throw new Error('Failed to generate chapters')
+  }
 
-    const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : []
-    const sanitized = rawChapters
-      .map((ch: any, idx: number) => ({
-        id: String(ch.id || `chapter-${idx + 1}`),
-        title: String(ch.title || `Chapter ${idx + 1}`),
-        summary: String(ch.summary || ''),
-        estimatedDuration: Number.isFinite(ch.estimatedDuration) ? Math.max(30, Math.round(ch.estimatedDuration)) : 300,
-        concepts: Array.isArray(ch.concepts) ? ch.concepts : [],
-        difficulty: (ch.difficulty as any) || 'medium',
-      }))
-      .slice(0, 10)
-
-    const totalEstimated = sanitized.reduce((sum: number, ch: any) => sum + ch.estimatedDuration, 0)
-    const scale = totalEstimated > 0 ? targetSeconds / totalEstimated : 1
-
-    // Calculate start/end times, scaled to match targetSeconds
-    let cumulativeTime = 0
-    const chapters: PodcastChapter[] = sanitized.map((ch: any, idx: number) => {
-      const isLast = idx === sanitized.length - 1
-      const scaled = Math.max(30, Math.round(ch.estimatedDuration * scale))
-      const startTime = cumulativeTime
-      const endTime = isLast ? targetSeconds : cumulativeTime + scaled
-      cumulativeTime = endTime
-
-      return {
-        id: ch.id,
-        title: ch.title,
-        startTime,
-        endTime,
-        concepts: ch.concepts || [],
-        difficulty: ch.difficulty || 'medium',
-        summary: ch.summary || '',
-      }
-    })
-
-    return {
-      chapters,
-      title: parsed.title || 'Podcast sans titre',
-      description: parsed.description || '',
-    }
-  } catch (error) {
-    console.error('Failed to parse chapters:', error)
+  let parsed: { title?: string; description?: string; chapters?: any[] }
+  try {
+    parsed = parseJsonObject<any>(raw)
+  } catch (parseErr) {
+    console.error('Failed to parse chapters JSON:', parseErr)
+    console.error('Raw response (first 1500 chars):', raw.slice(0, 1500))
     throw new Error('Failed to parse chapters')
+  }
+
+  const rawChapters = Array.isArray(parsed?.chapters) ? parsed.chapters : []
+  if (rawChapters.length === 0) {
+    console.warn('No chapters in model response; using single fallback chapter. Raw (first 800):', raw.slice(0, 800))
+  }
+
+  const sanitized = (rawChapters.length > 0 ? rawChapters : [{ id: 'chapter-1', title: 'Main content', summary: '', estimatedDuration: targetSeconds, concepts: [], difficulty: 'medium' as const }])
+    .map((ch: any, idx: number) => ({
+      id: String(ch?.id ?? `chapter-${idx + 1}`),
+      title: String(ch?.title ?? `Chapter ${idx + 1}`),
+      summary: String(ch?.summary ?? ''),
+      estimatedDuration: Number.isFinite(Number(ch?.estimatedDuration)) ? Math.max(30, Math.round(Number(ch.estimatedDuration))) : 300,
+      concepts: Array.isArray(ch?.concepts) ? ch.concepts : [],
+      difficulty: (ch?.difficulty === 'easy' || ch?.difficulty === 'hard' ? ch.difficulty : 'medium') as 'easy' | 'medium' | 'hard',
+    }))
+    .slice(0, 10)
+
+  const totalEstimated = sanitized.reduce((sum: number, ch: any) => sum + ch.estimatedDuration, 0)
+  const scale = totalEstimated > 0 ? targetSeconds / totalEstimated : 1
+
+  let cumulativeTime = 0
+  const chapters: PodcastChapter[] = sanitized.map((ch: any, idx: number) => {
+    const isLast = idx === sanitized.length - 1
+    const scaled = Math.max(30, Math.round(ch.estimatedDuration * scale))
+    const startTime = cumulativeTime
+    const endTime = isLast ? targetSeconds : cumulativeTime + scaled
+    cumulativeTime = endTime
+    return {
+      id: ch.id,
+      title: ch.title,
+      startTime,
+      endTime,
+      concepts: ch.concepts || [],
+      difficulty: ch.difficulty || 'medium',
+      summary: ch.summary || '',
+    }
+  })
+
+  return {
+    chapters,
+    title: parsed?.title && String(parsed.title).trim() ? String(parsed.title) : 'Podcast sans titre',
+    description: parsed?.description && String(parsed.description).trim() ? String(parsed.description) : '',
   }
 }
 

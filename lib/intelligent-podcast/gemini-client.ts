@@ -112,13 +112,23 @@ export async function runGemini3Flash(params: GeminiRunParams): Promise<string> 
   return textParts.join('')
 }
 
+/**
+ * Extract and parse a JSON object from model output.
+ * Handles markdown code blocks (```json ... ```) and plain JSON.
+ */
 export function parseJsonObject<T = unknown>(raw: string): T {
-  const text = raw.trim()
+  let text = raw.trim()
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch) text = codeBlockMatch[1].trim()
   const first = text.indexOf('{')
   const last = text.lastIndexOf('}')
   if (first === -1 || last === -1 || last <= first) {
     throw new Error('Model output did not contain a JSON object')
   }
   const jsonText = text.slice(first, last + 1)
-  return JSON.parse(jsonText) as T
+  try {
+    return JSON.parse(jsonText) as T
+  } catch (e) {
+    throw new Error(`Invalid JSON from model: ${e instanceof Error ? e.message : String(e)}`)
+  }
 }
