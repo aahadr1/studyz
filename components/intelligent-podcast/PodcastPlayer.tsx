@@ -14,6 +14,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const [playbackRate, setPlaybackRate] = useState(1.0)
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0)
   const [showTranscript, setShowTranscript] = useState(true)
+  const [isDownloading, setIsDownloading] = useState(false)
   
   const audioRef = useRef<HTMLAudioElement>(null)
   const currentSegment = podcast.segments[currentSegmentIndex]
@@ -94,12 +95,60 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const canDownload =
+    podcast.status === 'ready' &&
+    Array.isArray(podcast.segments) &&
+    podcast.segments.length > 0 &&
+    podcast.segments.every((s: any) => typeof s?.audioUrl === 'string' && s.audioUrl.length > 0)
+
+  const downloadWholePodcast = async () => {
+    try {
+      setIsDownloading(true)
+      const res = await fetch(`/api/intelligent-podcast/${podcast.id}/download`, {
+        method: 'GET',
+        credentials: 'include',
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || 'Download failed')
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${podcast.title || 'podcast'}.zip`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      console.error(e)
+      alert(e?.message || 'Failed to download podcast')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white">
       {/* Header */}
       <div className="p-6 border-b border-gray-800">
-        <h1 className="text-2xl font-bold mb-2">{podcast.title}</h1>
-        <p className="text-gray-400">{podcast.description}</p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold mb-2 truncate">{podcast.title}</h1>
+            <p className="text-gray-400">{podcast.description}</p>
+          </div>
+          <button
+            onClick={downloadWholePodcast}
+            disabled={!canDownload || isDownloading}
+            className="px-4 py-2 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            title={canDownload ? 'Download all audio segments as a zip' : 'Available once all audio is generated'}
+          >
+            {isDownloading ? 'Preparing…' : 'Download whole podcast'}
+          </button>
+        </div>
         {currentChapter && (
           <div className="mt-4 p-3 bg-gray-800 rounded-lg">
             <div className="text-sm text-gray-400">Current Chapter</div>

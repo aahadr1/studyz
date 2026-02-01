@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { extractTextFromPageImages } from '@/lib/intelligent-podcast/pdf-extractor'
-import { getOpenAI } from '@/lib/intelligent-podcast/openai-client'
-import { DocumentContent, VoiceProfile } from '@/types/intelligent-podcast'
+import { extractAndAnalyze } from '@/lib/intelligent-podcast/extractor'
+import { generateIntelligentScript } from '@/lib/intelligent-podcast/script-generator'
+import { generateMultiVoiceAudio } from '@/lib/intelligent-podcast/audio-generator'
+import { DocumentContent, VoiceProfile, PodcastChapter, PodcastSegment } from '@/types/intelligent-podcast'
 
 export const runtime = 'nodejs'
-export const maxDuration = 300 // 5 minutes
+export const maxDuration = 900 // long-running generation
 
 async function createAuthClient() {
   const cookieStore = await cookies()
@@ -38,6 +40,115 @@ export async function POST(
     console.log(`[Podcast ${podcastId}] ${progress}% - ${message}`)
   }
 
+  const voiceProfilesForProvider = (provider: 'openai' | 'elevenlabs' | 'playht'): VoiceProfile[] => {
+    if (provider === 'elevenlabs') {
+      return [
+        {
+          id: 'host-voice',
+          role: 'host',
+          name: 'Sophie',
+          provider: 'elevenlabs',
+          voiceId: '21m00Tcm4TlvDq8ikWAM',
+          description: 'Curious host who guides the conversation and asks sharp questions',
+        },
+        {
+          id: 'expert-voice',
+          role: 'expert',
+          name: 'Marcus',
+          provider: 'elevenlabs',
+          voiceId: 'pNInz6obpgDQGcFmaJgB',
+          description: 'Deep expert who explains mechanisms, details, and nuance',
+        },
+        {
+          id: 'simplifier-voice',
+          role: 'simplifier',
+          name: 'Emma',
+          provider: 'elevenlabs',
+          voiceId: 'EXAVITQu4vr4xnSDxMaL',
+          description: 'Simplifier who uses analogies and step-by-step explanations',
+        },
+      ]
+    }
+
+    // NOTE: PlayHT voice IDs are project-specific; fallback to OpenAI voices for now.
+    if (provider === 'playht') {
+      provider = 'openai'
+    }
+
+    return [
+      {
+        id: 'host-voice',
+        role: 'host',
+        name: 'Sophie',
+        provider: 'openai',
+        voiceId: 'nova',
+        description: 'Curious host who guides the conversation and asks sharp questions',
+      },
+      {
+        id: 'expert-voice',
+        role: 'expert',
+        name: 'Marcus',
+        provider: 'openai',
+        voiceId: 'onyx',
+        description: 'Deep expert who explains mechanisms, details, and nuance',
+      },
+      {
+        id: 'simplifier-voice',
+        role: 'simplifier',
+        name: 'Emma',
+        provider: 'openai',
+        voiceId: 'shimmer',
+        description: 'Simplifier who uses analogies and step-by-step explanations',
+      },
+    ]
+  }
+
+  const audioBytesFromUrl = async (audioUrl: string): Promise<{ bytes: Buffer; contentType: string }> => {
+    if (audioUrl.startsWith('data:')) {
+      const match = audioUrl.match(/^data:([^;]+);base64,(.*)$/)
+      if (!match) {
+        throw new Error('Invalid data URL audio')
+      }
+      const contentType = match[1] || 'audio/mpeg'
+      const base64 = match[2] || ''
+      return { bytes: Buffer.from(base64, 'base64'), contentType }
+    }
+
+    const res = await fetch(audioUrl)
+    if (!res.ok) {
+      throw new Error(`Failed to fetch audio (${res.status})`)
+    }
+    const contentType = res.headers.get('content-type') || 'audio/mpeg'
+    const arr = await res.arrayBuffer()
+    return { bytes: Buffer.from(arr), contentType }
+  }
+
+  const recomputeTimings = (segments: PodcastSegment[]): { segments: PodcastSegment[]; totalDuration: number } => {
+    let t = 0
+    const updated = segments.map((s) => {
+      const next = { ...s, timestamp: t }
+      t += Math.max(0, Number(s.duration) || 0)
+      return next
+    })
+    return { segments: updated, totalDuration: Math.round(t) }
+  }
+
+  const recomputeChapterTimes = (chapters: PodcastChapter[], segments: PodcastSegment[]): PodcastChapter[] => {
+    const byChapter: Record<string, PodcastSegment[]> = {}
+    for (const seg of segments) {
+      if (!byChapter[seg.chapterId]) byChapter[seg.chapterId] = []
+      byChapter[seg.chapterId].push(seg)
+    }
+
+    return chapters.map((ch) => {
+      const segs = byChapter[ch.id] || []
+      if (segs.length === 0) return ch
+      const start = Math.min(...segs.map((s) => s.timestamp))
+      const end = Math.max(...segs.map((s) => s.timestamp + s.duration))
+      return { ...ch, startTime: start, endTime: end }
+    })
+  }
+
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -45,181 +156,109 @@ export async function POST(
     const body = await request.json()
     const { documents, config } = body
 
-    // STEP 1: Transcription Vision (10-40%)
+    // STEP 1: Transcription Vision (10-35%)
     await updateProgress(10, `Transcription: 0/${documents.length} documents`)
-    const allContent: string[] = []
+    const extractedDocuments: DocumentContent[] = []
 
     for (let i = 0; i < documents.length; i++) {
       const doc = documents[i]
-      await updateProgress(10 + Math.round((i / documents.length) * 30), `Transcription: ${i + 1}/${documents.length}`)
-      
-      const { content } = await extractTextFromPageImages(doc.name, doc.page_images)
-      allContent.push(`\n\n=== ${doc.name} ===\n\n${content}`)
+      await updateProgress(10 + Math.round((i / documents.length) * 25), `Transcription: ${i + 1}/${documents.length}`)
+
+      const { content, pageCount } = await extractTextFromPageImages(doc.name, doc.page_images)
+      extractedDocuments.push({
+        id: crypto.randomUUID(),
+        title: doc.name,
+        content,
+        pageCount,
+        language: 'auto',
+        extractedAt: new Date().toISOString(),
+      })
     }
 
-    const fullText = allContent.join('\n\n')
-    console.log(`[Podcast ${podcastId}] Total content: ${fullText.length} chars`)
+    // STEP 2: Knowledge graph + language detection (35-50%)
+    await updateProgress(35, 'Analyzing content & building knowledge graph...')
+    const { knowledgeGraph, detectedLanguage } = await extractAndAnalyze(extractedDocuments)
 
-    // STEP 2: Génération directe du script conversationnel (40-60%)
-    await updateProgress(40, 'Génération du script conversationnel...')
-    const openai = getOpenAI()
+    const finalLanguage =
+      config.language && config.language !== 'auto' ? config.language : (detectedLanguage || 'en')
 
-    const scriptPrompt = config.language === 'fr' 
-      ? `Tu es un expert en création de podcasts éducatifs conversationnels.
+    const voiceProvider: 'openai' | 'elevenlabs' | 'playht' = config.voiceProvider || 'openai'
+    const voiceProfiles = voiceProfilesForProvider(voiceProvider)
 
-Crée un script de podcast de ${config.targetDuration} minutes basé sur ce contenu.
-
-STYLE: ${config.style}
-
-RÈGLES:
-1. 3 voix qui alternent naturellement:
-   - HOST (Sophie): Pose des questions, guide la conversation
-   - EXPERT (Marcus): Explique en profondeur
-   - SIMPLIFIER (Emma): Simplifie les concepts complexes
-   
-2. Crée 15-25 segments courts (2-4 phrases chacun)
-3. Conversation naturelle et engageante
-4. Progression logique des concepts
-
-Retourne un objet json:
-{
-  "title": "Titre accrocheur du podcast",
-  "description": "Description en 2 phrases",
-  "segments": [
-    {
-      "speaker": "host",
-      "text": "Bienvenue! Aujourd'hui on parle de...",
-      "order": 0
-    },
-    {
-      "speaker": "expert", 
-      "text": "Merci Sophie. Ce sujet est fascinant car...",
-      "order": 1
-    }
-  ]
-}
-
-CONTENU À TRAITER:
-${fullText.slice(0, 12000)}`
-      : `You are an expert at creating educational conversational podcasts.
-
-Create a ${config.targetDuration}-minute podcast script from this content.
-
-STYLE: ${config.style}
-
-RULES:
-1. 3 voices alternating naturally:
-   - HOST (Sophie): Asks questions, guides
-   - EXPERT (Marcus): Explains in depth
-   - SIMPLIFIER (Emma): Simplifies complex concepts
-   
-2. Create 15-25 short segments (2-4 sentences each)
-3. Natural, engaging conversation
-4. Logical concept progression
-
-Return a json object:
-{
-  "title": "Catchy podcast title",
-  "description": "Description in 2 sentences",
-  "segments": [
-    {
-      "speaker": "host",
-      "text": "Welcome! Today we're discussing...",
-      "order": 0
-    },
-    {
-      "speaker": "expert",
-      "text": "Thanks Sophie. This topic is fascinating because...",
-      "order": 1
-    }
-  ]
-}
-
-CONTENT TO PROCESS:
-${fullText.slice(0, 12000)}`
-
-    const scriptResponse = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: scriptPrompt },
-        { role: 'user', content: 'Generate the podcast script based on the content above.' }
-      ],
-      response_format: { type: 'json_object' },
-      max_tokens: 8192,
-      temperature: 0.8,
+    // STEP 3: Script generation (50-65%)
+    await updateProgress(50, `Generating detailed ${config.targetDuration}-minute script...`)
+    const script = await generateIntelligentScript(extractedDocuments, knowledgeGraph, {
+      targetDuration: config.targetDuration,
+      language: finalLanguage,
+      style: config.style,
+      voiceProfiles,
     })
 
-    const scriptData = JSON.parse(scriptResponse.choices[0]?.message?.content || '{}')
-    const { title, description, segments: rawSegments } = scriptData
+    await updateProgress(65, `Script ready: ${script.segments.length} segments`)
 
-    await updateProgress(60, `Script généré: ${rawSegments?.length || 0} segments`)
-
-    // STEP 3: TTS en parallèle par lots (60-95%)
-    const segments = rawSegments || []
-    const voiceMap: Record<string, string> = {
-      host: config.voiceProvider === 'openai' ? 'nova' : '21m00Tcm4TlvDq8ikWAM',
-      expert: config.voiceProvider === 'openai' ? 'onyx' : 'pNInz6obpgDQGcFmaJgB',
-      simplifier: config.voiceProvider === 'openai' ? 'shimmer' : 'EXAVITQu4vr4xnSDxMaL',
-    }
-
-    const segmentsWithAudio: Array<{
-      id: string
-      speaker: string
-      text: string
-      audioUrl: string
-      duration: number
-      timestamp: number
-    }> = []
-    const batchSize = 3
-
-    for (let i = 0; i < segments.length; i += batchSize) {
-      const batch = segments.slice(i, i + batchSize)
-      await updateProgress(60 + Math.round((i / segments.length) * 35), `Audio: ${i}/${segments.length}`)
-
-      for (const seg of batch) {
-        const voice = voiceMap[seg.speaker] || 'nova'
-        const response = await openai.audio.speech.create({
-          model: 'tts-1',
-          voice: voice as any,
-          input: seg.text,
-          speed: 1.0,
-        })
-
-        const audioBuffer = await response.arrayBuffer()
-        const audioBase64 = Buffer.from(audioBuffer).toString('base64')
-        const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
-
-        const wordCount = seg.text.split(/\s+/).length
-        const duration = (wordCount / 150) * 60
-
-        segmentsWithAudio.push({
-          id: `seg-${i + batch.indexOf(seg)}`,
-          speaker: seg.speaker,
-          text: seg.text,
-          audioUrl,
-          duration,
-          timestamp: segmentsWithAudio.reduce((sum, s) => sum + s.duration, 0),
-        })
+    // STEP 4: Audio generation (65-92%)
+    const segmentsWithAudio = await generateMultiVoiceAudio(
+      script.segments,
+      voiceProfiles,
+      finalLanguage,
+      (current, total, step) => {
+        const pct = 65 + Math.round((current / Math.max(1, total)) * 27)
+        void updateProgress(pct, step)
       }
+    )
+
+    await updateProgress(92, 'Uploading audio to storage...')
+
+    // Upload audio to Supabase Storage so it persists & can be downloaded
+    const uploadedSegments: PodcastSegment[] = []
+    for (let i = 0; i < segmentsWithAudio.length; i++) {
+      const seg = segmentsWithAudio[i]
+      if (!seg.audioUrl) {
+        uploadedSegments.push(seg)
+        continue
+      }
+
+      const { bytes, contentType } = await audioBytesFromUrl(seg.audioUrl)
+      const isWav = contentType.includes('wav')
+      const ext = isWav ? 'wav' : 'mp3'
+
+      const path = `podcasts/${podcastId}/segments/${String(i + 1).padStart(3, '0')}-${seg.speaker}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('podcast-audio')
+        .upload(path, bytes, {
+          contentType: isWav ? 'audio/wav' : 'audio/mpeg',
+          upsert: true,
+        })
+
+      if (uploadError) {
+        throw new Error(`Audio upload failed: ${uploadError.message}`)
+      }
+
+      const { data: publicData } = supabase.storage.from('podcast-audio').getPublicUrl(path)
+      uploadedSegments.push({
+        ...seg,
+        audioUrl: publicData.publicUrl,
+      })
     }
 
-    const totalDuration = segmentsWithAudio.reduce((sum, s) => sum + s.duration, 0)
+    const timings = recomputeTimings(uploadedSegments)
+    const updatedChapters = recomputeChapterTimes(script.chapters, timings.segments)
 
-    // STEP 4: Sauvegarde (95-100%)
-    await updateProgress(95, 'Finalisation...')
+    // STEP 5: Save to DB (95-100%)
+    await updateProgress(95, 'Finalizing...')
     const placeholderTitle = documents.map((d: any) => d.name.replace(/\.pdf$/i, '')).join(', ')
-    
+
     await supabase
       .from('intelligent_podcasts')
       .update({
-        title: title || placeholderTitle,
-        description: description || 'Podcast généré',
-        duration: Math.round(totalDuration),
-        language: config.language === 'auto' ? 'en' : config.language,
-        knowledge_graph: { concepts: [], relationships: [], embeddings: {} },
-        chapters: [],
-        segments: segmentsWithAudio,
-        predicted_questions: [],
+        title: script.title || placeholderTitle,
+        description: script.description || 'Podcast generated',
+        duration: timings.totalDuration,
+        language: finalLanguage,
+        knowledge_graph: knowledgeGraph,
+        chapters: updatedChapters,
+        segments: timings.segments,
+        predicted_questions: script.predictedQuestions || [],
         status: 'ready',
         generation_progress: 100,
       })

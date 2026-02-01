@@ -68,6 +68,9 @@ async function generateChapters(
 ): Promise<{ chapters: PodcastChapter[]; title: string; description: string }> {
   const openai = getOpenAI()
 
+  const targetSeconds = Math.max(1, Math.round((config.targetDuration || 1) * 60))
+  const targetChapters = Math.min(10, Math.max(3, Math.round(config.targetDuration / 8))) // ~1 chapter per 8 min
+
   const documentsSummary = documents
     .map((doc) => `Document: ${doc.title}\nContent: ${doc.content.slice(0, 3000)}`)
     .join('\n\n---\n\n')
@@ -85,7 +88,7 @@ Crée une structure en CHAPITRES pour un podcast de ${config.targetDuration} min
 STYLE : ${config.style}
 
 RÈGLES :
-1. Crée 3-6 chapitres selon la durée cible
+1. Crée environ ${targetChapters} chapitres (minimum 3, maximum 10) selon la durée cible
 2. Chaque chapitre doit avoir :
    - Un titre accrocheur
    - Un résumé concis
@@ -94,6 +97,7 @@ RÈGLES :
    - Un niveau de difficulté global
 3. Structure logique : progression du simple au complexe
 4. Équilibre entre les chapitres
+5. IMPORTANT: La somme des "estimatedDuration" DOIT être proche de ${targetSeconds} secondes (±5%)
 
 Retourne un objet json :
 {
@@ -119,7 +123,7 @@ Create a CHAPTER structure for a ${config.targetDuration}-minute podcast.
 STYLE: ${config.style}
 
 RULES:
-1. Create 3-6 chapters based on target duration
+1. Create about ${targetChapters} chapters (min 3, max 10) based on target duration
 2. Each chapter must have:
    - A catchy title
    - A concise summary
@@ -128,6 +132,7 @@ RULES:
    - Overall difficulty level
 3. Logical structure: progress from simple to complex
 4. Balance between chapters
+5. IMPORTANT: The sum of all "estimatedDuration" MUST be close to ${targetSeconds} seconds (±5%)
 
 Return a json object:
 {
@@ -169,11 +174,28 @@ IMPORTANT: Concept IDs must match those provided in the list.`
   try {
     const parsed = JSON.parse(content)
 
-    // Calculate start and end times for each chapter
+    const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : []
+    const sanitized = rawChapters
+      .map((ch: any, idx: number) => ({
+        id: String(ch.id || `chapter-${idx + 1}`),
+        title: String(ch.title || `Chapter ${idx + 1}`),
+        summary: String(ch.summary || ''),
+        estimatedDuration: Number.isFinite(ch.estimatedDuration) ? Math.max(30, Math.round(ch.estimatedDuration)) : 300,
+        concepts: Array.isArray(ch.concepts) ? ch.concepts : [],
+        difficulty: (ch.difficulty as any) || 'medium',
+      }))
+      .slice(0, 10)
+
+    const totalEstimated = sanitized.reduce((sum: number, ch: any) => sum + ch.estimatedDuration, 0)
+    const scale = totalEstimated > 0 ? targetSeconds / totalEstimated : 1
+
+    // Calculate start/end times, scaled to match targetSeconds
     let cumulativeTime = 0
-    const chapters: PodcastChapter[] = parsed.chapters.map((ch: any) => {
+    const chapters: PodcastChapter[] = sanitized.map((ch: any, idx: number) => {
+      const isLast = idx === sanitized.length - 1
+      const scaled = Math.max(30, Math.round(ch.estimatedDuration * scale))
       const startTime = cumulativeTime
-      const endTime = cumulativeTime + ch.estimatedDuration
+      const endTime = isLast ? targetSeconds : cumulativeTime + scaled
       cumulativeTime = endTime
 
       return {
@@ -220,22 +242,31 @@ async function generateSegments(
       .map((c) => `- ${c.name}: ${c.description}`)
       .join('\n')
 
+    const chapterSeconds = Math.max(60, Math.round(chapter.endTime - chapter.startTime))
+    const targetSegmentsForChapter = Math.min(
+      18,
+      Math.max(6, Math.round(chapterSeconds / 75)) // ~1 segment per 60-90s of audio
+    )
+
     const systemPrompt =
       config.language === 'fr'
         ? `Tu es un scénariste expert en podcasts éducatifs conversationnels.
 
-Crée une conversation NATURELLE et ENGAGEANTE pour ce chapitre.
+Crée une conversation NATURELLE, ENGAGEANTE et TRÈS DÉTAILLÉE pour ce chapitre.
+Durée cible de ce chapitre: ~${chapterSeconds} secondes.
 
 INTERVENANTS :
 ${config.voiceProfiles.map((v) => `- ${v.role.toUpperCase()} (${v.name}): ${v.description}`).join('\n')}
 
 RÈGLES CRITIQUES :
 1. Alterne entre les 3 voix de manière naturelle
-2. Chaque segment = 2-4 phrases maximum
+2. Chaque segment doit être substantiel et instructif (viser ~120 à 190 mots par segment, soit ~45-75 secondes d'audio)
 3. Utilise des transitions naturelles ("Justement...", "C'est fascinant...", "Attends...")
 4. Insère des "question breakpoints" toutes les 3-5 répliques (marque avec isQuestionBreakpoint: true)
-5. Ajoute de la personnalité : réactions, questions, exemples concrets
-6. Progression logique des concepts
+5. Ajoute de la personnalité : réactions, questions, exemples concrets, analogies, mini-récaps
+6. Progression logique des concepts, du simple au complexe
+7. Ne te contente pas de "réécrire" : explique, détaille, donne de la valeur pédagogique
+8. Couvre TOUS les concepts du chapitre, sans en oublier
 
 STRUCTURE DES SEGMENTS (json) :
 {
@@ -264,21 +295,24 @@ STRUCTURE DES SEGMENTS (json) :
   ]
 }
 
-Crée entre 15-25 segments pour couvrir tous les concepts du chapitre.`
+Crée environ ${targetSegmentsForChapter} segments (min 6, max 18) pour couvrir tous les concepts du chapitre.`
         : `You are an expert scriptwriter for educational conversational podcasts.
 
-Create a NATURAL and ENGAGING conversation for this chapter.
+Create a NATURAL, ENGAGING, and VERY DETAILED conversation for this chapter.
+Target chapter duration: ~${chapterSeconds} seconds.
 
 SPEAKERS:
 ${config.voiceProfiles.map((v) => `- ${v.role.toUpperCase()} (${v.name}): ${v.description}`).join('\n')}
 
 CRITICAL RULES:
 1. Alternate between the 3 voices naturally
-2. Each segment = 2-4 sentences maximum
+2. Each segment must be substantial and instructive (aim ~120 to 190 words per segment, ~45-75 seconds of audio)
 3. Use natural transitions ("Actually...", "That's fascinating...", "Wait...")
 4. Insert "question breakpoints" every 3-5 exchanges (mark with isQuestionBreakpoint: true)
-5. Add personality: reactions, questions, concrete examples
-6. Logical progression of concepts
+5. Add personality: reactions, questions, concrete examples, analogies, mini-recaps
+6. Logical progression of concepts, from simple to complex
+7. Don’t just paraphrase: teach, unpack, and add insight
+8. Cover ALL chapter concepts (don’t skip any)
 
 SEGMENT STRUCTURE (json format):
 {
@@ -307,7 +341,7 @@ SEGMENT STRUCTURE (json format):
   ]
 }
 
-Create 15-25 segments to cover all chapter concepts.`
+Create about ${targetSegmentsForChapter} segments (min 6, max 18) to cover all chapter concepts.`
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -333,8 +367,9 @@ Create 15-25 segments to cover all chapter concepts.`
       const parsed = JSON.parse(content)
       const chapterSegments = parsed.segments || []
 
-      // Calculate timestamps within the chapter
-      const segmentDuration = (chapter.endTime - chapter.startTime) / chapterSegments.length
+      // Timestamps/durations will be recalculated later from audio duration,
+      // but we still set placeholder values here.
+      const segmentDuration = chapterSegments.length > 0 ? chapterSeconds / chapterSegments.length : 0
       let timestamp = chapter.startTime
 
       chapterSegments.forEach((seg: any, idx: number) => {

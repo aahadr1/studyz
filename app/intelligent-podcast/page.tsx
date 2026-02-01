@@ -3,15 +3,14 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase'
 
 interface PodcastSummary {
   id: string
   title: string
   description: string
-  duration: number
+  duration: number // seconds
   language: string
-  chapters: number
-  segments: number
   status: string
   created_at: string
 }
@@ -27,9 +26,28 @@ export default function PodcastsListPage() {
 
   const fetchPodcasts = async () => {
     try {
-      // TODO: Implement list endpoint
-      // For now, empty list
-      setPodcasts([])
+      const supabase = createClient()
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        router.push('/login')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('intelligent_podcasts')
+        .select('id,title,description,duration,language,status,created_at')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        throw error
+      }
+
+      setPodcasts((data as PodcastSummary[]) || [])
     } catch (err) {
       console.error('Failed to fetch podcasts:', err)
     } finally {
@@ -106,7 +124,6 @@ export default function PodcastsListPage() {
 
                 <div className="flex items-center gap-4 text-sm text-gray-500">
                   <div>⏱ {formatDuration(podcast.duration)}</div>
-                  <div>📚 {podcast.chapters} chapters</div>
                   <div className="uppercase">{podcast.language}</div>
                 </div>
 
