@@ -3,15 +3,14 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
 interface UploadedFile {
   file: File
   id: string
   name: string
   size: number
-  status: 'pending' | 'converting' | 'ready' | 'error'
-  pageImages?: Array<{ page_number: number; url: string }>
+  status: 'pending' | 'uploading' | 'ready' | 'error'
+  storagePath?: string
   error?: string
 }
 
@@ -23,10 +22,12 @@ export default function NewPodcastPage() {
   const [language, setLanguage] = useState('auto')
   const [style, setStyle] = useState('conversational')
   const [voiceProvider, setVoiceProvider] = useState('openai')
+  const [userPrompt, setUserPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const [userId, setUserId] = useState<string | null>(null)
   const [generationProgress, setGenerationProgress] = useState(0)
   const [progressMessage, setProgressMessage] = useState('')
 
@@ -40,6 +41,7 @@ export default function NewPodcastPage() {
         router.push('/login')
         return
       }
+      setUserId(user.id)
       
       setIsCheckingAuth(false)
     }
@@ -59,72 +61,55 @@ export default function NewPodcastPage() {
     }))
 
     setUploadedFiles((prev) => [...prev, ...newFiles])
-    
-    // Automatically convert PDFs to images (same as MCQ flow)
-    await convertFilesInBackground(newFiles)
+
+    // Upload PDFs to Supabase Storage (backend will convert + transcribe)
+    await uploadFilesInBackground(newFiles)
   }
   
-  const convertFilesInBackground = async (filesToConvert: UploadedFile[]) => {
+  const uploadFilesInBackground = async (filesToUpload: UploadedFile[]) => {
     const supabase = createClient()
+    if (!userId) throw new Error('Not authenticated')
 
-    for (const fileObj of filesToConvert) {
+    for (const fileObj of filesToUpload) {
       try {
-        // Update status to converting
-        setUploadedFiles((prev) =>
-          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'converting' } : f))
-        )
-
-        console.log(`[Convert] Converting ${fileObj.name} to images...`)
-
-        // Convert PDF to images in browser with LOWER quality to reduce size
-        const pageImages = await convertPdfToImagesClient(fileObj.file, 1.2, 0.6)
-        
-        console.log(`[Convert] ✅ ${fileObj.name}: ${pageImages.length} pages`)
-
-        // Upload images to Supabase Storage to avoid 413 error
-        const uploadedImageUrls: Array<{ page_number: number; url: string }> = []
-        
-        for (const pageImg of pageImages) {
-          // Convert data URL to blob
-          const blob = await (await fetch(pageImg.dataUrl)).blob()
-          
-          // Upload to storage
-          const imagePath = `podcast-pages/${Date.now()}-${fileObj.id}-page-${pageImg.pageNumber}.jpg`
-          const { error: uploadError } = await supabase.storage
-            .from('podcast-documents')
-            .upload(imagePath, blob, { contentType: 'image/jpeg' })
-
-          if (uploadError) {
-            console.error(`[Convert] Failed to upload page ${pageImg.pageNumber}:`, uploadError)
-            throw uploadError
-          }
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('podcast-documents')
-            .getPublicUrl(imagePath)
-
-          uploadedImageUrls.push({
-            page_number: pageImg.pageNumber,
-            url: publicUrl
-          })
+        // Validate PDF
+        const isPdf = fileObj.file.type === 'application/pdf' || fileObj.name.toLowerCase().endsWith('.pdf')
+        if (!isPdf) {
+          throw new Error('Please upload a PDF file')
         }
 
-        console.log(`[Convert] Uploaded ${uploadedImageUrls.length} page images to storage`)
+        // Update status to uploading
+        setUploadedFiles((prev) =>
+          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading' } : f))
+        )
 
-        // Update status to ready with image URLs (not base64)
+        const safeName = fileObj.name.replace(/[^\w.\-() ]+/g, '_')
+        const storagePath = `${userId}/intelligent-podcasts/uploads/${Date.now()}-${fileObj.id}-${safeName}`
+
+        console.log(`[Podcast Upload] Uploading ${fileObj.name} → ${storagePath}`)
+        const { error: uploadError } = await supabase.storage
+          .from('podcast-documents')
+          .upload(storagePath, fileObj.file, { contentType: 'application/pdf', upsert: true })
+
+        if (uploadError) {
+          console.error('[Podcast Upload] Upload failed:', uploadError)
+          throw new Error(uploadError.message || 'Upload failed')
+        }
+
+        // Update status to ready
         setUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === fileObj.id
               ? { 
                   ...f, 
                   status: 'ready',
-                  pageImages: uploadedImageUrls
+                  storagePath
                 }
               : f
           )
         )
       } catch (err: any) {
-        console.error('[Convert] Conversion error:', err)
+        console.error('[Podcast Upload] Upload error:', err)
         setUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === fileObj.id
@@ -152,7 +137,15 @@ export default function NewPodcastPage() {
   }
 
   const removeFile = (id: string) => {
-    setUploadedFiles((prev) => prev.filter((f) => f.id !== id))
+    setUploadedFiles((prev) => {
+      const file = prev.find((f) => f.id === id)
+      // Best-effort cleanup of uploaded file
+      if (file?.storagePath) {
+        const supabase = createClient()
+        void supabase.storage.from('podcast-documents').remove([file.storagePath])
+      }
+      return prev.filter((f) => f.id !== id)
+    })
   }
 
   const handleGenerate = async () => {
@@ -165,40 +158,40 @@ export default function NewPodcastPage() {
     setError(null)
 
     try {
-      // Wait for any pending/converting files to complete
-      console.log('[Podcast] Checking conversion status...')
+      // Wait for any pending/uploading files to complete
+      console.log('[Podcast] Checking upload status...')
       
-      // Wait up to 60 seconds for conversions to complete
+      // Wait up to 60 seconds for uploads to complete
       const maxWaitTime = 60000 // 60 seconds
       const startTime = Date.now()
       
       while (Date.now() - startTime < maxWaitTime) {
-        const pendingOrConverting = uploadedFiles.filter(
-          (f) => f.status === 'pending' || f.status === 'converting'
+        const pendingOrUploading = uploadedFiles.filter(
+          (f) => f.status === 'pending' || f.status === 'uploading'
         )
         
-        if (pendingOrConverting.length === 0) break
+        if (pendingOrUploading.length === 0) break
         
-        console.log(`[Podcast] Waiting for ${pendingOrConverting.length} files to finish converting...`)
+        console.log(`[Podcast] Waiting for ${pendingOrUploading.length} files to finish uploading...`)
         await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second
       }
 
-      // Get all successfully converted files
-      const readyFiles = uploadedFiles.filter((f) => f.status === 'ready' && f.pageImages)
+      // Get all successfully uploaded files
+      const readyFiles = uploadedFiles.filter((f) => f.status === 'ready' && f.storagePath)
 
       console.log('[Podcast] Total ready files:', readyFiles.length)
 
       if (readyFiles.length === 0) {
-        throw new Error('No documents were successfully converted. Please check the errors and try again.')
+        throw new Error('No documents were successfully uploaded. Please check the errors and try again.')
       }
 
-      // Prepare document data with page images (same as MCQ flow)
+      // Prepare document data (PDFs are already in storage; backend will render pages + transcribe)
       const documents = readyFiles.map((f) => ({ 
         name: f.name,
-        page_images: f.pageImages!
+        storage_path: f.storagePath!
       }))
 
-      console.log('[Podcast] Sending to API:', documents.map(d => ({ name: d.name, pages: d.page_images.length })))
+      console.log('[Podcast] Sending to API:', documents.map(d => ({ name: d.name, storage_path: d.storage_path })))
 
       // Call generation API
       const response = await fetch('/api/intelligent-podcast/generate', {
@@ -213,6 +206,7 @@ export default function NewPodcastPage() {
           language,
           style,
           voiceProvider,
+          userPrompt,
         }),
       })
 
@@ -358,7 +352,7 @@ export default function NewPodcastPage() {
           <div className="bg-gray-900 rounded-lg p-6">
             <h3 className="text-xl font-semibold mb-4">Source Documents</h3>
             <p className="text-gray-400 text-sm mb-4">
-              Upload PDF documents to transform into an interactive podcast
+              Upload PDF documents. The backend will automatically convert pages to images and fully transcribe them with GPT vision before generating your script and audio.
             </p>
             
             {/* Drag & Drop Zone */}
@@ -404,7 +398,7 @@ export default function NewPodcastPage() {
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className="text-2xl">
                         {file.status === 'ready' ? '✅' :
-                         file.status === 'converting' ? '⏳' :
+                         file.status === 'uploading' ? '⏳' :
                          file.status === 'error' ? '❌' : '📄'}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -413,8 +407,8 @@ export default function NewPodcastPage() {
                         </p>
                         <p className="text-xs text-gray-500">
                           {formatFileSize(file.size)}
-                          {file.status === 'converting' && ' - Converting to images...'}
-                          {file.status === 'ready' && file.pageImages && ` - ${file.pageImages.length} pages ready`}
+                          {file.status === 'uploading' && ' - Uploading PDF...'}
+                          {file.status === 'ready' && file.storagePath && ` - Uploaded`}
                           {file.status === 'error' && ` - Error: ${file.error}`}
                         </p>
                       </div>
@@ -434,6 +428,22 @@ export default function NewPodcastPage() {
           {/* Configuration */}
           <div className="bg-gray-900 rounded-lg p-6 space-y-4">
             <h3 className="text-xl font-semibold mb-4">Podcast Configuration</h3>
+
+            {/* User Prompt */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                What should the video script focus on?
+              </label>
+              <textarea
+                value={userPrompt}
+                onChange={(e) => setUserPrompt(e.target.value)}
+                placeholder="Example: Explain the topic like a university lecture, add lots of real-world examples, focus on problem-solving steps, and include common pitfalls."
+                className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 min-h-[90px]"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                This instruction is forwarded to Gemini 3 Flash to tailor the long-form script to your exact demand.
+              </p>
+            </div>
             
             {/* Duration */}
             <div>

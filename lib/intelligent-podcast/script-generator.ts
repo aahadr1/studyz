@@ -67,6 +67,7 @@ export async function generateIntelligentScript(
     language: string
     style: 'educational' | 'conversational' | 'technical' | 'storytelling'
     voiceProfiles: VoiceProfile[]
+    userPrompt?: string
   }
 ): Promise<ScriptGenerationResult> {
   console.log('[Script] Starting intelligent script generation...')
@@ -109,14 +110,14 @@ export async function generateIntelligentScript(
 async function generateChapters(
   documents: DocumentContent[],
   knowledgeGraph: KnowledgeGraph,
-  config: { targetDuration: number; language: string; style: string }
+  config: { targetDuration: number; language: string; style: string; userPrompt?: string }
 ): Promise<{ chapters: PodcastChapter[]; title: string; description: string }> {
   const targetSeconds = Math.max(1, Math.round((config.targetDuration || 1) * 60))
   const targetChapters = Math.min(10, Math.max(3, Math.round(config.targetDuration / 8))) // ~1 chapter per 8 min
 
   const documentsSummary = documents
     // Provide more source material; Gemini has a large context window.
-    .map((doc) => `Document: ${doc.title}\nContent:\n${doc.content.slice(0, 40000)}`)
+    .map((doc) => `Document: ${doc.title}\nContent:\n${doc.content.slice(0, 200000)}`)
     .join('\n\n---\n\n')
 
   const conceptsSummary = knowledgeGraph.concepts
@@ -126,6 +127,9 @@ async function generateChapters(
   const systemInstruction =
     config.language === 'fr'
       ? `Tu es un expert en création de contenu pédagogique sous forme de podcast.
+
+DEMANDE UTILISATEUR (à respecter au maximum) :
+${String(config.userPrompt || '').trim() || '(aucune demande spécifique)'}
 
 Crée une structure en CHAPITRES pour un podcast de ${config.targetDuration} minutes.
 
@@ -162,6 +166,9 @@ Retourne un objet json :
 
 IMPORTANT : Les IDs des concepts doivent correspondre à ceux fournis dans la liste.`
       : `You are an expert in creating educational podcast content.
+
+USER DEMAND (follow as closely as possible):
+${String(config.userPrompt || '').trim() || '(no specific demand)'}
 
 Create a CHAPTER structure for a ${config.targetDuration}-minute podcast.
 
@@ -261,7 +268,7 @@ IMPORTANT: Concept IDs must match those provided in the list.`
 async function generateSegments(
   chapters: PodcastChapter[],
   knowledgeGraph: KnowledgeGraph,
-  config: { language: string; style: string; voiceProfiles: VoiceProfile[] }
+  config: { language: string; style: string; voiceProfiles: VoiceProfile[]; userPrompt?: string }
 ): Promise<{ segments: PodcastSegment[] }> {
   const allSegments: PodcastSegment[] = []
 
@@ -275,6 +282,7 @@ async function generateSegments(
     minSegments: number
     maxSegments: number
     language: string
+    userPrompt?: string
   }): Promise<RawSegment[]> => {
     const currentWords = params.currentSegments.reduce((sum, s) => sum + countWords(s.text || ''), 0)
     const targetWords = params.chapterTargetWords
@@ -286,6 +294,9 @@ async function generateSegments(
     const systemInstruction =
       params.language === 'fr'
         ? `Tu es un scénariste expert en podcasts éducatifs LONG-FORM.
+
+DEMANDE UTILISATEUR (à respecter au maximum) :
+${String(params.userPrompt || '').trim() || '(aucune demande spécifique)'}
 
 Ta mission: EXPANDRE une conversation existante pour atteindre une durée réaliste.
 
@@ -305,6 +316,9 @@ STYLE:
 - Ajoute profondeur: définitions, intuition, exemples, contre-exemples, erreurs fréquentes, applications, mini-exercices oraux.
 `
         : `You are an expert LONG-FORM educational podcast scriptwriter.
+
+USER DEMAND (follow as closely as possible):
+${String(params.userPrompt || '').trim() || '(no specific demand)'}
 
 Your job: EXPAND an existing conversation so it reaches a realistic duration.
 
@@ -374,6 +388,9 @@ ${JSON.stringify({ segments: params.currentSegments }, null, 2)}
       config.language === 'fr'
         ? `Tu es un scénariste expert en podcasts éducatifs conversationnels.
 
+DEMANDE UTILISATEUR (à respecter au maximum) :
+${String(config.userPrompt || '').trim() || '(aucune demande spécifique)'}
+
 Crée une conversation NATURELLE, ENGAGEANTE et TRÈS DÉTAILLÉE pour ce chapitre.
 Durée cible de ce chapitre: ~${chapterSeconds} secondes.
 Objectif de mots pour ce chapitre: ~${chapterTargetWords} mots (±10%).
@@ -421,6 +438,9 @@ STRUCTURE DES SEGMENTS (json) :
 
 Crée environ ${targetSegmentsForChapter} segments (min 6, max 18) pour couvrir tous les concepts du chapitre.`
         : `You are an expert scriptwriter for educational conversational podcasts.
+
+USER DEMAND (follow as closely as possible):
+${String(config.userPrompt || '').trim() || '(no specific demand)'}
 
 Create a NATURAL, ENGAGING, and VERY DETAILED conversation for this chapter.
 Target chapter duration: ~${chapterSeconds} seconds.
@@ -490,6 +510,7 @@ Create about ${targetSegmentsForChapter} segments (min 6, max 18) to cover all c
         minSegments: Math.max(6, Math.min(18, targetSegmentsForChapter)),
         maxSegments: 18,
         language: config.language,
+        userPrompt: config.userPrompt,
       })
 
       // Sanitize output and cap segment count.
@@ -536,7 +557,7 @@ async function generatePredictedQuestions(
   console.log('[Script] Generating predicted Q&A...')
 
   const contentSummary = documents
-    .map((doc) => `${doc.title}: ${doc.content.slice(0, 12000)}`)
+    .map((doc) => `${doc.title}: ${doc.content.slice(0, 60000)}`)
     .join('\n\n')
 
   const conceptsSummary = knowledgeGraph.concepts

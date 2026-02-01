@@ -65,7 +65,8 @@ async function extractConcepts(
   language: string
 ): Promise<ConceptNode[]> {
   const combinedContent = documents
-    .map((doc) => `Document: ${doc.title}\n\n${doc.content.slice(0, 50000)}`)
+    // Prefer using the full transcription; keep a very high cap as a safety valve.
+    .map((doc) => `Document: ${doc.title}\n\n${doc.content.slice(0, 200000)}`)
     .join('\n\n---\n\n')
 
   const systemInstruction =

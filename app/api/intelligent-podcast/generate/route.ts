@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { extractAndAnalyze } from '@/lib/intelligent-podcast/extractor'
-import { generateIntelligentScript } from '@/lib/intelligent-podcast/script-generator'
-import { generateMultiVoiceAudio, generatePredictedQuestionsAudio } from '@/lib/intelligent-podcast/audio-generator'
-import { extractTextFromPageImages } from '@/lib/intelligent-podcast/pdf-extractor'
-import { DocumentContent, VoiceProfile } from '@/types/intelligent-podcast'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes
@@ -35,20 +30,6 @@ async function createAuthClient() {
             // Called from Server Component
           }
         },
-      },
-    }
-  )
-}
-
-function createSimpleClient() {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get() { return undefined },
-        set() {},
-        remove() {},
       },
     }
   )
@@ -91,19 +72,21 @@ export async function POST(request: NextRequest) {
       language = 'auto',
       style = 'conversational',
       voiceProvider = 'openai',
+      userPrompt = '',
     } = body as {
       documents?: Array<{
         name: string
-        page_images: Array<{ page_number: number; url: string }>
+        storage_path: string
       }>
       targetDuration?: number
       language?: string
       style?: 'educational' | 'conversational' | 'technical' | 'storytelling'
       voiceProvider?: 'openai' | 'elevenlabs' | 'playht'
+      userPrompt?: string
     }
 
     if (!documents || documents.length === 0) {
-      return NextResponse.json({ error: 'At least one document with page_images is required' }, { status: 400 })
+      return NextResponse.json({ error: 'At least one document is required' }, { status: 400 })
     }
 
     console.log(`[Podcast] Starting generation for ${documents.length} document(s)`)
@@ -119,7 +102,7 @@ export async function POST(request: NextRequest) {
         description: 'Waiting to start...',
         duration: 0,
         language: language === 'auto' ? 'en' : language,
-        document_ids: documents.map(() => crypto.randomUUID()),
+        document_ids: documents.map((d) => d.storage_path),
         knowledge_graph: { concepts: [], relationships: [], embeddings: {} },
         chapters: [],
         segments: [],
@@ -142,6 +125,26 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Podcast] Created podcast ${podcast.id} with pending status`)
 
+    // Persist source document references (for resumability)
+    try {
+      const { error: docsError } = await supabase
+        .from('intelligent_podcast_documents')
+        .insert(
+          documents.map((d) => ({
+            podcast_id: podcast.id,
+            user_id: user.id,
+            name: d.name,
+            storage_path: d.storage_path,
+            page_count: 0,
+          }))
+        )
+      if (docsError) {
+        console.warn('[Podcast] Failed to create document rows:', docsError.message)
+      }
+    } catch (e: any) {
+      console.warn('[Podcast] Failed to create document rows:', e?.message || e)
+    }
+
     // Return immediately with podcast ID and processing config
     return NextResponse.json({
       id: podcast.id,
@@ -153,6 +156,7 @@ export async function POST(request: NextRequest) {
         language,
         style,
         voiceProvider,
+        userPrompt: String(userPrompt || ''),
       },
     })
   } catch (error: any) {

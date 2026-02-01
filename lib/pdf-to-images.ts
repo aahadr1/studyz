@@ -44,6 +44,90 @@ export interface PageImage {
   height: number
 }
 
+async function loadPdfDocumentForRendering(pdfBuffer: Buffer): Promise<any> {
+  // Initialize PDF.js at runtime
+  await initPdfJsForImages()
+
+  // Validate buffer
+  if (!pdfBuffer || pdfBuffer.length === 0) {
+    throw new Error('PDF buffer is empty')
+  }
+
+  // Check if it looks like a PDF (starts with %PDF-)
+  const header = pdfBuffer.slice(0, 5).toString('ascii')
+  if (!header.startsWith('%PDF-')) {
+    console.error('[PDF] Invalid PDF header:', header)
+    throw new Error('File does not appear to be a valid PDF (invalid header)')
+  }
+
+  // Load the PDF document
+  try {
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(pdfBuffer),
+      useSystemFonts: true,
+      disableFontFace: true,
+    })
+    return await loadingTask.promise
+  } catch (loadError: any) {
+    console.error('[PDF] Failed to load PDF document:', loadError)
+    throw new Error(`Failed to load PDF: ${loadError.message}`)
+  }
+}
+
+/**
+ * Render specific pages of a PDF to PNG buffers (server-side).
+ * This is used for per-page processing (vision transcription) without rendering the whole PDF.
+ */
+export async function renderPdfPagesToImages(
+  pdfBuffer: Buffer,
+  pageNumbers: number[],
+  scale: number = 1.5
+): Promise<PageImage[]> {
+  const uniquePages = Array.from(new Set((pageNumbers || []).map((n) => Math.round(Number(n))).filter((n) => n > 0)))
+  if (uniquePages.length === 0) return []
+
+  console.log(`[PDF] Rendering ${uniquePages.length} page(s): ${uniquePages.join(', ')}`)
+
+  const pdfDoc = await loadPdfDocumentForRendering(pdfBuffer)
+  const numPages = Number(pdfDoc?.numPages) || 0
+  if (numPages <= 0) throw new Error('Failed to read PDF page count')
+
+  const pageImages: PageImage[] = []
+
+  for (const pageNum of uniquePages) {
+    if (pageNum < 1 || pageNum > numPages) {
+      throw new Error(`Requested page ${pageNum} is out of bounds (1-${numPages})`)
+    }
+
+    try {
+      console.log(`[PDF] Rendering page ${pageNum}/${numPages}...`)
+      const page = await pdfDoc.getPage(pageNum)
+      const viewport = page.getViewport({ scale })
+
+      const canvas = createCanvas(viewport.width, viewport.height)
+      const context = canvas.getContext('2d')
+
+      await page.render({
+        canvasContext: context,
+        viewport,
+      }).promise
+
+      const buffer = canvas.toBuffer('image/png')
+      pageImages.push({
+        pageNumber: pageNum,
+        buffer,
+        width: Math.round(viewport.width),
+        height: Math.round(viewport.height),
+      })
+    } catch (pageError: any) {
+      console.error(`[PDF] Failed to render page ${pageNum}:`, pageError)
+      throw new Error(`Failed to render page ${pageNum}: ${pageError.message}`)
+    }
+  }
+
+  return pageImages
+}
+
 /**
  * Extract text content from PDF using pdf-parse (text-based extraction)
  * This is much faster and more reliable than image-based extraction
@@ -92,64 +176,28 @@ export async function convertPdfToImages(
   scale: number = 1.5
 ): Promise<PageImage[]> {
   console.log('[PDF] Converting PDF to images, buffer length:', pdfBuffer.length)
-  
-  // Initialize PDF.js at runtime
-  await initPdfJsForImages()
-  console.log('[PDF] PDF.js initialized successfully')
 
-  // Validate buffer
-  if (!pdfBuffer || pdfBuffer.length === 0) {
-    throw new Error('PDF buffer is empty')
-  }
+  const pdfDoc = await loadPdfDocumentForRendering(pdfBuffer)
+  const numPages = Number(pdfDoc?.numPages) || 0
+  if (numPages <= 0) throw new Error('Failed to read PDF page count')
 
-  // Check if it looks like a PDF (starts with %PDF-)
-  const header = pdfBuffer.slice(0, 5).toString('ascii')
-  if (!header.startsWith('%PDF-')) {
-    console.error('[PDF] Invalid PDF header:', header)
-    throw new Error('File does not appear to be a valid PDF (invalid header)')
-  }
-
-  // Load the PDF document
-  let pdfDoc: any
-  try {
-    console.log('[PDF] Creating getDocument task...')
-    const loadingTask = pdfjsLib.getDocument({
-      data: new Uint8Array(pdfBuffer),
-      useSystemFonts: true,
-      disableFontFace: true,
-    })
-
-    console.log('[PDF] Waiting for PDF to load...')
-    pdfDoc = await loadingTask.promise
-    console.log('[PDF] PDF loaded successfully, pages:', pdfDoc.numPages)
-  } catch (loadError: any) {
-    console.error('[PDF] Failed to load PDF document:', loadError)
-    throw new Error(`Failed to load PDF: ${loadError.message}`)
-  }
-
-  const numPages = pdfDoc.numPages
   const pageImages: PageImage[] = []
 
-  // Process each page
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
     try {
       console.log(`[PDF] Processing page ${pageNum}/${numPages}...`)
       const page = await pdfDoc.getPage(pageNum)
       const viewport = page.getViewport({ scale })
 
-      // Create canvas for this page
       const canvas = createCanvas(viewport.width, viewport.height)
       const context = canvas.getContext('2d')
 
-      // Render the page to canvas
       await page.render({
         canvasContext: context,
         viewport,
       }).promise
 
-      // Convert canvas to PNG buffer
       const buffer = canvas.toBuffer('image/png')
-
       pageImages.push({
         pageNumber: pageNum,
         buffer,
