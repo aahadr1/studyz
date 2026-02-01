@@ -52,14 +52,15 @@ export async function generateGeminiTTSAudio(
 
   const apiKey = getApiKey()
   const url = `${TTS_URL}?key=${encodeURIComponent(apiKey)}`
-  const body = {
+  const body: {
+    input: { text: string }
+    voice: { languageCode: string; name: string }
+    audioConfig: { audioEncoding: 'MP3'; sampleRateHertz: number }
+  } = {
     input: { text: trimmed },
-    voice: {
-      languageCode: locale,
-      name: voiceName,
-    },
+    voice: { languageCode: locale, name: voiceName },
     audioConfig: {
-      audioEncoding: 'MP3' as const,
+      audioEncoding: 'MP3',
       sampleRateHertz: 24000,
     },
   }
