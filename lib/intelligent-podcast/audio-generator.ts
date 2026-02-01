@@ -1,6 +1,7 @@
 import { PodcastSegment, VoiceProfile, PredictedQuestion } from '@/types/intelligent-podcast'
 import { makeTtsReadyText } from '../tts'
 import { getOpenAI } from './openai-client'
+import { generateGeminiTTSAudio, generateGeminiConversationAudio } from './google-tts-client'
 
 /**
  * Generate audio for all podcast segments with multiple voices
@@ -11,7 +12,117 @@ export async function generateMultiVoiceAudio(
   language: string,
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
-  console.log(`[Audio] Starting audio generation for ${segments.length} segments`)
+  // Check if we're using Gemini TTS and should use conversation mode
+  const isGeminiProvider = voiceProfiles.some(v => v.provider === 'gemini')
+  
+  if (isGeminiProvider && segments.length > 1) {
+    console.log(`[Audio] Using Gemini conversation mode for ${segments.length} segments`)
+    return generateGeminiConversation(segments, voiceProfiles, language, onProgress)
+  }
+  return generateIndividualSegments(segments, voiceProfiles, language, onProgress)
+}
+
+/**
+ * Generate conversation audio using Gemini's multi-speaker capabilities
+ */
+async function generateGeminiConversation(
+  segments: PodcastSegment[],
+  voiceProfiles: VoiceProfile[],
+  language: string,
+  onProgress?: (current: number, total: number, step: string) => Promise<void> | void
+): Promise<PodcastSegment[]> {
+  console.log(`[Audio] Starting Gemini conversation generation for ${segments.length} segments`)
+
+  if (onProgress) {
+    await onProgress(0, segments.length, 'Preparing conversation generation...')
+  }
+
+  try {
+    // Prepare conversation segments
+    const conversationSegments = segments.map(segment => {
+      const voiceProfile = voiceProfiles.find(v => v.role === segment.speaker) || voiceProfiles[0]
+      return {
+        text: segment.text,
+        speaker: segment.speaker,
+        voiceProfile: voiceProfile,
+      }
+    })
+
+    // Create conversation prompt
+    const speakers = [...new Set(segments.map(s => s.speaker))]
+    const conversationPrompt = `Generate this as a natural, engaging educational podcast conversation between ${speakers.join(' and ')}. 
+
+The conversation should feel authentic with:
+- Natural pacing and rhythm
+- Appropriate emotional responses
+- Smooth transitions between speakers
+- Educational yet conversational tone
+- Clear pronunciation of technical terms
+
+Each speaker has their role:
+- Host: Guides the conversation, asks insightful questions
+- Expert: Provides detailed explanations with authority
+- Simplifier: Makes complex topics accessible with analogies`
+
+    if (onProgress) {
+      await onProgress(segments.length / 2, segments.length, 'Generating conversation audio...')
+    }
+
+    // Generate the entire conversation as one cohesive audio
+    const result = await generateGeminiConversationAudio(
+      conversationSegments,
+      language,
+      conversationPrompt
+    )
+
+    // Since Gemini generates one continuous audio for the conversation,
+    // we need to split it back into segments with estimated timings
+    const totalDuration = result.duration
+    let currentTime = 0
+    
+    const processedSegments: PodcastSegment[] = segments.map((segment, index) => {
+      // Estimate segment duration based on text length
+      const segmentWordCount = segment.text.split(/\s+/).filter(Boolean).length
+      const totalWordCount = segments.reduce((sum, s) => sum + s.text.split(/\s+/).filter(Boolean).length, 0)
+      const segmentDuration = (segmentWordCount / totalWordCount) * totalDuration
+      
+      const processedSegment: PodcastSegment = {
+        ...segment,
+        audioUrl: result.audioUrl, // Same audio URL for all segments in conversation
+        duration: segmentDuration,
+        timestamp: currentTime,
+      }
+      
+      currentTime += segmentDuration
+      return processedSegment
+    })
+
+    if (onProgress) {
+      await onProgress(segments.length, segments.length, 'Conversation generation completed')
+    }
+
+    console.log(`[Audio] ✅ Gemini conversation completed: ${totalDuration.toFixed(1)}s total duration`)
+    return processedSegments
+
+  } catch (error: any) {
+    console.error(`[Audio] ❌ Gemini conversation generation failed:`, error)
+    
+    // Fallback to individual segment generation
+    console.log(`[Audio] Falling back to individual segment generation...`)
+    return generateIndividualSegments(segments, voiceProfiles, language, onProgress)
+  }
+}
+
+/**
+ * Generate individual segments (fallback method)
+ */
+async function generateIndividualSegments(
+  segments: PodcastSegment[],
+  voiceProfiles: VoiceProfile[],
+  language: string,
+  onProgress?: (current: number, total: number, step: string) => Promise<void> | void
+): Promise<PodcastSegment[]> {
+  console.log(`[Audio] Starting individual audio generation for ${segments.length} segments`)
 
   if (segments.length === 0) {
     console.warn(`[Audio] No segments provided for audio generation`)
@@ -50,7 +161,12 @@ export async function generateMultiVoiceAudio(
 
       console.log(`[Audio] Starting TTS for segment ${segmentNumber}...`)
       
-      if (voiceProfile.provider === 'elevenlabs') {
+      if (voiceProfile.provider === 'gemini') {
+        // Use Google Cloud Gemini TTS
+        const result = await generateGeminiTTSAudio(segment.text, voiceProfile, language)
+        audioUrl = result.audioUrl
+        actualDuration = result.duration
+      } else if (voiceProfile.provider === 'elevenlabs') {
         const result = await generateElevenLabsAudio(segment.text, voiceProfile, language)
         audioUrl = result.audioUrl
         actualDuration = result.duration
@@ -110,10 +226,9 @@ export async function generateMultiVoiceAudio(
   }
 
   const successCount = processedSegments.filter(s => s.audioUrl && s.audioUrl.length > 0).length
-  console.log(`[Audio] Batch completed: ${successCount}/${segments.length} segments successful`)
+  console.log(`[Audio] Individual generation completed: ${successCount}/${segments.length} segments successful`)
   
   return processedSegments
-}
 
 /**
  * Generate audio using ElevenLabs (highest quality)

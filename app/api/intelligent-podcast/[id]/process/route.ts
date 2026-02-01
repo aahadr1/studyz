@@ -57,7 +57,36 @@ export async function POST(
     }
   }
 
-  const voiceProfilesForProvider = (provider: 'openai' | 'elevenlabs' | 'playht'): VoiceProfile[] => {
+  const voiceProfilesForProvider = (provider: 'openai' | 'elevenlabs' | 'playht' | 'gemini'): VoiceProfile[] => {
+    if (provider === 'gemini') {
+      return [
+        {
+          id: 'host-voice',
+          role: 'host',
+          name: 'Sophie',
+          provider: 'gemini',
+          voiceId: 'Kore',
+          description: 'Engaging female host who guides conversations with warmth and curiosity',
+        },
+        {
+          id: 'expert-voice',
+          role: 'expert',
+          name: 'Marcus',
+          provider: 'gemini',
+          voiceId: 'Charon',
+          description: 'Authoritative male expert who explains complex topics with confidence',
+        },
+        {
+          id: 'simplifier-voice',
+          role: 'simplifier',
+          name: 'Emma',
+          provider: 'gemini',
+          voiceId: 'Aoede',
+          description: 'Friendly female simplifier who makes difficult concepts accessible',
+        },
+      ]
+    }
+
     if (provider === 'elevenlabs') {
       return [
         {
@@ -244,7 +273,7 @@ OUTPUT:
         ? existing.language
         : (config?.language && config.language !== 'auto' ? config.language : 'en')
 
-    const voiceProvider: 'openai' | 'elevenlabs' | 'playht' = config?.voiceProvider || 'openai'
+    const voiceProvider: 'openai' | 'elevenlabs' | 'playht' | 'gemini' = config?.voiceProvider || 'gemini'
     const voiceProfiles = voiceProfilesForProvider(voiceProvider)
 
     // STEP A: If script not present, do OCR + analysis + script, and save immediately (so audio can resume later).
