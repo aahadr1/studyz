@@ -1,4 +1,4 @@
-import { getOpenAI } from './openai-client'
+import { runGemini3Flash } from './gemini-client'
 
 export interface PageImageInput {
   page_number: number
@@ -6,7 +6,7 @@ export interface PageImageInput {
 }
 
 /**
- * Extract text from pre-rendered page images using GPT-4 Vision only.
+ * Extract text from pre-rendered page images using Gemini 3 Flash (Replicate).
  * Same flow as MCQ extraction: client converts PDF to images, server only runs Vision.
  * No PDF.js / DOMMatrix on server - works in Node and edge.
  */
@@ -18,57 +18,53 @@ export async function extractTextFromPageImages(
     throw new Error('No page images provided')
   }
 
-  console.log(`[PDF Extractor] Transcribing ${documentName} (${pageImages.length} pages) with GPT-4 Vision...`)
+  console.log(`[PDF Extractor] Transcribing ${documentName} (${pageImages.length} pages) with Gemini...`)
 
-  const openai = getOpenAI()
-  const extractedPages: string[] = []
+  const extractedBatches: string[] = []
+  const batchSize = 10 // Gemini input constraint
 
-  for (let i = 0; i < pageImages.length; i++) {
-    const page = pageImages[i]
-    const pageNum = page.page_number ?? i + 1
+  for (let i = 0; i < pageImages.length; i += batchSize) {
+    const batch = pageImages.slice(i, i + batchSize)
+    const pageNums = batch.map((p, idx) => p.page_number ?? i + idx + 1)
+    console.log(`[PDF Extractor] Pages ${pageNums[0]}-${pageNums[pageNums.length - 1]}...`)
 
-    console.log(`[PDF Extractor] Page ${pageNum}/${pageImages.length}...`)
+    const systemInstruction = `You are an expert at extracting text from document images.
+
+Extract ALL text from each page image, in a clear, readable format.
+Preserve headings, paragraphs, lists, and technical content (including formulas and symbols as text).
+
+Output MUST be plain text only (no commentary).
+For each page, you MUST wrap content like:
+--- Page <N> ---
+<extracted text>
+`
+
+    const prompt = `Document name: ${documentName}
+Pages in this batch: ${pageNums.join(', ')}
+
+Extract the text from each image and return them in order, using the exact delimiter format.
+`
 
     try {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert at extracting text from document images.
-
-Extract ALL text from this page in a clear, readable format.
-Preserve:
-- Headings and structure
-- Paragraphs and formatting
-- Lists and bullet points
-- Important terms and concepts
-- Technical content and formulas
-
-Return ONLY the extracted text, no commentary.`
-          },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: `Extract all text from page ${pageNum} of ${documentName}` },
-              { type: 'image_url', image_url: { url: page.url, detail: 'high' } }
-            ]
-          }
-        ],
-        max_tokens: 4096,
-        temperature: 0.1
+      const text = await runGemini3Flash({
+        prompt,
+        systemInstruction,
+        images: batch.map((p) => p.url),
+        thinkingLevel: 'low',
+        temperature: 0.1,
+        topP: 0.95,
+        maxOutputTokens: 65535,
       })
-
-      const text = response.choices[0]?.message?.content || ''
-      extractedPages.push(`\n\n--- Page ${pageNum} ---\n\n${text}`)
-      console.log(`[PDF Extractor] ✅ Page ${pageNum}: ${text.length} chars`)
+      extractedBatches.push(text)
+      console.log(`[PDF Extractor] ✅ Batch ${i / batchSize + 1}: ${text.length} chars`)
     } catch (err: any) {
-      console.error(`[PDF Extractor] Page ${pageNum} failed:`, err.message)
-      extractedPages.push(`\n\n--- Page ${pageNum} ---\n\n[Extraction failed]`)
+      console.error(`[PDF Extractor] Batch ${i / batchSize + 1} failed:`, err.message)
+      const fallback = pageNums.map((n) => `\n\n--- Page ${n} ---\n\n[Extraction failed]`).join('\n')
+      extractedBatches.push(fallback)
     }
   }
 
-  const content = extractedPages.join('\n\n')
+  const content = extractedBatches.join('\n\n')
   console.log(`[PDF Extractor] ✅ ${documentName}: ${content.length} total chars`)
 
   return {

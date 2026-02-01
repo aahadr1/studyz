@@ -56,7 +56,19 @@ function createSimpleClient() {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.REPLICATE_API_TOKEN) {
+      console.error('[Podcast] REPLICATE_API_TOKEN is not set')
+      return NextResponse.json(
+        {
+          error: 'Server configuration error',
+          details: 'Replicate API token is not configured (required for Gemini OCR + script generation)',
+        },
+        { status: 500 }
+      )
+    }
+
     if (!process.env.OPENAI_API_KEY) {
+      // Still required for OpenAI TTS + TTS text cleanup used in the audio pipeline
       console.error('[Podcast] OPENAI_API_KEY is not set')
       return NextResponse.json({
         error: 'Server configuration error',

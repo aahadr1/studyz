@@ -1,5 +1,5 @@
 import { DocumentContent, KnowledgeGraph, ConceptNode } from '@/types/intelligent-podcast'
-import { getOpenAI } from './openai-client'
+import { parseJsonObject, runGemini3Flash } from './gemini-client'
 
 /**
  * Extract and analyze content from documents to build a knowledge graph
@@ -11,8 +11,6 @@ export async function extractAndAnalyze(
   enrichedDocuments: DocumentContent[]
   detectedLanguage: string
 }> {
-  const openai = getOpenAI()
-
   // Step 1: Detect language from first document
   const detectedLanguage = await detectLanguage(documents[0].content)
 
@@ -42,108 +40,90 @@ export async function extractAndAnalyze(
  * Detect the primary language of the content
  */
 async function detectLanguage(content: string): Promise<string> {
-  const openai = getOpenAI()
-  
-  const sample = content.slice(0, 2000)
-  
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      {
-        role: 'system',
-        content: 'Detect the language of the text. Return only the ISO 639-1 code (en, fr, es, de, etc.)',
-      },
-      { role: 'user', content: sample },
-    ],
-    max_tokens: 10,
+  const sample = content.slice(0, 8000)
+  const systemInstruction = `Detect the language of the text and return ONLY the ISO 639-1 code (en, fr, es, de, etc.).
+No punctuation. No extra words.`
+
+  const out = await runGemini3Flash({
+    prompt: sample,
+    systemInstruction,
+    thinkingLevel: 'low',
     temperature: 0,
+    topP: 0.95,
+    maxOutputTokens: 16,
   })
 
-  return response.choices[0]?.message?.content?.trim().toLowerCase() || 'en'
+  const lang = out.trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 2)
+  return lang || 'en'
 }
 
 /**
- * Extract key concepts from documents using GPT-4
+ * Extract key concepts from documents using Gemini 3 Flash
  */
 async function extractConcepts(
   documents: DocumentContent[],
   language: string
 ): Promise<ConceptNode[]> {
-  const openai = getOpenAI()
-
   const combinedContent = documents
-    .map((doc) => `Document: ${doc.title}\n\n${doc.content.slice(0, 8000)}`)
+    .map((doc) => `Document: ${doc.title}\n\n${doc.content.slice(0, 50000)}`)
     .join('\n\n---\n\n')
 
-  const systemPrompt =
+  const systemInstruction =
     language === 'fr'
       ? `Tu es un expert en analyse de contenu éducatif.
 
 Extrais les concepts clés du contenu fourni.
 
-Pour CHAQUE concept, fournis :
-1. Un nom court et précis
-2. Une description claire (1-2 phrases)
-3. Un niveau de difficulté (easy/medium/hard)
-4. Des concepts liés (s'il y en a)
+CONTRAINTES:
+- Identifie entre 25 et 80 concepts (selon la richesse du contenu).
+- Chaque concept doit être UNIQUE, concret, et utile pour structurer un podcast long.
+- IMPORTANT: crée des IDs stables au format "concept-1", "concept-2", ...
 
-Retourne un objet json avec cette structure :
+Retourne UNIQUEMENT un objet JSON:
 {
   "concepts": [
     {
       "id": "concept-1",
       "name": "Nom du concept",
-      "description": "Description claire du concept",
-      "difficulty": "medium",
-      "relatedConcepts": []
+      "description": "Description claire (1-2 phrases)",
+      "difficulty": "easy|medium|hard",
+      "relatedConcepts": ["concept-2", "concept-7"]
     }
   ]
-}
-
-IMPORTANT : Identifie entre 10 et 30 concepts selon la complexité du contenu.`
+}`
       : `You are an expert in educational content analysis.
 
 Extract the key concepts from the provided content.
 
-For EACH concept, provide:
-1. A short and precise name
-2. A clear description (1-2 sentences)
-3. A difficulty level (easy/medium/hard)
-4. Related concepts (if any)
+CONSTRAINTS:
+- Identify 25 to 80 concepts (depending on content richness).
+- Each concept must be UNIQUE, concrete, and useful to structure a long-form podcast.
+- IMPORTANT: create stable IDs in the form "concept-1", "concept-2", ...
 
-Return a json object with this structure:
+Return ONLY a JSON object:
 {
   "concepts": [
     {
       "id": "concept-1",
       "name": "Concept name",
-      "description": "Clear description of the concept",
-      "difficulty": "medium",
-      "relatedConcepts": []
+      "description": "Clear description (1-2 sentences)",
+      "difficulty": "easy|medium|hard",
+      "relatedConcepts": ["concept-2", "concept-7"]
     }
   ]
-}
+}`
 
-IMPORTANT: Identify between 10 and 30 concepts based on content complexity.`
-
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: combinedContent },
-    ],
-    response_format: { type: 'json_object' },
-    max_tokens: 4096,
+  const raw = await runGemini3Flash({
+    prompt: combinedContent,
+    systemInstruction,
+    thinkingLevel: 'high',
     temperature: 0.3,
+    topP: 0.95,
+    maxOutputTokens: 12000,
   })
 
-  const content = response.choices[0]?.message?.content
-  if (!content) {
-    throw new Error('Failed to extract concepts')
-  }
-
   try {
-    const parsed = JSON.parse(content)
+    const parsed = parseJsonObject<{ concepts?: ConceptNode[] }>(raw)
     return parsed.concepts || []
   } catch (error) {
     console.error('Failed to parse concepts:', error)
@@ -158,13 +138,11 @@ async function buildConceptRelationships(
   concepts: ConceptNode[],
   language: string
 ): Promise<Array<{ from: string; to: string; type: 'requires' | 'related' | 'opposite' | 'example' }>> {
-  const openai = getOpenAI()
-
   const conceptsJson = JSON.stringify(
     concepts.map((c) => ({ id: c.id, name: c.name, description: c.description }))
   )
 
-  const systemPrompt =
+  const systemInstruction =
     language === 'fr'
       ? `Tu es un expert en création de graphes de connaissances.
 
@@ -203,24 +181,16 @@ Return a json object:
 
 Create as many relevant relationships as possible to build a rich graph.`
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: conceptsJson },
-    ],
-    response_format: { type: 'json_object' },
-    max_tokens: 4096,
-    temperature: 0.3,
-  })
-
-  const content = response.choices[0]?.message?.content
-  if (!content) {
-    return []
-  }
-
   try {
-    const parsed = JSON.parse(content)
+    const raw = await runGemini3Flash({
+      prompt: conceptsJson,
+      systemInstruction,
+      thinkingLevel: 'high',
+      temperature: 0.3,
+      topP: 0.95,
+      maxOutputTokens: 8000,
+    })
+    const parsed = parseJsonObject<{ relationships?: any[] }>(raw)
     return parsed.relationships || []
   } catch (error) {
     console.error('Failed to parse relationships:', error)
@@ -229,33 +199,49 @@ Create as many relevant relationships as possible to build a rich graph.`
 }
 
 /**
- * Generate embeddings for semantic search
+ * Generate lightweight local embeddings for semantic search (no external API).
  */
 async function generateConceptEmbeddings(
   concepts: ConceptNode[]
 ): Promise<Record<string, number[]>> {
-  const openai = getOpenAI()
-
   const embeddings: Record<string, number[]> = {}
-
-  // Generate embeddings in batches
-  const batchSize = 20
-  for (let i = 0; i < concepts.length; i += batchSize) {
-    const batch = concepts.slice(i, i + batchSize)
-
-    const texts = batch.map((c) => `${c.name}: ${c.description}`)
-
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: texts,
-    })
-
-    batch.forEach((concept, idx) => {
-      embeddings[concept.id] = response.data[idx].embedding
-    })
+  for (const concept of concepts) {
+    embeddings[concept.id] = textToEmbedding(`${concept.name}: ${concept.description}`)
   }
-
   return embeddings
+}
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((t) => t.length > 2)
+}
+
+function hashToken(token: string): number {
+  // djb2
+  let hash = 5381
+  for (let i = 0; i < token.length; i++) {
+    hash = (hash * 33) ^ token.charCodeAt(i)
+  }
+  return hash >>> 0
+}
+
+function textToEmbedding(text: string, dims: number = 256): number[] {
+  const vec = new Array(dims).fill(0)
+  const tokens = tokenize(text)
+  for (const tok of tokens) {
+    const idx = hashToken(tok) % dims
+    vec[idx] += 1
+  }
+  // L2 normalize
+  let norm = 0
+  for (let i = 0; i < vec.length; i++) norm += vec[i] * vec[i]
+  norm = Math.sqrt(norm) || 1
+  for (let i = 0; i < vec.length; i++) vec[i] = vec[i] / norm
+  return vec
 }
 
 /**
@@ -266,15 +252,7 @@ export async function findSimilarConcepts(
   knowledgeGraph: KnowledgeGraph,
   topK: number = 5
 ): Promise<ConceptNode[]> {
-  const openai = getOpenAI()
-
-  // Generate embedding for query
-  const response = await openai.embeddings.create({
-    model: 'text-embedding-3-small',
-    input: query,
-  })
-
-  const queryEmbedding = response.data[0].embedding
+  const queryEmbedding = textToEmbedding(query)
 
   // Calculate cosine similarity with all concepts
   const similarities = knowledgeGraph.concepts.map((concept) => {

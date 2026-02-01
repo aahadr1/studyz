@@ -6,7 +6,7 @@ import {
   PredictedQuestion,
   VoiceProfile,
 } from '@/types/intelligent-podcast'
-import { getOpenAI } from './openai-client'
+import { parseJsonObject, runGemini3Flash } from './gemini-client'
 
 interface ScriptGenerationResult {
   chapters: PodcastChapter[]
@@ -29,8 +29,6 @@ export async function generateIntelligentScript(
     voiceProfiles: VoiceProfile[]
   }
 ): Promise<ScriptGenerationResult> {
-  const openai = getOpenAI()
-
   console.log('[Script] Starting intelligent script generation...')
 
   // Step 1: Generate high-level structure (chapters)
@@ -66,20 +64,18 @@ async function generateChapters(
   knowledgeGraph: KnowledgeGraph,
   config: { targetDuration: number; language: string; style: string }
 ): Promise<{ chapters: PodcastChapter[]; title: string; description: string }> {
-  const openai = getOpenAI()
-
   const targetSeconds = Math.max(1, Math.round((config.targetDuration || 1) * 60))
   const targetChapters = Math.min(10, Math.max(3, Math.round(config.targetDuration / 8))) // ~1 chapter per 8 min
 
   const documentsSummary = documents
-    .map((doc) => `Document: ${doc.title}\nContent: ${doc.content.slice(0, 3000)}`)
+    .map((doc) => `Document: ${doc.title}\nContent:\n${doc.content.slice(0, 20000)}`)
     .join('\n\n---\n\n')
 
   const conceptsSummary = knowledgeGraph.concepts
     .map((c) => `- ${c.name} (${c.difficulty}): ${c.description}`)
     .join('\n')
 
-  const systemPrompt =
+  const systemInstruction =
     config.language === 'fr'
       ? `Tu es un expert en création de contenu pédagogique sous forme de podcast.
 
@@ -152,27 +148,16 @@ Return a json object:
 
 IMPORTANT: Concept IDs must match those provided in the list.`
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: `Documents:\n${documentsSummary}\n\nConcepts disponibles:\n${conceptsSummary}`,
-      },
-    ],
-    response_format: { type: 'json_object' },
-    max_tokens: 4096,
-    temperature: 0.7,
-  })
-
-  const content = response.choices[0]?.message?.content
-  if (!content) {
-    throw new Error('Failed to generate chapters')
-  }
-
   try {
-    const parsed = JSON.parse(content)
+    const raw = await runGemini3Flash({
+      prompt: `Documents:\n${documentsSummary}\n\nAvailable concepts:\n${conceptsSummary}`,
+      systemInstruction,
+      thinkingLevel: 'high',
+      temperature: 0.6,
+      topP: 0.95,
+      maxOutputTokens: 8000,
+    })
+    const parsed = parseJsonObject<any>(raw)
 
     const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : []
     const sanitized = rawChapters
@@ -228,8 +213,6 @@ async function generateSegments(
   knowledgeGraph: KnowledgeGraph,
   config: { language: string; style: string; voiceProfiles: VoiceProfile[] }
 ): Promise<{ segments: PodcastSegment[] }> {
-  const openai = getOpenAI()
-
   const allSegments: PodcastSegment[] = []
 
   // Generate segments for each chapter
@@ -343,28 +326,16 @@ SEGMENT STRUCTURE (json format):
 
 Create about ${targetSegmentsForChapter} segments (min 6, max 18) to cover all chapter concepts.`
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: `Chapitre: ${chapter.title}\n\nRésumé: ${chapter.summary}\n\nConcepts à couvrir:\n${conceptsDescription}`,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      max_tokens: 8192,
-      temperature: 0.8,
-    })
-
-    const content = response.choices[0]?.message?.content
-    if (!content) {
-      console.error(`Failed to generate segments for chapter ${chapter.id}`)
-      continue
-    }
-
     try {
-      const parsed = JSON.parse(content)
+      const raw = await runGemini3Flash({
+        prompt: `Chapter: ${chapter.title}\n\nSummary: ${chapter.summary}\n\nConcepts to cover:\n${conceptsDescription}`,
+        systemInstruction: systemPrompt,
+        thinkingLevel: 'high',
+        temperature: 0.75,
+        topP: 0.95,
+        maxOutputTokens: 20000,
+      })
+      const parsed = parseJsonObject<any>(raw)
       const chapterSegments = parsed.segments || []
 
       // Timestamps/durations will be recalculated later from audio duration,
@@ -403,19 +374,17 @@ async function generatePredictedQuestions(
   segments: PodcastSegment[],
   language: string
 ): Promise<PredictedQuestion[]> {
-  const openai = getOpenAI()
-
   console.log('[Script] Generating predicted Q&A...')
 
   const contentSummary = documents
-    .map((doc) => `${doc.title}: ${doc.content.slice(0, 2000)}`)
+    .map((doc) => `${doc.title}: ${doc.content.slice(0, 12000)}`)
     .join('\n\n')
 
   const conceptsSummary = knowledgeGraph.concepts
     .map((c) => `- ${c.name}: ${c.description}`)
     .join('\n')
 
-  const systemPrompt =
+  const systemInstruction =
     language === 'fr'
       ? `Tu es un expert en anticipation des questions des apprenants.
 
@@ -468,27 +437,16 @@ Return a json object:
 
 Vary question types and cover all important concepts.`
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: `Contenu:\n${contentSummary}\n\nConcepts:\n${conceptsSummary}`,
-      },
-    ],
-    response_format: { type: 'json_object' },
-    max_tokens: 8192,
-    temperature: 0.7,
-  })
-
-  const content = response.choices[0]?.message?.content
-  if (!content) {
-    return []
-  }
-
   try {
-    const parsed = JSON.parse(content)
+    const raw = await runGemini3Flash({
+      prompt: `Content:\n${contentSummary}\n\nConcepts:\n${conceptsSummary}`,
+      systemInstruction,
+      thinkingLevel: 'high',
+      temperature: 0.6,
+      topP: 0.95,
+      maxOutputTokens: 12000,
+    })
+    const parsed = parseJsonObject<any>(raw)
     const questions = parsed.questions || []
 
     return questions.map((q: any, idx: number) => ({
