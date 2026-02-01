@@ -185,8 +185,27 @@ async function generateOpenAIAudio(
   voiceProfile: VoiceProfile,
   language: string
 ): Promise<{ audioUrl: string; duration: number }> {
+  console.log(`[Audio] Starting OpenAI TTS for ${text.length} characters`)
+  
+  if (!text || text.trim().length === 0) {
+    throw new Error('Cannot generate audio for empty text')
+  }
+  
+  if (text.length > 4096) {
+    console.warn(`[Audio] Text too long (${text.length} chars), truncating to 4096`)
+    text = text.slice(0, 4096)
+  }
+
   const openai = getOpenAI()
-  const cleanedText = await makeTtsReadyText(text, openai, language as any)
+  let cleanedText: string
+  
+  try {
+    cleanedText = await makeTtsReadyText(text, openai, language as any)
+    console.log(`[Audio] Text cleaned, length: ${cleanedText.length}`)
+  } catch (cleanError) {
+    console.warn(`[Audio] Text cleaning failed, using original:`, cleanError)
+    cleanedText = text
+  }
 
   // Map role to OpenAI voice
   const voiceMap: Record<string, any> = {
@@ -197,24 +216,32 @@ async function generateOpenAIAudio(
 
   const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'alloy'
 
-  const response = await openai.audio.speech.create({
-    model: 'tts-1-hd', // High quality
-    voice: voice as any,
-    input: cleanedText,
-    speed: 1.0,
-  })
+  try {
+    console.log(`[Audio] Calling OpenAI TTS with voice: ${voice}`)
+    const response = await openai.audio.speech.create({
+      model: 'tts-1', // Use standard model for reliability (was tts-1-hd)
+      voice: voice as any,
+      input: cleanedText,
+      speed: 1.0,
+    })
 
-  const audioBuffer = await response.arrayBuffer()
-  const audioBase64 = Buffer.from(audioBuffer).toString('base64')
-  const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
+    const audioBuffer = await response.arrayBuffer()
+    const audioBase64 = Buffer.from(audioBuffer).toString('base64')
+    const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
 
-  // Estimate duration
-  const wordCount = cleanedText.split(/\s+/).length
-  const estimatedDuration = (wordCount / 150) * 60
+    // Estimate duration
+    const wordCount = cleanedText.split(/\s+/).length
+    const estimatedDuration = (wordCount / 135) * 60 // Updated to match our new WPM
 
-  return {
-    audioUrl,
-    duration: estimatedDuration,
+    console.log(`[Audio] OpenAI TTS completed, duration: ${estimatedDuration.toFixed(1)}s`)
+
+    return {
+      audioUrl,
+      duration: estimatedDuration,
+    }
+  } catch (ttsError: any) {
+    console.error(`[Audio] OpenAI TTS failed:`, ttsError)
+    throw new Error(`OpenAI TTS failed: ${ttsError.message}`)
   }
 }
 

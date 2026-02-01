@@ -548,6 +548,15 @@ OUTPUT:
     const remaining = segments.filter((s: any) => !(typeof s?.audioUrl === 'string' && s.audioUrl.length > 0))
     const completed = segments.length - remaining.length
     const pctAudio = segments.length > 0 ? completed / segments.length : 0
+    
+    console.log(`[Podcast ${podcastId}] Audio status: ${completed}/${segments.length} segments completed`)
+    console.log(`[Podcast ${podcastId}] Remaining segments: ${remaining.length}`)
+    
+    // Debug: Check if segments have proper text
+    const emptySegments = segments.filter(s => !s.text || s.text.trim().length === 0)
+    if (emptySegments.length > 0) {
+      console.warn(`[Podcast ${podcastId}] Found ${emptySegments.length} segments with empty text`)
+    }
 
     // If audio is complete, finalize timings and mark ready.
     if (remaining.length === 0 && segments.length > 0) {
@@ -569,24 +578,56 @@ OUTPUT:
     }
 
     // STEP B: Generate audio in small batches to stay within serverless limits.
-    const BATCH_SIZE = 6
+    // Reduced batch size to avoid rate limiting and memory issues
+    const BATCH_SIZE = 3
     const batch = remaining.slice(0, BATCH_SIZE)
+    
+    console.log(`[Podcast ${podcastId}] Processing batch of ${batch.length} segments`)
+    console.log(`[Podcast ${podcastId}] Batch preview:`, batch.map(s => ({ 
+      id: s.id, 
+      speaker: s.speaker, 
+      textLength: s.text?.length || 0,
+      hasText: Boolean(s.text?.trim())
+    })))
+    
+    // Safety check: If we have too many segments, reduce batch size
+    if (segments.length > 100) {
+      console.warn(`[Podcast ${podcastId}] Large segment count detected: ${segments.length}. Consider reducing batch size.`)
+    }
+    
+    // Filter out segments with no text to prevent TTS failures
+    const validBatch = batch.filter(s => s.text && s.text.trim().length > 0)
+    if (validBatch.length !== batch.length) {
+      console.warn(`[Podcast ${podcastId}] Filtered out ${batch.length - validBatch.length} segments with empty text`)
+    }
 
+    const currentProgress = 65 + Math.round(pctAudio * 27)
     await updateProgress(
-      65 + Math.round(pctAudio * 27),
+      currentProgress,
       `Audio generation: ${completed}/${segments.length} segments completed`
     )
+    
+    console.log(`[Podcast ${podcastId}] Progress: ${currentProgress}%, Audio: ${completed}/${segments.length}`)
 
-    const batchWithAudio = await generateMultiVoiceAudio(
-      batch,
-      voiceProfiles,
-      finalLanguage,
-      (currentIdx, total, step) => {
-        const withinBatch = total > 0 ? currentIdx / total : 0
-        const pct = 65 + Math.round((pctAudio + withinBatch * (BATCH_SIZE / Math.max(1, segments.length))) * 27)
-        void updateProgress(Math.min(92, pct), step)
-      }
-    )
+    let batchWithAudio: PodcastSegment[]
+    try {
+      console.log(`[Podcast ${podcastId}] Starting audio generation for ${validBatch.length} valid segments...`)
+      batchWithAudio = await generateMultiVoiceAudio(
+        validBatch,
+        voiceProfiles,
+        finalLanguage,
+        (currentIdx, total, step) => {
+          console.log(`[Podcast ${podcastId}] Audio progress: ${currentIdx}/${total} - ${step}`)
+          const withinBatch = total > 0 ? currentIdx / total : 0
+          const pct = 65 + Math.round((pctAudio + withinBatch * (BATCH_SIZE / Math.max(1, segments.length))) * 27)
+          void updateProgress(Math.min(92, pct), step)
+        }
+      )
+      console.log(`[Podcast ${podcastId}] Audio generation completed for batch`)
+    } catch (audioError: any) {
+      console.error(`[Podcast ${podcastId}] Audio generation failed:`, audioError)
+      throw new Error(`Audio generation failed: ${audioError.message}`)
+    }
 
     await updateProgress(92, 'Uploading audio batch to storage...')
 
