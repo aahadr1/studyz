@@ -76,7 +76,8 @@ export async function POST(request: NextRequest) {
     } = body as {
       documents?: Array<{
         name: string
-        storage_path: string
+        storage_path?: string
+        page_images?: Array<{ page_number: number; url: string }>
       }>
       targetDuration?: number
       language?: string
@@ -89,14 +90,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'At least one document is required' }, { status: 400 })
     }
 
-    // Fail fast if the client is sending the legacy payload (page_images) instead of storage_path.
-    const missingStoragePath = documents.filter((d: any) => typeof d?.storage_path !== 'string' || d.storage_path.trim().length === 0)
-    if (missingStoragePath.length > 0) {
+    // Require page_images (MCQ-style: client renders PDF -> images)
+    const missingPageImages = documents.filter(
+      (d: any) => !Array.isArray(d?.page_images) || d.page_images.length === 0
+    )
+    if (missingPageImages.length > 0) {
       return NextResponse.json(
         {
           error: 'Invalid documents payload',
           details:
-            'This endpoint expects PDFs already uploaded to Supabase Storage. Please hard refresh the page and re-upload your PDFs (documents[].storage_path is required).',
+            'This endpoint expects page_images for each document. Please re-upload your PDFs so the client can convert them to images.',
         },
         { status: 400 }
       )
@@ -115,7 +118,7 @@ export async function POST(request: NextRequest) {
         description: 'Waiting to start...',
         duration: 0,
         language: language === 'auto' ? 'en' : language,
-        document_ids: documents.map((d) => d.storage_path),
+        document_ids: documents.map((d) => d.storage_path || d.name),
         knowledge_graph: { concepts: [], relationships: [], embeddings: {} },
         chapters: [],
         segments: [],
@@ -146,8 +149,9 @@ export async function POST(request: NextRequest) {
           podcast_id: podcast.id,
           user_id: user.id,
           name: d.name,
-          storage_path: d.storage_path,
-          page_count: 0,
+          storage_path: d.storage_path || '',
+          page_count: Array.isArray(d.page_images) ? d.page_images.length : 0,
+          page_images: d.page_images || [],
         }))
       )
 
@@ -162,12 +166,16 @@ export async function POST(request: NextRequest) {
 
       const looksLikeMissingMigration =
         docsError.code === '42P01' || /relation\s+"intelligent_podcast_documents"\s+does not exist/i.test(docsError.message || '')
+      const looksLikeMissingColumn =
+        docsError.code === '42703' || /column\s+"page_images"\s+does not exist/i.test(docsError.message || '')
 
       return NextResponse.json(
         {
           error: 'Database is missing required tables',
           details: looksLikeMissingMigration
             ? 'Missing table intelligent_podcast_documents. Apply migration 020_intelligent_podcast_documents_and_transcriptions.sql as the postgres/supabase_admin role.'
+            : looksLikeMissingColumn
+              ? 'Missing column intelligent_podcast_documents.page_images. Apply migration 021_intelligent_podcast_document_page_images.sql.'
             : docsError.message,
         },
         { status: 500 }

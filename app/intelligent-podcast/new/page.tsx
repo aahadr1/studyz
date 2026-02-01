@@ -3,14 +3,17 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 
 interface UploadedFile {
   file: File
   id: string
   name: string
   size: number
-  status: 'pending' | 'uploading' | 'ready' | 'error'
-  storagePath?: string
+  status: 'pending' | 'uploading_pdf' | 'converting' | 'uploading_pages' | 'ready' | 'error'
+  pdfStoragePath?: string
+  pageImages?: Array<{ page_number: number; url: string }>
+  pageImageStoragePaths?: string[]
   error?: string
 }
 
@@ -62,15 +65,15 @@ export default function NewPodcastPage() {
 
     setUploadedFiles((prev) => [...prev, ...newFiles])
 
-    // Upload PDFs to Supabase Storage (backend will convert + transcribe)
-    await uploadFilesInBackground(newFiles)
+    // MCQ-style flow: client converts PDF -> page images, uploads them, backend does vision transcription.
+    await prepareFilesInBackground(newFiles)
   }
   
-  const uploadFilesInBackground = async (filesToUpload: UploadedFile[]) => {
+  const prepareFilesInBackground = async (filesToPrepare: UploadedFile[]) => {
     const supabase = createClient()
     if (!userId) throw new Error('Not authenticated')
 
-    for (const fileObj of filesToUpload) {
+    for (const fileObj of filesToPrepare) {
       try {
         // Validate PDF
         const isPdf = fileObj.file.type === 'application/pdf' || fileObj.name.toLowerCase().endsWith('.pdf')
@@ -78,32 +81,72 @@ export default function NewPodcastPage() {
           throw new Error('Please upload a PDF file')
         }
 
-        // Update status to uploading
+        const safeName = fileObj.name.replace(/[^\w.\-() ]+/g, '_')
+
+        // 1) Upload original PDF (optional but useful for future download/debug)
         setUploadedFiles((prev) =>
-          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading' } : f))
+          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading_pdf' } : f))
         )
 
-        const safeName = fileObj.name.replace(/[^\w.\-() ]+/g, '_')
-        const storagePath = `${userId}/intelligent-podcasts/uploads/${Date.now()}-${fileObj.id}-${safeName}`
+        const pdfStoragePath = `${userId}/intelligent-podcasts/uploads/${Date.now()}-${fileObj.id}-${safeName}`
 
-        console.log(`[Podcast Upload] Uploading ${fileObj.name} → ${storagePath}`)
+        console.log(`[Podcast Upload] Uploading ${fileObj.name} → ${pdfStoragePath}`)
         const { error: uploadError } = await supabase.storage
           .from('podcast-documents')
-          .upload(storagePath, fileObj.file, { contentType: 'application/pdf', upsert: true })
+          .upload(pdfStoragePath, fileObj.file, { contentType: 'application/pdf', upsert: true })
 
         if (uploadError) {
           console.error('[Podcast Upload] Upload failed:', uploadError)
           throw new Error(uploadError.message || 'Upload failed')
         }
 
-        // Update status to ready
+        setUploadedFiles((prev) =>
+          prev.map((f) => (f.id === fileObj.id ? { ...f, pdfStoragePath } : f))
+        )
+
+        // 2) Convert PDF -> images on the client
+        setUploadedFiles((prev) =>
+          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'converting' } : f))
+        )
+
+        const pageImages = await convertPdfToImagesClient(fileObj.file, 1.2, 0.6)
+        console.log(`[Podcast] ✅ ${fileObj.name}: ${pageImages.length} pages rendered`)
+
+        // 3) Upload page images to storage (avoid large request bodies / 413)
+        setUploadedFiles((prev) =>
+          prev.map((f) => (f.id === fileObj.id ? { ...f, status: 'uploading_pages' } : f))
+        )
+
+        const uploaded: Array<{ page_number: number; url: string }> = []
+        const uploadedPaths: string[] = []
+
+        for (const p of pageImages) {
+          const blob = await (await fetch(p.dataUrl)).blob()
+          const pagePath = `${userId}/intelligent-podcasts/pages/${Date.now()}-${fileObj.id}/${String(p.pageNumber).padStart(3, '0')}.jpg`
+          const { error: pageUploadError } = await supabase.storage
+            .from('podcast-documents')
+            .upload(pagePath, blob, { contentType: 'image/jpeg', upsert: true })
+
+          if (pageUploadError) {
+            throw new Error(pageUploadError.message || 'Failed to upload page image')
+          }
+
+          const { data } = supabase.storage.from('podcast-documents').getPublicUrl(pagePath)
+          uploaded.push({ page_number: p.pageNumber, url: data.publicUrl })
+          uploadedPaths.push(pagePath)
+        }
+
+        uploaded.sort((a, b) => a.page_number - b.page_number)
+
+        // Update status to ready (PDF + page_images are prepared)
         setUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === fileObj.id
               ? { 
                   ...f, 
                   status: 'ready',
-                  storagePath
+                  pageImages: uploaded,
+                  pageImageStoragePaths: uploadedPaths,
                 }
               : f
           )
@@ -140,9 +183,13 @@ export default function NewPodcastPage() {
     setUploadedFiles((prev) => {
       const file = prev.find((f) => f.id === id)
       // Best-effort cleanup of uploaded file
-      if (file?.storagePath) {
+      if (file?.pdfStoragePath) {
         const supabase = createClient()
-        void supabase.storage.from('podcast-documents').remove([file.storagePath])
+        void supabase.storage.from('podcast-documents').remove([file.pdfStoragePath])
+      }
+      if (file?.pageImageStoragePaths && file.pageImageStoragePaths.length > 0) {
+        const supabase = createClient()
+        void supabase.storage.from('podcast-documents').remove(file.pageImageStoragePaths)
       }
       return prev.filter((f) => f.id !== id)
     })
@@ -158,40 +205,41 @@ export default function NewPodcastPage() {
     setError(null)
 
     try {
-      // Wait for any pending/uploading files to complete
-      console.log('[Podcast] Checking upload status...')
+      // Wait for any pending/uploading/converting files to complete
+      console.log('[Podcast] Checking preparation status...')
       
-      // Wait up to 60 seconds for uploads to complete
-      const maxWaitTime = 60000 // 60 seconds
+      // Wait up to 120 seconds for prepare pipeline to complete
+      const maxWaitTime = 120000 // 120 seconds
       const startTime = Date.now()
       
       while (Date.now() - startTime < maxWaitTime) {
-        const pendingOrUploading = uploadedFiles.filter(
-          (f) => f.status === 'pending' || f.status === 'uploading'
+        const pendingOrBusy = uploadedFiles.filter(
+          (f) => f.status === 'pending' || f.status === 'uploading_pdf' || f.status === 'converting' || f.status === 'uploading_pages'
         )
         
-        if (pendingOrUploading.length === 0) break
+        if (pendingOrBusy.length === 0) break
         
-        console.log(`[Podcast] Waiting for ${pendingOrUploading.length} files to finish uploading...`)
+        console.log(`[Podcast] Waiting for ${pendingOrBusy.length} files to finish...`)
         await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second
       }
 
       // Get all successfully uploaded files
-      const readyFiles = uploadedFiles.filter((f) => f.status === 'ready' && f.storagePath)
+      const readyFiles = uploadedFiles.filter((f) => f.status === 'ready' && f.pageImages && f.pageImages.length > 0)
 
       console.log('[Podcast] Total ready files:', readyFiles.length)
 
       if (readyFiles.length === 0) {
-        throw new Error('No documents were successfully uploaded. Please check the errors and try again.')
+        throw new Error('No documents were successfully prepared. Please check the errors and try again.')
       }
 
-      // Prepare document data (PDFs are already in storage; backend will render pages + transcribe)
+      // Prepare document data (page_images are already uploaded; backend will only do vision transcription)
       const documents = readyFiles.map((f) => ({ 
         name: f.name,
-        storage_path: f.storagePath!
+        storage_path: f.pdfStoragePath || '',
+        page_images: f.pageImages!,
       }))
 
-      console.log('[Podcast] Sending to API:', documents.map(d => ({ name: d.name, storage_path: d.storage_path })))
+      console.log('[Podcast] Sending to API:', documents.map(d => ({ name: d.name, pages: d.page_images.length })))
 
       // Call generation API
       const response = await fetch('/api/intelligent-podcast/generate', {
@@ -351,9 +399,9 @@ export default function NewPodcastPage() {
           {/* Documents Upload */}
           <div className="bg-gray-900 rounded-lg p-6">
             <h3 className="text-xl font-semibold mb-4">Source Documents</h3>
-            <p className="text-gray-400 text-sm mb-4">
-              Upload PDF documents. The backend will automatically convert pages to images and fully transcribe them with GPT vision before generating your script and audio.
-            </p>
+              <p className="text-gray-400 text-sm mb-4">
+                Upload PDF documents. Your browser converts them into page images, then the backend transcribes those images with GPT vision, generates a long script with Gemini, and creates audio.
+              </p>
             
             {/* Drag & Drop Zone */}
             <div
@@ -398,7 +446,7 @@ export default function NewPodcastPage() {
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className="text-2xl">
                         {file.status === 'ready' ? '✅' :
-                         file.status === 'uploading' ? '⏳' :
+                         (file.status === 'uploading_pdf' || file.status === 'converting' || file.status === 'uploading_pages') ? '⏳' :
                          file.status === 'error' ? '❌' : '📄'}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -407,8 +455,10 @@ export default function NewPodcastPage() {
                         </p>
                         <p className="text-xs text-gray-500">
                           {formatFileSize(file.size)}
-                          {file.status === 'uploading' && ' - Uploading PDF...'}
-                          {file.status === 'ready' && file.storagePath && ` - Uploaded`}
+                          {file.status === 'uploading_pdf' && ' - Uploading PDF...'}
+                          {file.status === 'converting' && ' - Converting to images...'}
+                          {file.status === 'uploading_pages' && ' - Uploading page images...'}
+                          {file.status === 'ready' && file.pageImages && ` - ${file.pageImages.length} pages ready`}
                           {file.status === 'error' && ` - Error: ${file.error}`}
                         </p>
                       </div>

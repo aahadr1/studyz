@@ -5,7 +5,6 @@ import { extractAndAnalyze } from '@/lib/intelligent-podcast/extractor'
 import { generateIntelligentScript } from '@/lib/intelligent-podcast/script-generator'
 import { generateMultiVoiceAudio } from '@/lib/intelligent-podcast/audio-generator'
 import { getOpenAI } from '@/lib/intelligent-podcast/openai-client'
-import { getPdfPageCount, renderPdfPagesToImages } from '@/lib/pdf-to-images'
 import { DocumentContent, VoiceProfile, PodcastChapter, PodcastSegment } from '@/types/intelligent-podcast'
 
 export const runtime = 'nodejs'
@@ -165,10 +164,9 @@ OUTPUT:
   const transcribePageImageWithOpenAI = async (params: {
     documentName: string
     pageNumber: number
-    imagePngBuffer: Buffer
+    imageUrl: string
   }): Promise<string> => {
     const openai = getOpenAI()
-    const dataUrl = `data:image/png;base64,${params.imagePngBuffer.toString('base64')}`
 
     const resp = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -181,7 +179,7 @@ OUTPUT:
               type: 'text',
               text: `Document: ${params.documentName}\nPage: ${params.pageNumber}\n\nTranscribe this page image completely.`,
             },
-            { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
+            { type: 'image_url', image_url: { url: params.imageUrl, detail: 'high' } },
           ],
         },
       ],
@@ -241,7 +239,7 @@ OUTPUT:
       // Load (or create) source documents for this podcast
       let { data: docRows, error: docRowsError } = await supabase
         .from('intelligent_podcast_documents')
-        .select('id,name,storage_path,page_count')
+        .select('id,name,storage_path,page_count,page_images')
         .eq('podcast_id', podcastId)
         .eq('user_id', user.id)
         .order('created_at', { ascending: true })
@@ -250,9 +248,14 @@ OUTPUT:
         const looksLikeMissingMigration =
           (docRowsError as any).code === '42P01' ||
           /relation\s+"intelligent_podcast_documents"\s+does not exist/i.test(String(docRowsError.message || ''))
+        const looksLikeMissingColumn =
+          (docRowsError as any).code === '42703' ||
+          /column\s+"page_images"\s+does not exist/i.test(String(docRowsError.message || ''))
         throw new Error(
           looksLikeMissingMigration
             ? 'Missing table intelligent_podcast_documents. Apply migration 020_intelligent_podcast_documents_and_transcriptions.sql as postgres/supabase_admin.'
+            : looksLikeMissingColumn
+              ? 'Missing column intelligent_podcast_documents.page_images. Apply migration 021_intelligent_podcast_document_page_images.sql.'
             : `Failed to load podcast documents: ${docRowsError.message}`
         )
       }
@@ -266,8 +269,9 @@ OUTPUT:
               podcast_id: podcastId,
               user_id: user.id,
               name: d.name,
-              storage_path: d.storage_path,
-              page_count: 0,
+              storage_path: d.storage_path || '',
+              page_count: Array.isArray((d as any).page_images) ? (d as any).page_images.length : 0,
+              page_images: (d as any).page_images || [],
             }))
           )
 
@@ -275,16 +279,21 @@ OUTPUT:
           const looksLikeMissingMigration =
             (insertDocsError as any).code === '42P01' ||
             /relation\s+"intelligent_podcast_documents"\s+does not exist/i.test(String(insertDocsError.message || ''))
+          const looksLikeMissingColumn =
+            (insertDocsError as any).code === '42703' ||
+            /column\s+"page_images"\s+does not exist/i.test(String(insertDocsError.message || ''))
           throw new Error(
             looksLikeMissingMigration
               ? 'Missing table intelligent_podcast_documents. Apply migration 020_intelligent_podcast_documents_and_transcriptions.sql as postgres/supabase_admin.'
+              : looksLikeMissingColumn
+                ? 'Missing column intelligent_podcast_documents.page_images. Apply migration 021_intelligent_podcast_document_page_images.sql.'
               : `Failed to create podcast documents: ${insertDocsError.message}`
           )
         }
 
         const refetch = await supabase
           .from('intelligent_podcast_documents')
-          .select('id,name,storage_path,page_count')
+          .select('id,name,storage_path,page_count,page_images')
           .eq('podcast_id', podcastId)
           .eq('user_id', user.id)
           .order('created_at', { ascending: true })
@@ -297,26 +306,24 @@ OUTPUT:
         )
       }
 
-      // Ensure page_count is known for each document (store for resumability)
+      const missingImages = docRows.filter((d: any) => !Array.isArray(d.page_images) || d.page_images.length === 0)
+      if (missingImages.length > 0) {
+        throw new Error(
+          'Some documents have no page images. Please re-upload so the client can convert PDFs to images. If you are self-hosting, ensure migration 021_intelligent_podcast_document_page_images.sql was applied.'
+        )
+      }
+
+      // Ensure page_count is known for each document based on stored page_images
       for (const doc of docRows) {
-        if (Number(doc.page_count) > 0) continue
-
-        await updateProgress(10, `Transcription: reading ${doc.name}...`)
-        const { data: pdfData, error: downloadError } = await supabase.storage
-          .from('podcast-documents')
-          .download(doc.storage_path)
-        if (downloadError || !pdfData) throw new Error(`Failed to download PDF (${doc.name}): ${downloadError?.message}`)
-
-        const pdfBuffer = Buffer.from(await pdfData.arrayBuffer())
-        const pages = await getPdfPageCount(pdfBuffer)
-
+        const images = Array.isArray((doc as any).page_images) ? (doc as any).page_images : []
+        const computedCount = images.length
+        if (Number(doc.page_count) === computedCount) continue
         await supabase
           .from('intelligent_podcast_documents')
-          .update({ page_count: pages })
+          .update({ page_count: computedCount })
           .eq('id', doc.id)
           .eq('user_id', user.id)
-
-        doc.page_count = pages
+        doc.page_count = computedCount
       }
 
       const totalPages = docRows.reduce((sum, d) => sum + Math.max(0, Number(d.page_count) || 0), 0)
@@ -381,30 +388,33 @@ OUTPUT:
       if (selectedCount > 0) {
         for (const item of selected) {
           const doc = item.doc
+          const images = Array.isArray(doc.page_images) ? doc.page_images : []
+          const byPage: Record<number, string> = {}
+          for (const img of images) {
+            if (typeof img?.page_number === 'number' && typeof img?.url === 'string') {
+              byPage[img.page_number] = img.url
+            }
+          }
           await updateProgress(
             10 + Math.round((donePagesCount / totalPages) * 25),
             `Transcribing: ${doc.name} (pages ${item.pages.join(', ')})`
           )
 
-          const { data: pdfData, error: downloadError } = await supabase.storage
-            .from('podcast-documents')
-            .download(doc.storage_path)
-          if (downloadError || !pdfData) throw new Error(`Failed to download PDF (${doc.name}): ${downloadError?.message}`)
-
-          const pdfBuffer = Buffer.from(await pdfData.arrayBuffer())
-          const pageImages = await renderPdfPagesToImages(pdfBuffer, item.pages, 1.35)
-
-          for (const img of pageImages) {
+          for (const pageNum of item.pages) {
+            const imageUrl = byPage[pageNum]
+            if (!imageUrl) {
+              throw new Error(`Missing page image for ${doc.name} page ${pageNum}`)
+            }
             let text = ''
             try {
               text = await transcribePageImageWithOpenAI({
                 documentName: doc.name,
-                pageNumber: img.pageNumber,
-                imagePngBuffer: img.buffer,
+                pageNumber: pageNum,
+                imageUrl,
               })
             } catch (e: any) {
-              console.error(`[Podcast ${podcastId}] Transcription failed for ${doc.name} page ${img.pageNumber}:`, e)
-              text = `[[TRANSCRIPTION FAILED]]\nDocument: ${doc.name}\nPage: ${img.pageNumber}\nError: ${String(
+              console.error(`[Podcast ${podcastId}] Transcription failed for ${doc.name} page ${pageNum}:`, e)
+              text = `[[TRANSCRIPTION FAILED]]\nDocument: ${doc.name}\nPage: ${pageNum}\nError: ${String(
                 e?.message || e
               )}`
             }
@@ -416,7 +426,7 @@ OUTPUT:
                   podcast_id: podcastId,
                   document_id: doc.id,
                   user_id: user.id,
-                  page_number: img.pageNumber,
+                  page_number: pageNum,
                   transcription: text,
                 },
                 { onConflict: 'document_id,page_number' }
