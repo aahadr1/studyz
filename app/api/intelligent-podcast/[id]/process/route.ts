@@ -601,11 +601,12 @@ OUTPUT:
     const remaining = segments.filter((s: any) => !(typeof s?.audioUrl === 'string' && s.audioUrl.length > 0))
     const completed = segments.length - remaining.length
     const pctAudio = segments.length > 0 ? completed / segments.length : 0
-    
-    console.log(`[Podcast ${podcastId}] Audio status: ${completed}/${segments.length} segments completed`)
-    console.log(`[Podcast ${podcastId}] Remaining segments: ${remaining.length}`)
-    
-    // Debug: Check if segments have proper text
+
+    console.log(`[Podcast ${podcastId}] Loaded: ${segments.length} segments, ${completed} with audioUrl, ${remaining.length} remaining`)
+    if (remaining.length === 0 && segments.length > 0) {
+      console.log(`[Podcast ${podcastId}] All audio complete — entering finalize (mark ready)`)
+    }
+
     const emptySegments = segments.filter(s => !s.text || s.text.trim().length === 0)
     if (emptySegments.length > 0) {
       console.warn(`[Podcast ${podcastId}] Found ${emptySegments.length} segments with empty text`)
@@ -616,7 +617,8 @@ OUTPUT:
       const timings = recomputeTimings(segments)
       const updatedChapters = recomputeChapterTimes(chapters, timings.segments)
       await updateProgress(95, 'Finalizing...', false, user.id)
-      await supabase
+
+      const { data: finalizeRow, error: finalizeError } = await supabase
         .from('intelligent_podcasts')
         .update({
           duration: timings.totalDuration,
@@ -626,7 +628,15 @@ OUTPUT:
           generation_progress: 100,
         })
         .eq('id', podcastId)
-      console.log(`[Podcast ${podcastId}] ✅ Complete!`)
+        .eq('user_id', user.id)
+        .select('id')
+        .single()
+
+      if (finalizeError || !finalizeRow) {
+        console.error(`[Podcast ${podcastId}] Finalize update failed:`, finalizeError?.message ?? 'no row updated')
+        throw new Error(`Failed to mark podcast ready: ${finalizeError?.message ?? 'update did not apply'}`)
+      }
+      console.log(`[Podcast ${podcastId}] ✅ Complete! Status set to ready.`)
       return NextResponse.json({ success: true })
     }
 
@@ -761,6 +771,27 @@ OUTPUT:
           ? `Failed to save audio progress: ${segmentsUpdateError.message}. Retry may duplicate work.`
           : 'Failed to persist segments (no row updated). Check RLS or row existence.'
       )
+    }
+
+    // Verify persistence: re-fetch and ensure at least newCompleted segments have audioUrl
+    const { data: verifyRow, error: verifyError } = await supabase
+      .from('intelligent_podcasts')
+      .select('segments')
+      .eq('id', podcastId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (!verifyError && Array.isArray(verifyRow?.segments)) {
+      const withAudio = (verifyRow.segments as any[]).filter(
+        (s: any) => typeof s?.audioUrl === 'string' && s.audioUrl.length > 0
+      ).length
+      console.log(`[Podcast ${podcastId}] Verify: DB now has ${withAudio}/${verifyRow.segments.length} segments with audioUrl (expected >= ${newCompleted})`)
+      if (withAudio < newCompleted) {
+        console.error(`[Podcast ${podcastId}] Persistence mismatch: wrote ${newCompleted} but DB has ${withAudio}`)
+        throw new Error(`Audio progress was not fully saved (DB has ${withAudio}, expected ${newCompleted}). Please try again.`)
+      }
+    } else {
+      console.warn(`[Podcast ${podcastId}] Could not verify persistence:`, verifyError?.message)
     }
 
     return NextResponse.json({
