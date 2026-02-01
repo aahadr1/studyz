@@ -1,107 +1,117 @@
+/**
+ * Google Gemini LLM client via REST (generativelanguage.googleapis.com).
+ * Uses a single API key: GEMINI_API_KEY, GOOGLE_API_KEY, or GOOGLE_CLOUD_API_KEY.
+ * No Replicate, no OpenAI — works with Google free credits.
+ */
+
 type GeminiThinkingLevel = 'low' | 'high'
 
-interface GeminiRunParams {
+export interface GeminiRunParams {
   prompt: string
   systemInstruction?: string
-  images?: string[]
+  images?: string[] // data URLs (data:image/...;base64,...) or raw base64
   thinkingLevel?: GeminiThinkingLevel
   temperature?: number
   topP?: number
   maxOutputTokens?: number
 }
 
-let cachedGeminiVersion: string | null = null
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+const DEFAULT_MODEL = 'gemini-2.0-flash'
 
-async function getLatestGeminiVersion(): Promise<string> {
-  if (cachedGeminiVersion) return cachedGeminiVersion
-
-  const apiToken = process.env.REPLICATE_API_TOKEN
-  if (!apiToken) {
-    throw new Error('REPLICATE_API_TOKEN is not set (required for Gemini)')
+function getApiKey(): string {
+  const key =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_CLOUD_API_KEY
+  if (!key) {
+    throw new Error(
+      'Set one of GEMINI_API_KEY, GOOGLE_API_KEY, or GOOGLE_CLOUD_API_KEY (Google AI / Cloud) for the podcast creator.'
+    )
   }
-
-  const resp = await fetch('https://api.replicate.com/v1/models/google/gemini-3-flash', {
-    headers: { Authorization: `Bearer ${apiToken}` },
-  })
-
-  if (!resp.ok) {
-    const text = await resp.text()
-    throw new Error(`Failed to fetch Gemini model version (${resp.status}): ${text}`)
-  }
-
-  const data = await resp.json()
-  const version = data?.latest_version?.id
-  if (!version) {
-    throw new Error('Replicate did not return latest_version.id for google/gemini-3-flash')
-  }
-
-  cachedGeminiVersion = String(version)
-  return cachedGeminiVersion
+  return key
 }
 
-function normalizeOutput(output: any): string {
-  if (Array.isArray(output)) {
-    return output.map((x) => String(x)).join('')
+/**
+ * Parse data URL or base64 string into { mimeType, data } for Gemini inline_data.
+ */
+function parseImageForApi(image: string): { mimeType: string; data: string } {
+  const s = image.trim()
+  const dataUrlMatch = s.match(/^data:([^;]+);base64,(.+)$/)
+  if (dataUrlMatch) {
+    return { mimeType: dataUrlMatch[1].trim() || 'image/png', data: dataUrlMatch[2] }
   }
-  if (typeof output === 'string') return output
-  return String(output ?? '')
+  // Assume raw base64
+  return { mimeType: 'image/png', data: s }
 }
 
+/**
+ * Build contents[].parts: text first, then each image as inline_data.
+ */
+function buildParts(prompt: string, images?: string[]): Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> {
+  const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> = []
+  if (prompt) parts.push({ text: prompt })
+  if (images?.length) {
+    for (const img of images) {
+      const { mimeType, data } = parseImageForApi(img)
+      parts.push({ inline_data: { mime_type: mimeType, data } })
+    }
+  }
+  return parts
+}
+
+/**
+ * Call Google Gemini generateContent (text + optional images). One request, no polling.
+ */
 export async function runGemini3Flash(params: GeminiRunParams): Promise<string> {
-  const apiToken = process.env.REPLICATE_API_TOKEN
-  if (!apiToken) {
-    throw new Error('REPLICATE_API_TOKEN is not set (required for Gemini)')
+  const apiKey = getApiKey()
+  const url = `${GEMINI_BASE}/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
+
+  const parts = buildParts(params.prompt, params.images)
+  const body: Record<string, unknown> = {
+    contents: [{ role: 'user', parts }],
+    generationConfig: {
+      temperature: params.temperature ?? 0.6,
+      topP: params.topP ?? 0.95,
+      maxOutputTokens: params.maxOutputTokens ?? 8192,
+      // Optional: disable thinking to reduce latency/cost if needed
+      ...(params.thinkingLevel === 'low' && { thinkingConfig: { thinkingBudget: 0 } }),
+    },
+  }
+  if (params.systemInstruction) {
+    body.system_instruction = { parts: [{ text: params.systemInstruction }] }
   }
 
-  const version = await getLatestGeminiVersion()
-
-  const createResponse = await fetch('https://api.replicate.com/v1/predictions', {
+  const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      version,
-      input: {
-        prompt: params.prompt,
-        images: params.images || [],
-        system_instruction: params.systemInstruction,
-        thinking_level: params.thinkingLevel || 'high',
-        temperature: params.temperature ?? 0.6,
-        top_p: params.topP ?? 0.95,
-        max_output_tokens: params.maxOutputTokens ?? 65535,
-      },
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   })
 
-  if (!createResponse.ok) {
-    const errorText = await createResponse.text()
-    throw new Error(`Replicate error ${createResponse.status}: ${errorText}`)
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Gemini API error (${res.status}): ${errText}`)
   }
 
-  let prediction = await createResponse.json()
-  let attempts = 0
-  while (prediction.status !== 'succeeded' && prediction.status !== 'failed' && attempts < 180) {
-    await new Promise((r) => setTimeout(r, 1000))
-    const pollResponse = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-      headers: { Authorization: `Bearer ${apiToken}` },
-    })
-    prediction = await pollResponse.json()
-    attempts++
+  const data = (await res.json()) as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> }
+      finishReason?: string
+    }>
+    promptFeedback?: { blockReason?: string }
   }
 
-  if (prediction.status === 'failed') {
-    throw new Error(prediction.error || 'Gemini generation failed')
-  }
-  if (!prediction.output) {
-    throw new Error('Gemini timed out or returned no output')
+  const candidate = data.candidates?.[0]
+  if (!candidate?.content?.parts?.length) {
+    const blockReason = data.promptFeedback?.blockReason
+    throw new Error(blockReason ? `Gemini blocked: ${blockReason}` : 'Gemini returned no text')
   }
 
-  return normalizeOutput(prediction.output)
+  const textParts = candidate.content.parts.map((p) => p.text ?? '').filter(Boolean)
+  return textParts.join('')
 }
 
-export function parseJsonObject<T = any>(raw: string): T {
+export function parseJsonObject<T = unknown>(raw: string): T {
   const text = raw.trim()
   const first = text.indexOf('{')
   const last = text.lastIndexOf('}')
@@ -111,4 +121,3 @@ export function parseJsonObject<T = any>(raw: string): T {
   const jsonText = text.slice(first, last + 1)
   return JSON.parse(jsonText) as T
 }
-

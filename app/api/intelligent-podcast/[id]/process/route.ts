@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { extractAndAnalyze } from '@/lib/intelligent-podcast/extractor'
 import { generateIntelligentScript } from '@/lib/intelligent-podcast/script-generator'
 import { generateMultiVoiceAudio } from '@/lib/intelligent-podcast/audio-generator'
-import { getOpenAI } from '@/lib/intelligent-podcast/openai-client'
+import { runGemini3Flash } from '@/lib/intelligent-podcast/gemini-client'
 import { DocumentContent, VoiceProfile, PodcastChapter, PodcastSegment } from '@/types/intelligent-podcast'
 
 export const runtime = 'nodejs'
@@ -206,33 +206,20 @@ TASK:
 OUTPUT:
 - Plain text only.`
 
-  const transcribePageImageWithOpenAI = async (params: {
+  const transcribePageImageWithGemini = async (params: {
     documentName: string
     pageNumber: number
     imageUrl: string
   }): Promise<string> => {
-    const openai = getOpenAI()
-
-    const resp = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: TRANSCRIPTION_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Document: ${params.documentName}\nPage: ${params.pageNumber}\n\nTranscribe this page image completely.`,
-            },
-            { type: 'image_url', image_url: { url: params.imageUrl, detail: 'high' } },
-          ],
-        },
-      ],
+    const out = await runGemini3Flash({
+      prompt: `Document: ${params.documentName}\nPage: ${params.pageNumber}\n\nTranscribe this page image completely.`,
+      systemInstruction: TRANSCRIPTION_SYSTEM_PROMPT,
+      images: [params.imageUrl],
+      thinkingLevel: 'low',
       temperature: 0.1,
-      max_tokens: 6000,
+      maxOutputTokens: 6000,
     })
-
-    return String(resp.choices[0]?.message?.content || '').trim()
+    return out.trim()
   }
 
   try {
@@ -452,7 +439,7 @@ OUTPUT:
             }
             let text = ''
             try {
-              text = await transcribePageImageWithOpenAI({
+              text = await transcribePageImageWithGemini({
                 documentName: doc.name,
                 pageNumber: pageNum,
                 imageUrl,
@@ -653,18 +640,6 @@ OUTPUT:
     )
     
     console.log(`[Podcast ${podcastId}] Progress: ${currentProgress}%, Audio: ${completed}/${segments.length}`)
-
-    // Test OpenAI connection before starting batch
-    try {
-      console.log(`[Podcast ${podcastId}] Testing OpenAI connection...`)
-      const openai = getOpenAI()
-      // Simple test to verify API key works
-      await openai.models.list()
-      console.log(`[Podcast ${podcastId}] ✅ OpenAI connection verified`)
-    } catch (connectionError: any) {
-      console.error(`[Podcast ${podcastId}] ❌ OpenAI connection failed:`, connectionError)
-      throw new Error(`OpenAI connection failed: ${connectionError.message}`)
-    }
 
     let batchWithAudio: PodcastSegment[]
     try {
