@@ -1,7 +1,8 @@
 /**
- * Google Gemini LLM client via REST (generativelanguage.googleapis.com).
- * Uses a single API key: GEMINI_API_KEY, GOOGLE_API_KEY, or GOOGLE_CLOUD_API_KEY.
- * No Replicate, no OpenAI — works with Google free credits.
+ * Google Gemini LLM client via REST.
+ * - AI Studio (generativelanguage.googleapis.com): use GEMINI_API_KEY or GOOGLE_API_KEY.
+ * - Vertex AI (aiplatform.googleapis.com): use GOOGLE_CLOUD_API_KEY (Cloud Console key).
+ * Cloud keys get 401 on generativelanguage; Vertex accepts them.
  */
 
 type GeminiThinkingLevel = 'low' | 'high'
@@ -16,20 +17,31 @@ export interface GeminiRunParams {
   maxOutputTokens?: number
 }
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+const AI_STUDIO_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+const VERTEX_BASE = 'https://aiplatform.googleapis.com/v1'
 const DEFAULT_MODEL = 'gemini-2.0-flash'
 
-function getApiKey(): string {
-  const key =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GOOGLE_CLOUD_API_KEY
-  if (!key) {
-    throw new Error(
-      'Set one of GEMINI_API_KEY, GOOGLE_API_KEY, or GOOGLE_CLOUD_API_KEY (Google AI / Cloud) for the podcast creator.'
-    )
+function getGeminiConfig(): { url: string; apiKey: string; isVertex: boolean } {
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+  const cloudKey = process.env.GOOGLE_CLOUD_API_KEY
+
+  if (geminiKey) {
+    return {
+      url: `${AI_STUDIO_BASE}/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+      apiKey: geminiKey,
+      isVertex: false,
+    }
   }
-  return key
+  if (cloudKey) {
+    return {
+      url: `${VERTEX_BASE}/publishers/google/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(cloudKey)}`,
+      apiKey: cloudKey,
+      isVertex: true,
+    }
+  }
+  throw new Error(
+    'Set GEMINI_API_KEY or GOOGLE_API_KEY (AI Studio) or GOOGLE_CLOUD_API_KEY (Vertex AI) for the podcast creator.'
+  )
 }
 
 /**
@@ -46,15 +58,21 @@ function parseImageForApi(image: string): { mimeType: string; data: string } {
 }
 
 /**
- * Build contents[].parts: text first, then each image as inline_data.
+ * Build contents[].parts: text first, then each image.
+ * AI Studio uses snake_case (inline_data, mime_type); Vertex uses camelCase (inlineData, mimeType).
  */
-function buildParts(prompt: string, images?: string[]): Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> {
-  const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> = []
+function buildParts(
+  prompt: string,
+  images: string[] | undefined,
+  isVertex: boolean
+): Array<{ text?: string; inline_data?: { mime_type: string; data: string }; inlineData?: { mimeType: string; data: string } }> {
+  const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string }; inlineData?: { mimeType: string; data: string } }> = []
   if (prompt) parts.push({ text: prompt })
   if (images?.length) {
     for (const img of images) {
       const { mimeType, data } = parseImageForApi(img)
-      parts.push({ inline_data: { mime_type: mimeType, data } })
+      if (isVertex) parts.push({ inlineData: { mimeType, data } })
+      else parts.push({ inline_data: { mime_type: mimeType, data } })
     }
   }
   return parts
@@ -64,22 +82,22 @@ function buildParts(prompt: string, images?: string[]): Array<{ text?: string; i
  * Call Google Gemini generateContent (text + optional images). One request, no polling.
  */
 export async function runGemini3Flash(params: GeminiRunParams): Promise<string> {
-  const apiKey = getApiKey()
-  const url = `${GEMINI_BASE}/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
+  const { url, isVertex } = getGeminiConfig()
 
-  const parts = buildParts(params.prompt, params.images)
+  const parts = buildParts(params.prompt, params.images, isVertex)
   const body: Record<string, unknown> = {
     contents: [{ role: 'user', parts }],
     generationConfig: {
       temperature: params.temperature ?? 0.6,
       topP: params.topP ?? 0.95,
       maxOutputTokens: params.maxOutputTokens ?? 8192,
-      // Optional: disable thinking to reduce latency/cost if needed
       ...(params.thinkingLevel === 'low' && { thinkingConfig: { thinkingBudget: 0 } }),
     },
   }
   if (params.systemInstruction) {
-    body.system_instruction = { parts: [{ text: params.systemInstruction }] }
+    body[isVertex ? 'systemInstruction' : 'system_instruction'] = {
+      parts: [{ text: params.systemInstruction }],
+    }
   }
 
   const res = await fetch(url, {
