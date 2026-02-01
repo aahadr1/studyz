@@ -609,23 +609,18 @@ OUTPUT:
       return NextResponse.json({ success: true })
     }
 
-    // STEP B: Generate audio in small batches to stay within serverless limits.
-    // Reduced batch size to avoid rate limiting and memory issues
-    const BATCH_SIZE = 3
+    // STEP B: Generate audio in batches. maxDuration=800s per invocation — process as many segments as fit.
+    // ~5–15s per TTS segment → aim for up to ~80 segments per run to use the full window.
+    const BATCH_SIZE = 80
     const batch = remaining.slice(0, BATCH_SIZE)
-    
-    console.log(`[Podcast ${podcastId}] Processing batch of ${batch.length} segments`)
-    console.log(`[Podcast ${podcastId}] Batch preview:`, batch.map(s => ({ 
-      id: s.id, 
-      speaker: s.speaker, 
-      textLength: s.text?.length || 0,
-      hasText: Boolean(s.text?.trim())
+
+    console.log(`[Podcast ${podcastId}] Processing batch of ${batch.length} segments (max ${BATCH_SIZE} per run)`)
+    console.log(`[Podcast ${podcastId}] Batch preview:`, batch.slice(0, 5).map(s => ({
+      id: s.id,
+      speaker: s.speaker,
+      textLength: s.text?.length ?? 0,
+      hasText: Boolean(s.text?.trim()),
     })))
-    
-    // Safety check: If we have too many segments, reduce batch size
-    if (segments.length > 100) {
-      console.warn(`[Podcast ${podcastId}] Large segment count detected: ${segments.length}. Consider reducing batch size.`)
-    }
     
     // Filter out segments with no text to prevent TTS failures
     const validBatch = batch.filter(s => s.text && s.text.trim().length > 0)

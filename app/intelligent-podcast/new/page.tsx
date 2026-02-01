@@ -313,56 +313,69 @@ export default function NewPodcastPage() {
   }
 
   const pollPodcastStatus = async (podcastId: string, documents: any, config: any) => {
-    const maxPolls = 240 // 20 minutes max (5 second intervals)
+    const maxPolls = 600 // ~20 min max (process + 2s between nudges)
     let pollCount = 0
 
-    while (pollCount < maxPolls) {
+    const fetchStatus = async () => {
+      const res = await fetch(`/api/intelligent-podcast/${podcastId}/status`, { credentials: 'include' })
+      if (!res.ok) return null
+      return res.json()
+    }
+
+    // Poll status every 800ms so the progress bar and "X/Y segments" update in near real time
+    const POLL_MS = 800
+    const statusInterval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/intelligent-podcast/${podcastId}/status`, {
-          credentials: 'include',
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to get podcast status')
-        }
-
-        const data = await response.json()
-        setGenerationProgress(data.progress || 0)
+        const data = await fetchStatus()
+        if (!data) return
+        setGenerationProgress(data.progress ?? 0)
         setProgressMessage(data.description || 'Processing...')
+      } catch {
+        // ignore interval errors
+      }
+    }, POLL_MS)
 
-        console.log(`[Podcast] Status: ${data.status}, Progress: ${data.progress}%`)
-
-        if (data.status === 'ready') {
-          console.log('[Podcast] ✅ Generation completed!')
+    try {
+      while (pollCount < maxPolls) {
+        const data = await fetchStatus()
+        if (data?.status === 'ready') {
+          clearInterval(statusInterval)
           setGenerationProgress(100)
           setProgressMessage('Complete! Redirecting...')
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          await new Promise((r) => setTimeout(r, 1000))
           router.push(`/intelligent-podcast/${podcastId}`)
           return
         }
-
-        if (data.status === 'error') {
+        if (data?.status === 'error') {
           throw new Error(data.description || 'Podcast generation failed')
         }
 
-        // Keep nudging processing forward (resumable batches).
-        // This avoids relying on a single long-running serverless invocation.
         await startProcessing(podcastId, documents, config)
 
-        // Wait 5 seconds before next poll
-        await new Promise(resolve => setTimeout(resolve, 5000))
-        pollCount++
-      } catch (err: any) {
-        console.error('[Podcast] Polling error:', err)
-        setError(err.message || 'Failed to track podcast generation')
-        setIsGenerating(false)
-        return
-      }
-    }
+        const after = await fetchStatus()
+        if (after?.status === 'ready') {
+          clearInterval(statusInterval)
+          setGenerationProgress(100)
+          setProgressMessage('Complete! Redirecting...')
+          await new Promise((r) => setTimeout(r, 1000))
+          router.push(`/intelligent-podcast/${podcastId}`)
+          return
+        }
+        if (after?.status === 'error') {
+          throw new Error(after.description || 'Podcast generation failed')
+        }
 
-    // Timeout
-    setError('Generation is taking longer than expected. Check back later.')
-    setIsGenerating(false)
+        await new Promise((r) => setTimeout(r, 2000))
+        pollCount++
+      }
+      setError('Generation is taking longer than expected. Check back later.')
+    } catch (err: any) {
+      console.error('[Podcast] Polling error:', err)
+      setError(err.message || 'Failed to track podcast generation')
+    } finally {
+      clearInterval(statusInterval)
+      setIsGenerating(false)
+    }
   }
 
   const formatFileSize = (bytes: number) => {
@@ -602,10 +615,10 @@ export default function NewPodcastPage() {
                   <span className="text-blue-400 font-medium">{generationProgress}%</span>
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-full transition-all duration-500 ease-out"
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-full transition-[width] duration-300 ease-out"
                     style={{ width: `${generationProgress}%` }}
-                  ></div>
+                  />
                 </div>
               </div>
               <p className="text-center text-gray-400 text-sm mt-4">
