@@ -23,6 +23,11 @@ CREATE INDEX IF NOT EXISTS idx_intelligent_podcast_documents_user_id
 
 ALTER TABLE intelligent_podcast_documents ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view their own intelligent podcast documents" ON intelligent_podcast_documents;
+DROP POLICY IF EXISTS "Users can create their own intelligent podcast documents" ON intelligent_podcast_documents;
+DROP POLICY IF EXISTS "Users can update their own intelligent podcast documents" ON intelligent_podcast_documents;
+DROP POLICY IF EXISTS "Users can delete their own intelligent podcast documents" ON intelligent_podcast_documents;
+
 CREATE POLICY "Users can view their own intelligent podcast documents"
   ON intelligent_podcast_documents FOR SELECT
   USING (auth.uid() = user_id);
@@ -67,6 +72,11 @@ CREATE INDEX IF NOT EXISTS idx_intelligent_podcast_page_transcriptions_document_
   ON intelligent_podcast_page_transcriptions(document_id);
 
 ALTER TABLE intelligent_podcast_page_transcriptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own intelligent podcast page transcriptions" ON intelligent_podcast_page_transcriptions;
+DROP POLICY IF EXISTS "Users can create their own intelligent podcast page transcriptions" ON intelligent_podcast_page_transcriptions;
+DROP POLICY IF EXISTS "Users can update their own intelligent podcast page transcriptions" ON intelligent_podcast_page_transcriptions;
+DROP POLICY IF EXISTS "Users can delete their own intelligent podcast page transcriptions" ON intelligent_podcast_page_transcriptions;
 
 CREATE POLICY "Users can view their own intelligent podcast page transcriptions"
   ON intelligent_podcast_page_transcriptions FOR SELECT

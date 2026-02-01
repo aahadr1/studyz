@@ -218,13 +218,33 @@ export async function convertPdfToImages(
  * Get the number of pages in a PDF using fast text-based parsing
  */
 export async function getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
+  // Prefer PDF.js (same engine we use for rendering) to avoid pdf-parse runtime issues.
   try {
-    const parser = await initPdfParse()
-    const data = await parser(pdfBuffer)
-    return data.numpages
+    const pdfDoc = await loadPdfDocumentForRendering(pdfBuffer)
+    const numPages = Number(pdfDoc?.numPages) || 0
+    if (numPages > 0) return numPages
   } catch (error: any) {
-    console.error('[PDF] Failed to get page count:', error)
-    throw new Error(`Failed to get PDF page count: ${error.message}`)
+    console.warn('[PDF] PDF.js page count failed (will fallback):', error?.message || error)
   }
+
+  // Fallback: best-effort manual parsing (similar to older confirm-upload logic)
+  try {
+    const text = pdfBuffer.toString('binary')
+    const countMatch = text.match(/\/Count\s+(\d+)/g)
+    if (countMatch) {
+      const counts = countMatch.map((m) => parseInt(m.replace('/Count', '').trim(), 10)).filter((n) => Number.isFinite(n))
+      const maxCount = counts.length > 0 ? Math.max(...counts) : 0
+      if (maxCount > 0) return maxCount
+    }
+
+    const pageMatches = text.match(/\/Type\s*\/Page[^s]/g)
+    if (pageMatches && pageMatches.length > 0) {
+      return pageMatches.length
+    }
+  } catch (error: any) {
+    console.error('[PDF] Manual page count fallback failed:', error?.message || error)
+  }
+
+  throw new Error('Failed to get PDF page count')
 }
 
