@@ -11,7 +11,8 @@ type GeminiThinkingLevel = 'low' | 'high'
 export interface GeminiRunParams {
   prompt: string
   systemInstruction?: string
-  images?: string[] // data URLs (data:image/...;base64,...) or raw base64
+  /** data URLs (data:image/...;base64,...), raw base64, or http(s) image URLs (fetched and converted to base64) */
+  images?: string[]
   thinkingLevel?: GeminiThinkingLevel
   temperature?: number
   topP?: number
@@ -29,6 +30,21 @@ function getApiKey(): string {
     )
   }
   return key
+}
+
+/**
+ * If the string is an http(s) image URL, fetch it and return a data URL (base64).
+ * Otherwise return the string as-is (already data URL or raw base64).
+ */
+async function resolveImageToBase64(image: string): Promise<string> {
+  const s = image.trim()
+  if (!s.startsWith('http://') && !s.startsWith('https://')) return s
+  const res = await fetch(s, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`)
+  const buf = await res.arrayBuffer()
+  const base64 = Buffer.from(buf).toString('base64')
+  const contentType = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg'
+  return `data:${contentType};base64,${base64}`
 }
 
 /**
@@ -64,12 +80,17 @@ function buildParts(
 
 /**
  * Call Google Gemini generateContent (text + optional images). One request, no polling.
+ * Image URLs (http/https) are fetched and converted to base64 before sending.
  */
 export async function runGemini3Flash(params: GeminiRunParams): Promise<string> {
   const apiKey = getApiKey()
   const url = `${GEMINI_BASE}/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
 
-  const parts = buildParts(params.prompt, params.images)
+  const resolvedImages =
+    params.images?.length ?
+      await Promise.all(params.images.map((img) => resolveImageToBase64(img)))
+      : undefined
+  const parts = buildParts(params.prompt, resolvedImages)
   const body: Record<string, unknown> = {
     contents: [{ role: 'user', parts }],
     generationConfig: {

@@ -230,16 +230,25 @@ IMPORTANT: Concept IDs must match those provided in the list.`
   } catch (parseErr) {
     console.error('Failed to parse chapters JSON:', parseErr)
     console.error('Raw response (first 1500 chars):', raw.slice(0, 1500))
-    throw new Error('Failed to parse chapters')
+    parsed = { title: '', description: '', chapters: undefined }
   }
 
   const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : []
   if (rawChapters.length === 0) {
-    console.error('Model returned no chapters. Raw (first 1000 chars):', raw.slice(0, 1000))
-    throw new Error('Failed to parse chapters')
+    console.warn('Model returned no chapters; using single fallback chapter. Raw (first 1000 chars):', raw.slice(0, 1000))
+    parsed.chapters = [
+      {
+        id: 'chapter-1',
+        title: config.language === 'fr' ? 'Contenu principal' : 'Main content',
+        summary: '',
+        estimatedDuration: targetSeconds,
+        concepts: [],
+        difficulty: 'medium',
+      },
+    ]
   }
 
-  const sanitized = rawChapters
+  const sanitized = (Array.isArray(parsed.chapters) ? parsed.chapters : [])
     .map((ch: any, idx: number) => ({
       id: String(ch?.id ?? `chapter-${idx + 1}`),
       title: String(ch?.title ?? `Chapter ${idx + 1}`),

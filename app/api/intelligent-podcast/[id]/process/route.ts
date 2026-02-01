@@ -437,7 +437,9 @@ OUTPUT:
           }
           await updateProgress(
             10 + Math.round((donePagesCount / totalPages) * 25),
-            `Transcribing: ${doc.name} (pages ${item.pages.join(', ')})`
+            `Transcribing: ${doc.name} (pages ${item.pages.join(', ')})`,
+            false,
+            user.id
           )
 
           for (const pageNum of item.pages) {
@@ -529,7 +531,7 @@ OUTPUT:
       }
 
       // STEP 2: Knowledge graph + language detection (35-50%)
-      await updateProgress(35, 'Analyzing content & building knowledge graph...')
+      await updateProgress(35, 'Analyzing content & building knowledge graph...', false, user.id)
       const { knowledgeGraph, detectedLanguage } = await extractAndAnalyze(extractedDocuments)
       console.log(
         `[Podcast ${podcastId}] Knowledge graph: ${knowledgeGraph.concepts?.length || 0} concepts, ${knowledgeGraph.relationships?.length || 0} relationships`
@@ -642,6 +644,11 @@ OUTPUT:
     const validBatch = batch.filter(s => s.text && s.text.trim().length > 0)
     if (validBatch.length !== batch.length) {
       console.warn(`[Podcast ${podcastId}] Filtered out ${batch.length - validBatch.length} segments with empty text`)
+    }
+    if (validBatch.length === 0 && remaining.length > 0) {
+      throw new Error(
+        'No segments in this batch have text; cannot generate audio. The script may be invalid. Try generating again or use different content.'
+      )
     }
 
     const currentProgress = 65 + Math.round(pctAudio * 27)
