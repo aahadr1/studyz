@@ -33,22 +33,28 @@ export async function POST(
   const { id: podcastId } = await params
   const supabase = await createAuthClient()
   
-  const updateProgress = async (progress: number, message: string, forceUpdate: boolean = false) => {
+  const updateProgress = async (
+    progress: number,
+    message: string,
+    forceUpdate: boolean = false,
+    userId?: string
+  ) => {
     // Always log progress
     console.log(`[Podcast ${podcastId}] ${progress}% - ${message}`)
-    
+    if (!userId) return
     // Update database immediately for real-time feedback
     try {
       const { error: updateError } = await supabase
         .from('intelligent_podcasts')
-        .update({ 
-          generation_progress: progress, 
-          description: message, 
+        .update({
+          generation_progress: progress,
+          description: message,
           status: 'generating',
-          updated_at: new Date().toISOString() // Force timestamp update
+          updated_at: new Date().toISOString(),
         })
         .eq('id', podcastId)
-      
+        .eq('user_id', userId)
+
       if (updateError) {
         console.error(`[Podcast ${podcastId}] Progress update failed:`, updateError)
       }
@@ -266,7 +272,7 @@ OUTPUT:
     // STEP A: If script not present, do OCR + analysis + script, and save immediately (so audio can resume later).
     if (!hasScript) {
       // STEP 1: PDF -> Images -> GPT Vision transcription (10-35%) (resumable per page)
-      await updateProgress(10, 'Transcription: preparing documents...')
+      await updateProgress(10, 'Transcription: preparing documents...', false, user.id)
 
       // Load (or create) source documents for this podcast
       let { data: docRows, error: docRowsError } = await supabase
@@ -392,7 +398,9 @@ OUTPUT:
       const pctWithinTranscription = totalPages > 0 ? donePagesCount / totalPages : 0
       await updateProgress(
         10 + Math.round(pctWithinTranscription * 25),
-        `Transcription: ${donePagesCount}/${totalPages} pages`
+        `Transcription: ${donePagesCount}/${totalPages} pages`,
+        false,
+        user.id
       )
 
       // Pick a small batch of pages to transcribe in this invocation (keeps it resumable)
@@ -471,7 +479,7 @@ OUTPUT:
       }
 
       // All pages transcribed -> assemble full document contents
-      await updateProgress(35, 'Transcription complete. Assembling full text...')
+      await updateProgress(35, 'Transcription complete. Assembling full text...', false, user.id)
       const extractedDocuments: DocumentContent[] = []
 
       for (const doc of docRows) {
@@ -531,7 +539,7 @@ OUTPUT:
         config.language && config.language !== 'auto' ? config.language : (detectedLanguage || 'en')
 
       // STEP 3: Script generation (50-65%)
-      await updateProgress(50, `Generating detailed ${config.targetDuration}-minute script...`)
+      await updateProgress(50, `Generating detailed ${config.targetDuration}-minute script...`, false, user.id)
       const script = await generateIntelligentScript(extractedDocuments, knowledgeGraph, {
         targetDuration: config.targetDuration,
         language: computedLanguage,
@@ -544,11 +552,13 @@ OUTPUT:
       const estMinutes = totalWords / 150
       await updateProgress(
         65,
-        `Script ready: ${script.segments.length} segments (~${estMinutes.toFixed(1)} min est, ${totalWords} words)`
+        `Script ready: ${script.segments.length} segments (~${estMinutes.toFixed(1)} min est, ${totalWords} words)`,
+        false,
+        user.id
       )
 
       // Persist script now (critical for resumability)
-      await supabase
+      const { error: scriptSaveError } = await supabase
         .from('intelligent_podcasts')
         .update({
           title: script.title || existing.title,
@@ -562,6 +572,12 @@ OUTPUT:
           generation_progress: 65,
         })
         .eq('id', podcastId)
+        .eq('user_id', user.id)
+
+      if (scriptSaveError) {
+        console.error(`[Podcast ${podcastId}] Script save failed:`, scriptSaveError)
+        throw new Error(`Failed to save script: ${scriptSaveError.message}`)
+      }
     }
 
     // Reload latest script/segments from DB (source of truth)
@@ -594,7 +610,7 @@ OUTPUT:
     if (remaining.length === 0 && segments.length > 0) {
       const timings = recomputeTimings(segments)
       const updatedChapters = recomputeChapterTimes(chapters, timings.segments)
-      await updateProgress(95, 'Finalizing...')
+      await updateProgress(95, 'Finalizing...', false, user.id)
       await supabase
         .from('intelligent_podcasts')
         .update({
@@ -631,7 +647,9 @@ OUTPUT:
     const currentProgress = 65 + Math.round(pctAudio * 27)
     await updateProgress(
       currentProgress,
-      `Audio generation: ${completed}/${segments.length} segments completed`
+      `Audio generation: ${completed}/${segments.length} segments completed`,
+      false,
+      user.id
     )
     
     console.log(`[Podcast ${podcastId}] Progress: ${currentProgress}%, Audio: ${completed}/${segments.length}`)
@@ -658,7 +676,7 @@ OUTPUT:
       throw new Error(`Audio generation failed: ${audioError.message}`)
     }
 
-    await updateProgress(92, 'Uploading audio batch to storage...')
+    await updateProgress(92, 'Uploading audio batch to storage...', false, user.id)
 
     const byId: Record<string, PodcastSegment> = {}
     for (const s of segments) byId[s.id] = s
@@ -701,7 +719,7 @@ OUTPUT:
     const progressChange = newCompleted - completed
     console.log(`[Podcast ${podcastId}] Progress update: +${progressChange} completed (${newCompleted}/${timings.segments.length})`)
 
-    await supabase
+    const { data: updatedRow, error: segmentsUpdateError } = await supabase
       .from('intelligent_podcasts')
       .update({
         duration: timings.totalDuration,
@@ -712,6 +730,18 @@ OUTPUT:
         description: `Audio generation: ${newCompleted}/${timings.segments.length} segments completed`,
       })
       .eq('id', podcastId)
+      .eq('user_id', user.id)
+      .select('id')
+      .single()
+
+    if (segmentsUpdateError || !updatedRow) {
+      console.error(`[Podcast ${podcastId}] Segments update failed (audio batch not persisted):`, segmentsUpdateError)
+      throw new Error(
+        segmentsUpdateError
+          ? `Failed to save audio progress: ${segmentsUpdateError.message}. Retry may duplicate work.`
+          : 'Failed to persist segments (no row updated). Check RLS or row existence.'
+      )
+    }
 
     return NextResponse.json({
       success: true,
@@ -722,10 +752,14 @@ OUTPUT:
 
   } catch (error: any) {
     console.error(`[Podcast ${podcastId}] Error:`, error)
-    await supabase
-      .from('intelligent_podcasts')
-      .update({ status: 'error', description: `Erreur: ${error.message}` })
-      .eq('id', podcastId)
+    const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
+    if (user) {
+      await supabase
+        .from('intelligent_podcasts')
+        .update({ status: 'error', description: `Erreur: ${error.message}` })
+        .eq('id', podcastId)
+        .eq('user_id', user.id)
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
