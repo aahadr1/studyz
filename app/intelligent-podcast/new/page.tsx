@@ -27,6 +27,8 @@ export default function NewPodcastPage() {
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const [generationProgress, setGenerationProgress] = useState(0)
+  const [progressMessage, setProgressMessage] = useState('')
 
   // Check authentication on mount
   useEffect(() => {
@@ -192,16 +194,66 @@ export default function NewPodcastPage() {
         throw new Error(responseData.error || responseData.details || 'Failed to generate podcast')
       }
 
-      console.log('[Podcast] ✅ Success:', responseData)
+      console.log('[Podcast] ✅ Generation started:', responseData)
       
-      // Redirect to podcast player
-      router.push(`/intelligent-podcast/${responseData.id}`)
+      // Poll for completion
+      const podcastId = responseData.id
+      await pollPodcastStatus(podcastId)
+      
     } catch (err: any) {
       console.error('[Podcast] Generation error:', err)
       setError(err.message || 'Failed to generate podcast')
-    } finally {
       setIsGenerating(false)
     }
+  }
+
+  const pollPodcastStatus = async (podcastId: string) => {
+    const maxPolls = 120 // 10 minutes max (5 second intervals)
+    let pollCount = 0
+
+    while (pollCount < maxPolls) {
+      try {
+        const response = await fetch(`/api/intelligent-podcast/${podcastId}/status`, {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to get podcast status')
+        }
+
+        const data = await response.json()
+        setGenerationProgress(data.progress || 0)
+        setProgressMessage(data.description || 'Processing...')
+
+        console.log(`[Podcast] Status: ${data.status}, Progress: ${data.progress}%`)
+
+        if (data.status === 'ready') {
+          console.log('[Podcast] ✅ Generation completed!')
+          setGenerationProgress(100)
+          setProgressMessage('Complete! Redirecting...')
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          router.push(`/intelligent-podcast/${podcastId}`)
+          return
+        }
+
+        if (data.status === 'error') {
+          throw new Error(data.description || 'Podcast generation failed')
+        }
+
+        // Wait 5 seconds before next poll
+        await new Promise(resolve => setTimeout(resolve, 5000))
+        pollCount++
+      } catch (err: any) {
+        console.error('[Podcast] Polling error:', err)
+        setError(err.message || 'Failed to track podcast generation')
+        setIsGenerating(false)
+        return
+      }
+    }
+
+    // Timeout
+    setError('Generation is taking longer than expected. Check back later.')
+    setIsGenerating(false)
   }
 
   const formatFileSize = (bytes: number) => {
@@ -417,14 +469,23 @@ export default function NewPodcastPage() {
           {/* Progress */}
           {isGenerating && (
             <div className="bg-gray-900 rounded-lg p-6">
-              <div className="flex items-center justify-center mb-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+              <div className="mb-4">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-300">{progressMessage || 'Starting...'}</span>
+                  <span className="text-blue-400 font-medium">{generationProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-full transition-all duration-500 ease-out"
+                    style={{ width: `${generationProgress}%` }}
+                  ></div>
+                </div>
               </div>
-              <p className="text-center text-gray-400">
-                This may take 2-5 minutes depending on content length...
+              <p className="text-center text-gray-400 text-sm mt-4">
+                This will take 5-10 minutes. The page will automatically redirect when complete.
               </p>
-              <div className="mt-4 text-center text-sm text-gray-500">
-                Analyzing documents → Building knowledge graph → Generating script → Creating audio
+              <div className="mt-3 text-center text-xs text-gray-500">
+                Transcribing → Knowledge Graph → Script → Audio Generation → Finalizing
               </div>
             </div>
           )}
