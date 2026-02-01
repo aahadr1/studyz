@@ -12,13 +12,14 @@ export async function generateMultiVoiceAudio(
   language: string,
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
-  // Check if we're using Gemini TTS and should use conversation mode
   const isGeminiProvider = voiceProfiles.some(v => v.provider === 'gemini')
-  
+  console.log(`[Audio] generateMultiVoiceAudio: segments=${segments.length}, provider=${voiceProfiles[0]?.provider ?? 'unknown'}, hasOnProgress=${Boolean(onProgress)}`)
+
   if (isGeminiProvider && segments.length > 1) {
     console.log(`[Audio] Using Gemini conversation mode for ${segments.length} segments`)
     return generateGeminiConversation(segments, voiceProfiles, language, onProgress)
   }
+  console.log(`[Audio] Using individual segment generation for ${segments.length} segments`)
   return generateIndividualSegments(segments, voiceProfiles, language, onProgress)
 }
 
@@ -34,6 +35,7 @@ async function generateGeminiConversation(
   console.log(`[Audio] Starting Gemini conversation generation for ${segments.length} segments`)
 
   if (onProgress) {
+    console.log(`[Audio] Gemini conversation: calling onProgress(0, ${segments.length}, "Preparing...")`)
     await onProgress(0, segments.length, 'Preparing conversation generation...')
   }
 
@@ -105,9 +107,9 @@ Each speaker has their role:
     return processedSegments
 
   } catch (error: any) {
-    console.error(`[Audio] ❌ Gemini conversation generation failed:`, error)
-    
-    // Fallback to individual segment generation
+    console.error(`[Audio] ❌ Gemini conversation generation failed:`, error?.message ?? error)
+    console.error(`[Audio] Gemini error details:`, { message: error?.message, code: error?.code, stack: error?.stack })
+
     console.log(`[Audio] Falling back to individual segment generation...`)
     return generateIndividualSegments(segments, voiceProfiles, language, onProgress)
   }
@@ -189,21 +191,22 @@ async function generateIndividualSegments(
 
       console.log(`[Audio] ✅ Segment ${segmentNumber} completed: ${actualDuration.toFixed(1)}s, audio length: ${audioUrl.length} chars`)
 
-      // Update progress after completion
       if (onProgress) {
         const step = `Segment ${segmentNumber}/${segments.length} audio generated`
+        console.log(`[Audio] onProgress after segment ${segmentNumber}: (${segmentNumber}, ${segments.length}, "${step}")`)
         await onProgress(segmentNumber, segments.length, step)
       }
 
     } catch (error: any) {
-      console.error(`[Audio] ❌ Failed to generate audio for segment ${segmentNumber}:`, error)
+      console.error(`[Audio] ❌ Failed to generate audio for segment ${segmentNumber}/${segments.length}:`, error?.message ?? error)
       console.error(`[Audio] Segment details:`, {
         id: segment.id,
         speaker: segment.speaker,
-        textLength: segment.text?.length || 0,
+        textLength: segment.text?.length ?? 0,
         textPreview: segment.text?.slice(0, 100) + '...'
       })
-      
+      console.error(`[Audio] Error details:`, { message: error?.message, code: error?.code, name: error?.name })
+
       // Add segment without audio but don't fail the entire process
       processedSegments.push({
         ...segment,

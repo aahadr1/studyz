@@ -39,10 +39,11 @@ export async function POST(
     forceUpdate: boolean = false,
     userId?: string
   ) => {
-    // Always log progress
-    console.log(`[Podcast ${podcastId}] ${progress}% - ${message}`)
-    if (!userId) return
-    // Update database immediately for real-time feedback
+    console.log(`[Podcast ${podcastId}] Progress: ${progress}% - ${message}`)
+    if (!userId) {
+      console.warn(`[Podcast ${podcastId}] Progress NOT written to DB (missing userId) - frontend will not update`)
+      return
+    }
     try {
       const { error: updateError } = await supabase
         .from('intelligent_podcasts')
@@ -56,10 +57,12 @@ export async function POST(
         .eq('user_id', userId)
 
       if (updateError) {
-        console.error(`[Podcast ${podcastId}] Progress update failed:`, updateError)
+        console.error(`[Podcast ${podcastId}] Progress DB update failed:`, updateError.message, updateError.code)
+      } else {
+        console.log(`[Podcast ${podcastId}] Progress DB updated: ${progress}% - "${message.slice(0, 60)}..."`)
       }
-    } catch (e) {
-      console.error(`[Podcast ${podcastId}] Progress update error:`, e)
+    } catch (e: any) {
+      console.error(`[Podcast ${podcastId}] Progress update error:`, e?.message ?? e)
     }
   }
 
@@ -663,18 +666,19 @@ OUTPUT:
 
     let batchWithAudio: PodcastSegment[]
     try {
-      console.log(`[Podcast ${podcastId}] Starting audio generation for ${validBatch.length} valid segments...`)
+      console.log(`[Podcast ${podcastId}] Starting audio generation: validBatch=${validBatch.length}, voiceProvider=${voiceProvider}, language=${finalLanguage}`)
+      console.log(`[Podcast ${podcastId}] First 3 segment IDs in batch:`, validBatch.slice(0, 3).map(s => s.id))
       batchWithAudio = await generateMultiVoiceAudio(
         validBatch,
         voiceProfiles,
         finalLanguage,
         async (currentIdx, total, step) => {
-          console.log(`[Podcast ${podcastId}] Audio progress: ${currentIdx}/${total} - ${step}`)
+          console.log(`[Podcast ${podcastId}] Audio progress callback: ${currentIdx}/${total} - ${step}`)
           const withinBatch = total > 0 ? currentIdx / total : 0
           const pct = 65 + Math.round((pctAudio + withinBatch * (validBatch.length / Math.max(1, segments.length))) * 27)
           const progressPct = Math.min(92, pct)
-          const detailedMessage = `Audio: ${completed + currentIdx}/${segments.length} segments (${step})`
-          await updateProgress(progressPct, detailedMessage, true) // Force immediate update
+          const detailedMessage = `Audio generation: ${completed + currentIdx}/${segments.length} segments completed`
+          await updateProgress(progressPct, detailedMessage, true, user.id)
         }
       )
       console.log(`[Podcast ${podcastId}] Audio generation completed for batch`)
@@ -688,11 +692,15 @@ OUTPUT:
     const byId: Record<string, PodcastSegment> = {}
     for (const s of segments) byId[s.id] = s
 
-    // Upload only the newly generated audio segments
+    let uploadedCount = 0
     for (let i = 0; i < batchWithAudio.length; i++) {
       const seg = batchWithAudio[i]
-      if (!seg.audioUrl) continue
+      if (!seg.audioUrl) {
+        console.log(`[Podcast ${podcastId}] Segment ${i + 1}/${batchWithAudio.length} (${seg.id}) has no audioUrl, skipping upload`)
+        continue
+      }
 
+      console.log(`[Podcast ${podcastId}] Uploading segment ${i + 1}/${batchWithAudio.length}: ${seg.id}`)
       const { bytes, contentType } = await audioBytesFromUrl(seg.audioUrl)
       const isWav = contentType.includes('wav')
       const ext = isWav ? 'wav' : 'mp3'
@@ -708,12 +716,17 @@ OUTPUT:
           upsert: true,
         })
 
-      if (uploadError) throw new Error(`Audio upload failed: ${uploadError.message}`)
+      if (uploadError) {
+        console.error(`[Podcast ${podcastId}] Upload failed for ${seg.id}:`, uploadError.message)
+        throw new Error(`Audio upload failed: ${uploadError.message}`)
+      }
 
       const { data: publicData } = supabase.storage.from('podcast-audio').getPublicUrl(path)
       byId[seg.id] = { ...seg, audioUrl: publicData.publicUrl }
+      uploadedCount++
     }
 
+    console.log(`[Podcast ${podcastId}] Upload complete: ${uploadedCount} files. Merging segments and persisting...`)
     const mergedSegments = segments.map((s) => byId[s.id] || s)
     const timings = recomputeTimings(mergedSegments)
     const updatedChapters = recomputeChapterTimes(chapters, timings.segments)
@@ -724,7 +737,7 @@ OUTPUT:
     
     // Log progress changes
     const progressChange = newCompleted - completed
-    console.log(`[Podcast ${podcastId}] Progress update: +${progressChange} completed (${newCompleted}/${timings.segments.length})`)
+    console.log(`[Podcast ${podcastId}] Persisting: newCompleted=${newCompleted}, total=${timings.segments.length}, change=+${progressChange}`)
 
     const { data: updatedRow, error: segmentsUpdateError } = await supabase
       .from('intelligent_podcasts')
