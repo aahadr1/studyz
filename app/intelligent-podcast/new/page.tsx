@@ -194,15 +194,45 @@ export default function NewPodcastPage() {
         throw new Error(responseData.error || responseData.details || 'Failed to generate podcast')
       }
 
-      console.log('[Podcast] ✅ Generation started:', responseData)
+      console.log('[Podcast] ✅ Podcast created:', responseData)
+      
+      // Start processing in a separate request
+      const podcastId = responseData.id
+      startProcessing(podcastId, responseData.documents, responseData.config)
       
       // Poll for completion
-      const podcastId = responseData.id
       await pollPodcastStatus(podcastId)
       
     } catch (err: any) {
       console.error('[Podcast] Generation error:', err)
       setError(err.message || 'Failed to generate podcast')
+      setIsGenerating(false)
+    }
+  }
+
+  const startProcessing = async (
+    podcastId: string, 
+    documents: any, 
+    config: any
+  ) => {
+    try {
+      console.log('[Podcast] Starting processing...')
+      const response = await fetch(`/api/intelligent-podcast/${podcastId}/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ documents, config }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.details || error.error || 'Processing failed')
+      }
+
+      console.log('[Podcast] Processing request sent successfully')
+    } catch (err: any) {
+      console.error('[Podcast] Failed to start processing:', err)
+      setError(`Processing failed: ${err.message}`)
       setIsGenerating(false)
     }
   }
