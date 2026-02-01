@@ -1,8 +1,9 @@
 /**
- * Google Gemini LLM client via REST.
- * - AI Studio (generativelanguage.googleapis.com): use GEMINI_API_KEY or GOOGLE_API_KEY.
- * - Vertex AI (aiplatform.googleapis.com): use GOOGLE_CLOUD_API_KEY (Cloud Console key).
- * Cloud keys get 401 on generativelanguage; Vertex accepts them.
+ * Google Gemini LLM client via REST (Google AI Studio only).
+ * Vision + LLM use generativelanguage.googleapis.com with an API key from
+ * https://aistudio.google.com/app/apikey (set GEMINI_API_KEY or GOOGLE_API_KEY).
+ * Cloud Console keys (GOOGLE_CLOUD_API_KEY) are not supported for this API;
+ * use them only for Google Cloud TTS.
  */
 
 type GeminiThinkingLevel = 'low' | 'high'
@@ -17,31 +18,17 @@ export interface GeminiRunParams {
   maxOutputTokens?: number
 }
 
-const AI_STUDIO_BASE = 'https://generativelanguage.googleapis.com/v1beta'
-const VERTEX_BASE = 'https://aiplatform.googleapis.com/v1'
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const DEFAULT_MODEL = 'gemini-2.0-flash'
 
-function getGeminiConfig(): { url: string; apiKey: string; isVertex: boolean } {
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
-  const cloudKey = process.env.GOOGLE_CLOUD_API_KEY
-
-  if (geminiKey) {
-    return {
-      url: `${AI_STUDIO_BASE}/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(geminiKey)}`,
-      apiKey: geminiKey,
-      isVertex: false,
-    }
+function getApiKey(): string {
+  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+  if (!key) {
+    throw new Error(
+      'Set GEMINI_API_KEY or GOOGLE_API_KEY for the podcast creator (vision + LLM). Create a key at https://aistudio.google.com/app/apikey'
+    )
   }
-  if (cloudKey) {
-    return {
-      url: `${VERTEX_BASE}/publishers/google/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(cloudKey)}`,
-      apiKey: cloudKey,
-      isVertex: true,
-    }
-  }
-  throw new Error(
-    'Set GEMINI_API_KEY or GOOGLE_API_KEY (AI Studio) or GOOGLE_CLOUD_API_KEY (Vertex AI) for the podcast creator.'
-  )
+  return key
 }
 
 /**
@@ -58,21 +45,18 @@ function parseImageForApi(image: string): { mimeType: string; data: string } {
 }
 
 /**
- * Build contents[].parts: text first, then each image.
- * AI Studio uses snake_case (inline_data, mime_type); Vertex uses camelCase (inlineData, mimeType).
+ * Build contents[].parts: text first, then each image (snake_case for AI Studio).
  */
 function buildParts(
   prompt: string,
-  images: string[] | undefined,
-  isVertex: boolean
-): Array<{ text?: string; inline_data?: { mime_type: string; data: string }; inlineData?: { mimeType: string; data: string } }> {
-  const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string }; inlineData?: { mimeType: string; data: string } }> = []
+  images: string[] | undefined
+): Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> {
+  const parts: Array<{ text?: string; inline_data?: { mime_type: string; data: string } }> = []
   if (prompt) parts.push({ text: prompt })
   if (images?.length) {
     for (const img of images) {
       const { mimeType, data } = parseImageForApi(img)
-      if (isVertex) parts.push({ inlineData: { mimeType, data } })
-      else parts.push({ inline_data: { mime_type: mimeType, data } })
+      parts.push({ inline_data: { mime_type: mimeType, data } })
     }
   }
   return parts
@@ -82,9 +66,10 @@ function buildParts(
  * Call Google Gemini generateContent (text + optional images). One request, no polling.
  */
 export async function runGemini3Flash(params: GeminiRunParams): Promise<string> {
-  const { url, isVertex } = getGeminiConfig()
+  const apiKey = getApiKey()
+  const url = `${GEMINI_BASE}/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
 
-  const parts = buildParts(params.prompt, params.images, isVertex)
+  const parts = buildParts(params.prompt, params.images)
   const body: Record<string, unknown> = {
     contents: [{ role: 'user', parts }],
     generationConfig: {
@@ -95,9 +80,7 @@ export async function runGemini3Flash(params: GeminiRunParams): Promise<string> 
     },
   }
   if (params.systemInstruction) {
-    body[isVertex ? 'systemInstruction' : 'system_instruction'] = {
-      parts: [{ text: params.systemInstruction }],
-    }
+    body.system_instruction = { parts: [{ text: params.systemInstruction }] }
   }
 
   const res = await fetch(url, {
