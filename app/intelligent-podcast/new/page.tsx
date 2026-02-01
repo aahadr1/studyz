@@ -225,12 +225,12 @@ export default function NewPodcastPage() {
 
       console.log('[Podcast] ✅ Podcast created:', responseData)
       
-      // Start processing in a separate request
+      // Start processing in a separate request (resumable)
       const podcastId = responseData.id
       startProcessing(podcastId, responseData.documents, responseData.config)
       
       // Poll for completion
-      await pollPodcastStatus(podcastId)
+      await pollPodcastStatus(podcastId, responseData.documents, responseData.config)
       
     } catch (err: any) {
       console.error('[Podcast] Generation error:', err)
@@ -259,15 +259,19 @@ export default function NewPodcastPage() {
       }
 
       console.log('[Podcast] Processing request sent successfully')
+      setError(null)
+      return true
     } catch (err: any) {
       console.error('[Podcast] Failed to start processing:', err)
-      setError(`Processing failed: ${err.message}`)
-      setIsGenerating(false)
+      // Don’t abort generation immediately; processing is resumable and may intermittently fail
+      // under serverless time limits. We'll keep polling and retry.
+      setError(`Processing retry: ${err.message}`)
+      return false
     }
   }
 
-  const pollPodcastStatus = async (podcastId: string) => {
-    const maxPolls = 120 // 10 minutes max (5 second intervals)
+  const pollPodcastStatus = async (podcastId: string, documents: any, config: any) => {
+    const maxPolls = 240 // 20 minutes max (5 second intervals)
     let pollCount = 0
 
     while (pollCount < maxPolls) {
@@ -298,6 +302,10 @@ export default function NewPodcastPage() {
         if (data.status === 'error') {
           throw new Error(data.description || 'Podcast generation failed')
         }
+
+        // Keep nudging processing forward (resumable batches).
+        // This avoids relying on a single long-running serverless invocation.
+        await startProcessing(podcastId, documents, config)
 
         // Wait 5 seconds before next poll
         await new Promise(resolve => setTimeout(resolve, 5000))

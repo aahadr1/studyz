@@ -153,76 +153,182 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await request.json()
-    const { documents, config } = body
+    const body = await request.json().catch(() => ({}))
+    const documents = body?.documents
+    const config = body?.config
 
-    // STEP 1: Transcription Vision (10-35%)
-    await updateProgress(10, `Transcription: 0/${documents.length} documents`)
-    const extractedDocuments: DocumentContent[] = []
+    // Load current podcast state (for resumability)
+    const { data: existing, error: fetchError } = await supabase
+      .from('intelligent_podcasts')
+      .select('id,user_id,title,description,status,generation_progress,language,knowledge_graph,chapters,segments,predicted_questions')
+      .eq('id', podcastId)
+      .eq('user_id', user.id)
+      .single()
 
-    for (let i = 0; i < documents.length; i++) {
-      const doc = documents[i]
-      await updateProgress(10 + Math.round((i / documents.length) * 25), `Transcription: ${i + 1}/${documents.length}`)
-
-      const { content, pageCount } = await extractTextFromPageImages(doc.name, doc.page_images)
-      extractedDocuments.push({
-        id: crypto.randomUUID(),
-        title: doc.name,
-        content,
-        pageCount,
-        language: 'auto',
-        extractedAt: new Date().toISOString(),
-      })
+    if (fetchError || !existing) {
+      return NextResponse.json({ error: 'Podcast not found' }, { status: 404 })
     }
 
-    // STEP 2: Knowledge graph + language detection (35-50%)
-    await updateProgress(35, 'Analyzing content & building knowledge graph...')
-    const { knowledgeGraph, detectedLanguage } = await extractAndAnalyze(extractedDocuments)
+    const existingSegments: PodcastSegment[] = Array.isArray(existing.segments) ? existing.segments : []
+    const hasScript = existingSegments.length > 0 && existingSegments.some((s: any) => typeof s?.text === 'string' && s.text.trim().length > 0)
+
+    // If there is already a script, we can continue audio generation without needing docs again.
+    if (!hasScript) {
+      if (!documents || !config) {
+        return NextResponse.json(
+          { error: 'Missing required body', details: 'documents + config are required for initial processing' },
+          { status: 400 }
+        )
+      }
+    }
 
     const finalLanguage =
-      config.language && config.language !== 'auto' ? config.language : (detectedLanguage || 'en')
+      (hasScript && typeof existing.language === 'string' && existing.language.length > 0 && existing.language !== 'auto')
+        ? existing.language
+        : (config?.language && config.language !== 'auto' ? config.language : 'en')
 
-    const voiceProvider: 'openai' | 'elevenlabs' | 'playht' = config.voiceProvider || 'openai'
+    const voiceProvider: 'openai' | 'elevenlabs' | 'playht' = config?.voiceProvider || 'openai'
     const voiceProfiles = voiceProfilesForProvider(voiceProvider)
 
-    // STEP 3: Script generation (50-65%)
-    await updateProgress(50, `Generating detailed ${config.targetDuration}-minute script...`)
-    const script = await generateIntelligentScript(extractedDocuments, knowledgeGraph, {
-      targetDuration: config.targetDuration,
-      language: finalLanguage,
-      style: config.style,
-      voiceProfiles,
-    })
+    // STEP A: If script not present, do OCR + analysis + script, and save immediately (so audio can resume later).
+    if (!hasScript) {
+      // STEP 1: Transcription Vision (10-35%)
+      await updateProgress(10, `Transcription: 0/${documents.length} documents`)
+      const extractedDocuments: DocumentContent[] = []
 
-    await updateProgress(65, `Script ready: ${script.segments.length} segments`)
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i]
+        await updateProgress(10 + Math.round((i / documents.length) * 25), `Transcription: ${i + 1}/${documents.length}`)
 
-    // STEP 4: Audio generation (65-92%)
-    const segmentsWithAudio = await generateMultiVoiceAudio(
-      script.segments,
+        const { content, pageCount } = await extractTextFromPageImages(doc.name, doc.page_images)
+        console.log(`[Podcast ${podcastId}] OCR doc ${i + 1}/${documents.length}: ${doc.name} (${pageCount} pages, ${content.length} chars)`)
+        extractedDocuments.push({
+          id: crypto.randomUUID(),
+          title: doc.name,
+          content,
+          pageCount,
+          language: 'auto',
+          extractedAt: new Date().toISOString(),
+        })
+      }
+
+      // STEP 2: Knowledge graph + language detection (35-50%)
+      await updateProgress(35, 'Analyzing content & building knowledge graph...')
+      const { knowledgeGraph, detectedLanguage } = await extractAndAnalyze(extractedDocuments)
+      console.log(
+        `[Podcast ${podcastId}] Knowledge graph: ${knowledgeGraph.concepts?.length || 0} concepts, ${knowledgeGraph.relationships?.length || 0} relationships`
+      )
+
+      const computedLanguage =
+        config.language && config.language !== 'auto' ? config.language : (detectedLanguage || 'en')
+
+      // STEP 3: Script generation (50-65%)
+      await updateProgress(50, `Generating detailed ${config.targetDuration}-minute script...`)
+      const script = await generateIntelligentScript(extractedDocuments, knowledgeGraph, {
+        targetDuration: config.targetDuration,
+        language: computedLanguage,
+        style: config.style,
+        voiceProfiles,
+      })
+
+      const totalWords = script.segments.reduce((sum, s) => sum + String(s.text || '').trim().split(/\s+/).filter(Boolean).length, 0)
+      const estMinutes = totalWords / 150
+      await updateProgress(
+        65,
+        `Script ready: ${script.segments.length} segments (~${estMinutes.toFixed(1)} min est, ${totalWords} words)`
+      )
+
+      // Persist script now (critical for resumability)
+      await supabase
+        .from('intelligent_podcasts')
+        .update({
+          title: script.title || existing.title,
+          description: existing.description,
+          language: computedLanguage,
+          knowledge_graph: knowledgeGraph,
+          chapters: script.chapters,
+          segments: script.segments,
+          predicted_questions: script.predictedQuestions || [],
+          status: 'generating',
+          generation_progress: 65,
+        })
+        .eq('id', podcastId)
+    }
+
+    // Reload latest script/segments from DB (source of truth)
+    const { data: current, error: currentError } = await supabase
+      .from('intelligent_podcasts')
+      .select('id,title,description,language,chapters,segments,status')
+      .eq('id', podcastId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (currentError || !current) throw new Error('Failed to load podcast after script generation')
+
+    const chapters: PodcastChapter[] = Array.isArray(current.chapters) ? current.chapters : []
+    const segments: PodcastSegment[] = Array.isArray(current.segments) ? current.segments : []
+
+    const remaining = segments.filter((s: any) => !(typeof s?.audioUrl === 'string' && s.audioUrl.length > 0))
+    const completed = segments.length - remaining.length
+    const pctAudio = segments.length > 0 ? completed / segments.length : 0
+
+    // If audio is complete, finalize timings and mark ready.
+    if (remaining.length === 0 && segments.length > 0) {
+      const timings = recomputeTimings(segments)
+      const updatedChapters = recomputeChapterTimes(chapters, timings.segments)
+      await updateProgress(95, 'Finalizing...')
+      await supabase
+        .from('intelligent_podcasts')
+        .update({
+          duration: timings.totalDuration,
+          chapters: updatedChapters,
+          segments: timings.segments,
+          status: 'ready',
+          generation_progress: 100,
+        })
+        .eq('id', podcastId)
+      console.log(`[Podcast ${podcastId}] ✅ Complete!`)
+      return NextResponse.json({ success: true })
+    }
+
+    // STEP B: Generate audio in small batches to stay within serverless limits.
+    const BATCH_SIZE = 6
+    const batch = remaining.slice(0, BATCH_SIZE)
+
+    await updateProgress(
+      65 + Math.round(pctAudio * 27),
+      `Audio generation: ${completed}/${segments.length} segments completed`
+    )
+
+    const batchWithAudio = await generateMultiVoiceAudio(
+      batch,
       voiceProfiles,
       finalLanguage,
-      (current, total, step) => {
-        const pct = 65 + Math.round((current / Math.max(1, total)) * 27)
-        void updateProgress(pct, step)
+      (currentIdx, total, step) => {
+        const withinBatch = total > 0 ? currentIdx / total : 0
+        const pct = 65 + Math.round((pctAudio + withinBatch * (BATCH_SIZE / Math.max(1, segments.length))) * 27)
+        void updateProgress(Math.min(92, pct), step)
       }
     )
 
-    await updateProgress(92, 'Uploading audio to storage...')
+    await updateProgress(92, 'Uploading audio batch to storage...')
 
-    // Upload audio to Supabase Storage so it persists & can be downloaded
-    const uploadedSegments: PodcastSegment[] = []
-    for (let i = 0; i < segmentsWithAudio.length; i++) {
-      const seg = segmentsWithAudio[i]
-      if (!seg.audioUrl) {
-        uploadedSegments.push(seg)
-        continue
-      }
+    const byId: Record<string, PodcastSegment> = {}
+    for (const s of segments) byId[s.id] = s
+
+    // Upload only the newly generated audio segments
+    for (let i = 0; i < batchWithAudio.length; i++) {
+      const seg = batchWithAudio[i]
+      if (!seg.audioUrl) continue
 
       const { bytes, contentType } = await audioBytesFromUrl(seg.audioUrl)
       const isWav = contentType.includes('wav')
       const ext = isWav ? 'wav' : 'mp3'
 
-      const path = `podcasts/${podcastId}/segments/${String(i + 1).padStart(3, '0')}-${seg.speaker}.${ext}`
+      const absoluteIndex = segments.findIndex((s) => s.id === seg.id)
+      const ordinal = absoluteIndex >= 0 ? absoluteIndex + 1 : completed + i + 1
+
+      const path = `podcasts/${podcastId}/segments/${String(ordinal).padStart(3, '0')}-${seg.speaker}.${ext}`
       const { error: uploadError } = await supabase.storage
         .from('podcast-audio')
         .upload(path, bytes, {
@@ -230,42 +336,38 @@ export async function POST(
           upsert: true,
         })
 
-      if (uploadError) {
-        throw new Error(`Audio upload failed: ${uploadError.message}`)
-      }
+      if (uploadError) throw new Error(`Audio upload failed: ${uploadError.message}`)
 
       const { data: publicData } = supabase.storage.from('podcast-audio').getPublicUrl(path)
-      uploadedSegments.push({
-        ...seg,
-        audioUrl: publicData.publicUrl,
-      })
+      byId[seg.id] = { ...seg, audioUrl: publicData.publicUrl }
     }
 
-    const timings = recomputeTimings(uploadedSegments)
-    const updatedChapters = recomputeChapterTimes(script.chapters, timings.segments)
+    const mergedSegments = segments.map((s) => byId[s.id] || s)
+    const timings = recomputeTimings(mergedSegments)
+    const updatedChapters = recomputeChapterTimes(chapters, timings.segments)
 
-    // STEP 5: Save to DB (95-100%)
-    await updateProgress(95, 'Finalizing...')
-    const placeholderTitle = documents.map((d: any) => d.name.replace(/\.pdf$/i, '')).join(', ')
+    const newRemaining = timings.segments.filter((s: any) => !(typeof s?.audioUrl === 'string' && s.audioUrl.length > 0))
+    const newCompleted = timings.segments.length - newRemaining.length
+    const newPctAudio = timings.segments.length > 0 ? newCompleted / timings.segments.length : 0
 
     await supabase
       .from('intelligent_podcasts')
       .update({
-        title: script.title || placeholderTitle,
-        description: script.description || 'Podcast generated',
         duration: timings.totalDuration,
-        language: finalLanguage,
-        knowledge_graph: knowledgeGraph,
         chapters: updatedChapters,
         segments: timings.segments,
-        predicted_questions: script.predictedQuestions || [],
-        status: 'ready',
-        generation_progress: 100,
+        status: 'generating',
+        generation_progress: Math.min(92, 65 + Math.round(newPctAudio * 27)),
+        description: `Audio generation: ${newCompleted}/${timings.segments.length} segments completed`,
       })
       .eq('id', podcastId)
 
-    console.log(`[Podcast ${podcastId}] ✅ Complete!`)
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      status: 'generating',
+      completedSegments: newCompleted,
+      totalSegments: timings.segments.length,
+    })
 
   } catch (error: any) {
     console.error(`[Podcast ${podcastId}] Error:`, error)

@@ -58,49 +58,13 @@ function cleanTextForTTSFallback(text: string): string {
 }
 
 export async function makeTtsReadyText(text: string, openai: OpenAI, language: TtsLanguage): Promise<string> {
-  const input = text.trim().slice(0, 12000)
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content:
-            language === 'fr'
-              ? `Tu es un expert en préparation de texte pour la synthèse vocale (text-to-speech).
-Transforme un texte (potentiellement avec du markdown) en texte oral fluide et naturel.
-
-RÈGLES STRICTES:
-- Supprime tout le markdown (titres, listes, code, etc.)
-- Remplace les listes par des phrases complètes
-- Garde une ponctuation simple: . , ? ! et autorise les parenthèses ( ) quand elles contiennent du vocabulaire important.
-- Pas d'emojis, pas de symboles spéciaux
-- Garde le sens, mais rends-le très naturel à l'oral
-- IMPORTANT: si le texte contient des termes techniques en anglais entre parenthèses, CONSERVE-LES (ex: "résistance (resistance)").
-
-Retourne UNIQUEMENT le texte final.`
-              : `You are an expert at preparing text for text-to-speech.
-Turn potentially-markdown text into natural spoken text.
-
-STRICT RULES:
-- Remove all markdown (headings, lists, code, etc.)
-- Convert lists into full sentences
-- Keep simple punctuation: . , ? ! and allow parentheses ( ) when they contain important vocabulary.
-- No emojis, no special symbols
-- Keep the meaning but make it very natural for speech
-- IMPORTANT: if the text contains English technical terms in parentheses, KEEP them (e.g. "résistance (resistance)").
-
-Return ONLY the final text.`,
-        },
-        { role: 'user', content: input },
-      ],
-      max_tokens: 1200,
-      temperature: 0.2,
-    })
-    return response.choices[0]?.message?.content?.trim() || cleanTextForTTSFallback(input)
-  } catch {
-    return cleanTextForTTSFallback(input)
-  }
+  // IMPORTANT:
+  // This function must NEVER shorten/summarize content, otherwise podcast audio
+  // can become much shorter than the generated script. Use deterministic cleanup only.
+  // (We keep the OpenAI param for API compatibility with callers.)
+  void openai
+  void language
+  return cleanTextForTTSFallback(String(text || ''))
 }
 
 export async function generateTtsAudioUrl(params: {

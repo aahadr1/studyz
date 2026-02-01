@@ -16,6 +16,46 @@ interface ScriptGenerationResult {
   description: string
 }
 
+function countWords(text: string): number {
+  const t = String(text || '').trim()
+  if (!t) return 0
+  return t.split(/\s+/).filter(Boolean).length
+}
+
+function estimateMinutesFromWords(words: number, wpm: number = 150): number {
+  const safeWpm = Number.isFinite(wpm) && wpm > 50 ? wpm : 150
+  return words / safeWpm
+}
+
+function estimateScriptMetrics(segments: PodcastSegment[]) {
+  const totalWords = segments.reduce((sum, s) => sum + countWords(s.text), 0)
+  const estimatedMinutes = estimateMinutesFromWords(totalWords, 150)
+  const avgWordsPerSegment = segments.length > 0 ? totalWords / segments.length : 0
+  return { totalWords, estimatedMinutes, avgWordsPerSegment }
+}
+
+type RawSegment = {
+  speaker?: string
+  text?: string
+  concepts?: string[]
+  isQuestionBreakpoint?: boolean
+  difficulty?: 'easy' | 'medium' | 'hard'
+}
+
+function sanitizeSpeaker(speaker: any): 'host' | 'expert' | 'simplifier' {
+  const v = String(speaker || '').toLowerCase().trim()
+  if (v === 'expert') return 'expert'
+  if (v === 'simplifier') return 'simplifier'
+  return 'host'
+}
+
+function sanitizeDifficulty(d: any): 'easy' | 'medium' | 'hard' {
+  const v = String(d || '').toLowerCase().trim()
+  if (v === 'easy') return 'easy'
+  if (v === 'hard') return 'hard'
+  return 'medium'
+}
+
 /**
  * Generate intelligent podcast script with chapters, segments, and predicted Q&A
  */
@@ -36,6 +76,13 @@ export async function generateIntelligentScript(
 
   // Step 2: Generate detailed segments for each chapter
   const segmentsData = await generateSegments(chaptersData.chapters, knowledgeGraph, config)
+
+  const metrics = estimateScriptMetrics(segmentsData.segments)
+  console.log(
+    `[Script] Segments: ${segmentsData.segments.length}, words: ${metrics.totalWords}, estimated minutes: ${metrics.estimatedMinutes.toFixed(
+      1
+    )}, avg words/segment: ${metrics.avgWordsPerSegment.toFixed(1)}`
+  )
 
   // Step 3: Generate predicted questions with pre-generated answers
   const predictedQuestions = await generatePredictedQuestions(
@@ -68,7 +115,8 @@ async function generateChapters(
   const targetChapters = Math.min(10, Math.max(3, Math.round(config.targetDuration / 8))) // ~1 chapter per 8 min
 
   const documentsSummary = documents
-    .map((doc) => `Document: ${doc.title}\nContent:\n${doc.content.slice(0, 20000)}`)
+    // Provide more source material; Gemini has a large context window.
+    .map((doc) => `Document: ${doc.title}\nContent:\n${doc.content.slice(0, 40000)}`)
     .join('\n\n---\n\n')
 
   const conceptsSummary = knowledgeGraph.concepts
@@ -94,6 +142,7 @@ RÈGLES :
 3. Structure logique : progression du simple au complexe
 4. Équilibre entre les chapitres
 5. IMPORTANT: La somme des "estimatedDuration" DOIT être proche de ${targetSeconds} secondes (±5%)
+6. IMPORTANT: Ce podcast est LONG-FORM. Planifie assez de chapitres pour développer en profondeur : définitions, intuition, exemples, erreurs fréquentes, applications.
 
 Retourne un objet json :
 {
@@ -129,6 +178,7 @@ RULES:
 3. Logical structure: progress from simple to complex
 4. Balance between chapters
 5. IMPORTANT: The sum of all "estimatedDuration" MUST be close to ${targetSeconds} seconds (±5%)
+6. IMPORTANT: This is LONG-FORM content. Plan enough room for depth: definitions, intuition, examples, common mistakes, applications.
 
 Return a json object:
 {
@@ -215,6 +265,94 @@ async function generateSegments(
 ): Promise<{ segments: PodcastSegment[] }> {
   const allSegments: PodcastSegment[] = []
 
+  const expandChapterSegmentsIfNeeded = async (params: {
+    chapterTitle: string
+    chapterSummary: string
+    chapterSeconds: number
+    chapterTargetWords: number
+    conceptsDescription: string
+    currentSegments: RawSegment[]
+    minSegments: number
+    maxSegments: number
+    language: string
+  }): Promise<RawSegment[]> => {
+    const currentWords = params.currentSegments.reduce((sum, s) => sum + countWords(s.text || ''), 0)
+    const targetWords = params.chapterTargetWords
+    const ratio = targetWords > 0 ? currentWords / targetWords : 1
+
+    // If we’re close enough, keep as-is.
+    if (ratio >= 0.9 && params.currentSegments.length >= params.minSegments) return params.currentSegments
+
+    const systemInstruction =
+      params.language === 'fr'
+        ? `Tu es un scénariste expert en podcasts éducatifs LONG-FORM.
+
+Ta mission: EXPANDRE une conversation existante pour atteindre une durée réaliste.
+
+CONTRAINTES ABSOLUES:
+- Ne résume pas. N'abrège pas. N'enlève pas de détails utiles.
+- Retourne UNIQUEMENT un objet JSON avec la clé "segments".
+- Chaque segment doit contenir: speaker, text, concepts, isQuestionBreakpoint, difficulty.
+- Les intervenants doivent être: "host" | "expert" | "simplifier".
+
+OBJECTIF:
+- Durée chapitre: ~${params.chapterSeconds}s
+- Cible mots: ~${targetWords} mots (±10%)
+- Nombre segments: entre ${params.minSegments} et ${params.maxSegments}
+
+STYLE:
+- Dialogue naturel, humain, avec des rôles cohérents.
+- Ajoute profondeur: définitions, intuition, exemples, contre-exemples, erreurs fréquentes, applications, mini-exercices oraux.
+`
+        : `You are an expert LONG-FORM educational podcast scriptwriter.
+
+Your job: EXPAND an existing conversation so it reaches a realistic duration.
+
+HARD CONSTRAINTS:
+- Do not summarize. Do not shorten. Do not remove useful detail.
+- Return ONLY a JSON object with key "segments".
+- Each segment must include: speaker, text, concepts, isQuestionBreakpoint, difficulty.
+- Speakers must be: "host" | "expert" | "simplifier".
+
+TARGET:
+- Chapter duration: ~${params.chapterSeconds}s
+- Word target: ~${targetWords} words (±10%)
+- Segment count: between ${params.minSegments} and ${params.maxSegments}
+
+STYLE:
+- Natural human dialogue with consistent roles.
+- Add depth: definitions, intuition, examples, counterexamples, misconceptions, applications, quick spoken exercises.
+`
+
+    const prompt = `Chapter: ${params.chapterTitle}
+Summary: ${params.chapterSummary}
+
+Concepts to cover:
+${params.conceptsDescription}
+
+CURRENT SEGMENTS (to expand):
+${JSON.stringify({ segments: params.currentSegments }, null, 2)}
+`
+
+    try {
+      const raw = await runGemini3Flash({
+        prompt,
+        systemInstruction,
+        thinkingLevel: 'high',
+        temperature: 0.65,
+        topP: 0.95,
+        maxOutputTokens: 65535,
+      })
+      const parsed = parseJsonObject<{ segments?: RawSegment[] }>(raw)
+      const segs = Array.isArray(parsed.segments) ? parsed.segments : []
+      if (segs.length === 0) return params.currentSegments
+      return segs
+    } catch (e) {
+      console.error('[Script] Chapter expansion failed:', e)
+      return params.currentSegments
+    }
+  }
+
   // Generate segments for each chapter
   for (const chapter of chapters) {
     console.log(`[Script] Generating segments for chapter: ${chapter.title}`)
@@ -226,6 +364,7 @@ async function generateSegments(
       .join('\n')
 
     const chapterSeconds = Math.max(60, Math.round(chapter.endTime - chapter.startTime))
+    const chapterTargetWords = Math.max(250, Math.round((chapterSeconds / 60) * 160)) // ~160 wpm baseline
     const targetSegmentsForChapter = Math.min(
       18,
       Math.max(6, Math.round(chapterSeconds / 75)) // ~1 segment per 60-90s of audio
@@ -237,19 +376,21 @@ async function generateSegments(
 
 Crée une conversation NATURELLE, ENGAGEANTE et TRÈS DÉTAILLÉE pour ce chapitre.
 Durée cible de ce chapitre: ~${chapterSeconds} secondes.
+Objectif de mots pour ce chapitre: ~${chapterTargetWords} mots (±10%).
 
 INTERVENANTS :
 ${config.voiceProfiles.map((v) => `- ${v.role.toUpperCase()} (${v.name}): ${v.description}`).join('\n')}
 
 RÈGLES CRITIQUES :
-1. Alterne entre les 3 voix de manière naturelle
-2. Chaque segment doit être substantiel et instructif (viser ~120 à 190 mots par segment, soit ~45-75 secondes d'audio)
-3. Utilise des transitions naturelles ("Justement...", "C'est fascinant...", "Attends...")
-4. Insère des "question breakpoints" toutes les 3-5 répliques (marque avec isQuestionBreakpoint: true)
-5. Ajoute de la personnalité : réactions, questions, exemples concrets, analogies, mini-récaps
-6. Progression logique des concepts, du simple au complexe
-7. Ne te contente pas de "réécrire" : explique, détaille, donne de la valeur pédagogique
-8. Couvre TOUS les concepts du chapitre, sans en oublier
+1. Dialogue humain et naturel : tours de parole réalistes (parfois 2 tours d'affilée par la même personne), interruptions légères ("Attends…"), réactions, humour léger si approprié.
+2. Chaque intervenant a un RÔLE clair et cohérent (hôte = cadence + questions, expert = mécanismes + nuance, simplificateur = analogies + étapes).
+3. Chaque segment doit être substantiel et instructif (viser ~150 à 240 mots par segment, ~60-95 secondes d'audio).
+4. Ajoute de la valeur AU-DELÀ du texte source : définitions rigoureuses, intuition, exemples, contre-exemples, erreurs fréquentes, applications concrètes.
+5. Utilise des transitions naturelles ("Justement...", "C'est fascinant...", "Attends...").
+6. Place des \"question breakpoints\" à des moments naturellement propices (marque avec isQuestionBreakpoint: true), sans rigidité.
+7. Progression logique des concepts, du simple au complexe.
+8. Couvre TOUS les concepts du chapitre, sans en oublier.
+9. NE JAMAIS résumer le contenu : développer, expliquer, enrichir.
 
 STRUCTURE DES SEGMENTS (json) :
 {
@@ -283,19 +424,21 @@ Crée environ ${targetSegmentsForChapter} segments (min 6, max 18) pour couvrir 
 
 Create a NATURAL, ENGAGING, and VERY DETAILED conversation for this chapter.
 Target chapter duration: ~${chapterSeconds} seconds.
+Target word budget for this chapter: ~${chapterTargetWords} words (±10%).
 
 SPEAKERS:
 ${config.voiceProfiles.map((v) => `- ${v.role.toUpperCase()} (${v.name}): ${v.description}`).join('\n')}
 
 CRITICAL RULES:
-1. Alternate between the 3 voices naturally
-2. Each segment must be substantial and instructive (aim ~120 to 190 words per segment, ~45-75 seconds of audio)
-3. Use natural transitions ("Actually...", "That's fascinating...", "Wait...")
-4. Insert "question breakpoints" every 3-5 exchanges (mark with isQuestionBreakpoint: true)
-5. Add personality: reactions, questions, concrete examples, analogies, mini-recaps
-6. Logical progression of concepts, from simple to complex
-7. Don’t just paraphrase: teach, unpack, and add insight
-8. Cover ALL chapter concepts (don’t skip any)
+1. Human-like dialogue: realistic turn-taking (sometimes 2 turns in a row), light interruptions (“Wait…”), reactions, small talk only when useful.
+2. Each speaker has a consistent ROLE (host = pacing + sharp questions, expert = mechanisms + nuance, simplifier = analogies + step-by-step).
+3. Each segment must be substantial and instructive (aim ~150 to 240 words, ~60-95 seconds of audio).
+4. Add value BEYOND the source: rigorous definitions, intuition, examples, counterexamples, common misconceptions, practical applications.
+5. Use natural transitions (“Actually…”, “That’s fascinating…”, “Wait…”).
+6. Sprinkle “question breakpoints” at natural pause moments (set isQuestionBreakpoint: true), without rigid frequency rules.
+7. Logical progression of concepts, from simple to complex.
+8. Cover ALL chapter concepts (don’t skip any).
+9. NEVER summarize: expand, explain, and enrich.
 
 SEGMENT STRUCTURE (json format):
 {
@@ -336,7 +479,23 @@ Create about ${targetSegmentsForChapter} segments (min 6, max 18) to cover all c
         maxOutputTokens: 20000,
       })
       const parsed = parseJsonObject<any>(raw)
-      const chapterSegments = parsed.segments || []
+      const initialSegments: RawSegment[] = Array.isArray(parsed.segments) ? parsed.segments : []
+      const expandedSegments = await expandChapterSegmentsIfNeeded({
+        chapterTitle: chapter.title,
+        chapterSummary: chapter.summary,
+        chapterSeconds,
+        chapterTargetWords,
+        conceptsDescription,
+        currentSegments: initialSegments,
+        minSegments: Math.max(6, Math.min(18, targetSegmentsForChapter)),
+        maxSegments: 18,
+        language: config.language,
+      })
+
+      // Sanitize output and cap segment count.
+      const chapterSegments: RawSegment[] = (expandedSegments || [])
+        .filter((s) => s && typeof s === 'object')
+        .slice(0, 18)
 
       // Timestamps/durations will be recalculated later from audio duration,
       // but we still set placeholder values here.
@@ -347,13 +506,13 @@ Create about ${targetSegmentsForChapter} segments (min 6, max 18) to cover all c
         allSegments.push({
           id: `${chapter.id}-segment-${idx}`,
           chapterId: chapter.id,
-          speaker: seg.speaker || 'host',
-          text: seg.text || '',
+          speaker: sanitizeSpeaker(seg.speaker),
+          text: String(seg.text || '').trim(),
           duration: segmentDuration,
           timestamp,
-          concepts: seg.concepts || [],
-          isQuestionBreakpoint: seg.isQuestionBreakpoint || false,
-          difficulty: seg.difficulty || 'medium',
+          concepts: Array.isArray(seg.concepts) ? seg.concepts : [],
+          isQuestionBreakpoint: Boolean(seg.isQuestionBreakpoint),
+          difficulty: sanitizeDifficulty(seg.difficulty),
         })
         timestamp += segmentDuration
       })
