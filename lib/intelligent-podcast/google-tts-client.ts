@@ -1,292 +1,107 @@
-import { TextToSpeechClient, protos } from '@google-cloud/text-to-speech'
+/**
+ * Lightweight Google Cloud Text-to-Speech client using REST API only (no SDK).
+ * Use GOOGLE_CLOUD_API_KEY in env. Keeps bundle small for Vercel.
+ */
+
 import type { VoiceProfile } from '@/types/intelligent-podcast'
 
-// Types for Google Cloud TTS
-type AudioEncoding = protos.google.cloud.texttospeech.v1.AudioEncoding
-type SynthesisInput = protos.google.cloud.texttospeech.v1.ISynthesisInput
-type VoiceSelectionParams = protos.google.cloud.texttospeech.v1.IVoiceSelectionParams
-type AudioConfig = protos.google.cloud.texttospeech.v1.IAudioConfig
+const TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
 
-/**
- * Singleton Google Cloud TTS client for podcast generation
- */
-let googleTTSInstance: TextToSpeechClient | null = null
+/** Language code to Google TTS locale (languageCode for voice). */
+const LANG_TO_LOCALE: Record<string, string> = {
+  en: 'en-US',
+  fr: 'fr-FR',
+  es: 'es-ES',
+  de: 'de-DE',
+}
 
-export function getGoogleTTS(): TextToSpeechClient {
-  if (!googleTTSInstance) {
-    // Check for API key or service account
-    if (!process.env.GOOGLE_CLOUD_PROJECT) {
-      throw new Error('GOOGLE_CLOUD_PROJECT environment variable is not set')
-    }
-
-    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && !process.env.GOOGLE_CLOUD_API_KEY) {
-      throw new Error('Either GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_CLOUD_API_KEY must be set')
-    }
-
-    // Initialize client with appropriate credentials
-    const clientOptions: any = {}
-    
-    if (process.env.GOOGLE_CLOUD_API_KEY) {
-      clientOptions.apiKey = process.env.GOOGLE_CLOUD_API_KEY
-    }
-
-    googleTTSInstance = new TextToSpeechClient(clientOptions)
-    console.log('[Google TTS] Client initialized successfully')
+/** Map our voiceId (Kore, Charon, Aoede) + locale to Google TTS voice name. */
+function getVoiceName(locale: string, voiceId: string): string {
+  const base = locale
+  const map: Record<string, string> = {
+    Kore: `${base}-Neural2-F`,
+    Charon: `${base}-Neural2-D`,
+    Aoede: `${base}-Neural2-J`,
   }
+  return map[voiceId] || `${base}-Neural2-F`
+}
 
-  return googleTTSInstance
+function getApiKey(): string {
+  const key = process.env.GOOGLE_CLOUD_API_KEY
+  if (!key) throw new Error('GOOGLE_CLOUD_API_KEY is not set')
+  return key
+}
+
+export interface TTSResult {
+  audioUrl: string
+  duration: number
 }
 
 /**
- * Generate audio using Google Cloud Gemini TTS
+ * Synthesize one segment via Google Cloud TTS REST API.
  */
 export async function generateGeminiTTSAudio(
   text: string,
   voiceProfile: VoiceProfile,
-  language: string,
-  prompt?: string
-): Promise<{ audioUrl: string; duration: number }> {
-  console.log(`[Gemini TTS] Starting generation for ${text.length} characters`)
+  language: string
+): Promise<TTSResult> {
+  if (!text?.trim()) throw new Error('Cannot generate audio for empty text')
+  const trimmed = text.length > 5000 ? text.slice(0, 5000) : text
+  const locale = LANG_TO_LOCALE[language] || LANG_TO_LOCALE.en
+  const voiceName = getVoiceName(locale, voiceProfile.voiceId)
 
-  if (!text || text.trim().length === 0) {
-    throw new Error('Cannot generate audio for empty text')
-  }
-
-  // Gemini TTS has limits
-  if (text.length > 4000) {
-    console.warn(`[Gemini TTS] Text too long (${text.length} chars), truncating to 4000`)
-    text = text.slice(0, 4000)
-  }
-
-  const client = getGoogleTTS()
-
-  // Map our voice profile to Gemini TTS voice
-  const geminiVoice = mapVoiceProfileToGemini(voiceProfile, language)
-  
-  // Create style prompt based on speaker role and context
-  const stylePrompt = createStylePrompt(voiceProfile, prompt)
-  
-  try {
-    console.log(`[Gemini TTS] Using voice: ${geminiVoice.name}, model: ${geminiVoice.modelName}`)
-    console.log(`[Gemini TTS] Style prompt: "${stylePrompt}"`)
-
-    const synthesisInput: SynthesisInput = {
-      text: text,
-      prompt: stylePrompt,
-    }
-
-    const voice: VoiceSelectionParams = {
-      languageCode: geminiVoice.languageCode,
-      name: geminiVoice.name,
-      modelName: geminiVoice.modelName,
-    }
-
-    const audioConfig: AudioConfig = {
-      audioEncoding: 'MP3' as AudioEncoding,
+  const apiKey = getApiKey()
+  const url = `${TTS_URL}?key=${encodeURIComponent(apiKey)}`
+  const body = {
+    input: { text: trimmed },
+    voice: {
+      languageCode: locale,
+      name: voiceName,
+    },
+    audioConfig: {
+      audioEncoding: 'MP3' as const,
       sampleRateHertz: 24000,
-    }
-
-    const [response] = await client.synthesizeSpeech({
-      input: synthesisInput,
-      voice: voice,
-      audioConfig: audioConfig,
-    })
-
-    if (!response.audioContent) {
-      throw new Error('No audio content received from Gemini TTS')
-    }
-
-    console.log(`[Gemini TTS] Audio generated, size: ${response.audioContent.length} bytes`)
-
-    // Convert audio to base64 data URL
-    const audioBase64 = Buffer.from(response.audioContent).toString('base64')
-    const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
-
-    // Estimate duration more accurately for TTS
-    const wordCount = text.split(/\s+/).filter(Boolean).length
-    const estimatedDuration = Math.max(1, (wordCount / 135) * 60) // ~135 WPM for natural speech
-
-    console.log(`[Gemini TTS] Generation completed - Words: ${wordCount}, Duration: ${estimatedDuration.toFixed(1)}s`)
-
-    return {
-      audioUrl,
-      duration: estimatedDuration,
-    }
-  } catch (error: any) {
-    console.error(`[Gemini TTS] Generation failed:`, error)
-    console.error(`[Gemini TTS] Error details:`, {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      status: error.status,
-    })
-    throw new Error(`Gemini TTS failed: ${error.message || 'Unknown error'}`)
+    },
   }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Google TTS failed (${res.status}): ${errText}`)
+  }
+
+  const data = (await res.json()) as { audioContent?: string }
+  const b64 = data.audioContent
+  if (!b64) throw new Error('Google TTS did not return audioContent')
+
+  const audioUrl = `data:audio/mpeg;base64,${b64}`
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length
+  const duration = Math.max(1, (wordCount / 135) * 60)
+  return { audioUrl, duration }
+}
+
+/** Conversation segment for multi-speaker (we do not merge; caller falls back to per-segment). */
+export interface ConversationSegment {
+  text: string
+  speaker: string
+  voiceProfile: VoiceProfile
 }
 
 /**
- * Generate multi-speaker conversation audio using Gemini TTS
+ * "Conversation" mode: not supported as a single API call in Cloud TTS.
+ * Caller should use per-segment generation; this throws so audio-generator falls back.
  */
 export async function generateGeminiConversationAudio(
-  segments: Array<{ text: string; speaker: string; voiceProfile: VoiceProfile }>,
-  language: string,
-  conversationPrompt?: string
-): Promise<{ audioUrl: string; duration: number }> {
-  console.log(`[Gemini TTS] Starting multi-speaker conversation for ${segments.length} segments`)
-
-  if (segments.length === 0) {
-    throw new Error('No segments provided for conversation generation')
-  }
-
-  const client = getGoogleTTS()
-
-  // Build conversation text with speaker labels
-  const conversationText = segments
-    .map(seg => `${seg.speaker}: ${seg.text}`)
-    .join('\n')
-
-  // Create conversation style prompt
-  const stylePrompt = conversationPrompt || 
-    `Generate this as a natural, engaging conversation between ${Array.from(new Set(segments.map(s => s.speaker))).join(' and ')}. Make it sound like real people having a friendly, educational discussion with natural pacing and appropriate emotions.`
-
-  try {
-    // Get unique speakers and map to Gemini voices
-    const uniqueSpeakers = Array.from(new Set(segments.map(s => s.speaker)))
-    const speakerVoiceConfigs = uniqueSpeakers.map((speaker, index) => {
-      const segment = segments.find(s => s.speaker === speaker)!
-      const geminiVoice = mapVoiceProfileToGemini(segment.voiceProfile, language)
-      
-      return {
-        speakerAlias: speaker,
-        speakerId: geminiVoice.name,
-      }
-    })
-
-    console.log(`[Gemini TTS] Multi-speaker config:`, speakerVoiceConfigs)
-
-    const synthesisInput: SynthesisInput = {
-      text: conversationText,
-      prompt: stylePrompt,
-    }
-
-    const voice: VoiceSelectionParams = {
-      languageCode: mapLanguageToGeminiCode(language),
-      modelName: 'gemini-2.5-flash-tts',
-      multiSpeakerVoiceConfig: {
-        speakerVoiceConfigs: speakerVoiceConfigs.map(config => ({
-          speakerAlias: config.speakerAlias,
-          speakerId: config.speakerId,
-        })),
-      },
-    }
-
-    const audioConfig: AudioConfig = {
-      audioEncoding: 'MP3' as AudioEncoding,
-      sampleRateHertz: 24000,
-    }
-
-    const [response] = await client.synthesizeSpeech({
-      input: synthesisInput,
-      voice: voice,
-      audioConfig: audioConfig,
-    })
-
-    if (!response.audioContent) {
-      throw new Error('No audio content received from Gemini TTS conversation')
-    }
-
-    console.log(`[Gemini TTS] Conversation audio generated, size: ${response.audioContent.length} bytes`)
-
-    const audioBase64 = Buffer.from(response.audioContent).toString('base64')
-    const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
-
-    // Estimate total duration for conversation
-    const totalWordCount = segments.reduce((sum, seg) => 
-      sum + seg.text.split(/\s+/).filter(Boolean).length, 0
-    )
-    const estimatedDuration = Math.max(1, (totalWordCount / 135) * 60)
-
-    console.log(`[Gemini TTS] Conversation completed - Total words: ${totalWordCount}, Duration: ${estimatedDuration.toFixed(1)}s`)
-
-    return {
-      audioUrl,
-      duration: estimatedDuration,
-    }
-  } catch (error: any) {
-    console.error(`[Gemini TTS] Conversation generation failed:`, error)
-    throw new Error(`Gemini TTS conversation failed: ${error.message || 'Unknown error'}`)
-  }
-}
-
-/**
- * Map our voice profile to Gemini TTS voice selection
- */
-function mapVoiceProfileToGemini(voiceProfile: VoiceProfile, language: string): {
-  name: string
-  languageCode: string
-  modelName: string
-} {
-  const languageCode = mapLanguageToGeminiCode(language)
-  
-  // Map speaker roles to appropriate Gemini voices
-  const voiceMap: Record<string, string> = {
-    'host': 'Kore',        // Female, clear and engaging
-    'expert': 'Charon',    // Male, authoritative
-    'simplifier': 'Aoede', // Female, friendly and approachable
-  }
-
-  const voiceName = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'Kore'
-
-  return {
-    name: voiceName,
-    languageCode: languageCode,
-    modelName: 'gemini-2.5-flash-tts',
-  }
-}
-
-/**
- * Create style prompt based on voice profile and context
- */
-function createStylePrompt(voiceProfile: VoiceProfile, customPrompt?: string): string {
-  if (customPrompt) {
-    return customPrompt
-  }
-
-  const rolePrompts: Record<string, string> = {
-    'host': 'Speak as a friendly, curious podcast host who guides the conversation with engaging questions and smooth transitions. Use a warm, conversational tone.',
-    'expert': 'Speak as a knowledgeable expert sharing detailed insights. Use a confident, authoritative tone while remaining approachable and clear.',
-    'simplifier': 'Speak as someone who excels at making complex topics easy to understand. Use a patient, encouraging tone with clear explanations and helpful analogies.',
-  }
-
-  return rolePrompts[voiceProfile.role] || rolePrompts['host']
-}
-
-/**
- * Map language codes to Gemini TTS supported codes
- */
-function mapLanguageToGeminiCode(language: string): string {
-  const languageMap: Record<string, string> = {
-    'en': 'en-US',
-    'fr': 'fr-FR',
-    'es': 'es-ES',
-    'de': 'de-DE',
-    'it': 'it-IT',
-    'pt': 'pt-BR',
-    'ru': 'ru-RU',
-    'ja': 'ja-JP',
-    'ko': 'ko-KR',
-    'zh': 'cmn-CN',
-    'ar': 'ar-EG',
-    'hi': 'hi-IN',
-    'auto': 'en-US',
-  }
-
-  return languageMap[language] || 'en-US'
-}
-
-/**
- * Reset the Google TTS client instance (useful for testing)
- */
-export function resetGoogleTTS(): void {
-  googleTTSInstance = null
+  _segments: ConversationSegment[],
+  _language: string,
+  _conversationPrompt: string
+): Promise<TTSResult> {
+  throw new Error(
+    'Google Cloud TTS does not support multi-speaker conversation in one call; use per-segment generation.'
+  )
 }
