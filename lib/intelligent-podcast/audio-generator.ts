@@ -229,6 +229,7 @@ async function generateIndividualSegments(
   console.log(`[Audio] Individual generation completed: ${successCount}/${segments.length} segments successful`)
   
   return processedSegments
+}
 
 /**
  * Generate audio using ElevenLabs (highest quality)

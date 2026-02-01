@@ -23,6 +23,7 @@ const nextConfig = {
       'canvas',
       'pdfjs-dist',
       'pdfkit',
+      '@google-cloud/text-to-speech',
     ],
   },
   // Also exclude from webpack for API routes
