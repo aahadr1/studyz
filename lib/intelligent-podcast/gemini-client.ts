@@ -113,19 +113,45 @@ export async function runGemini3Flash(params: GeminiRunParams): Promise<string> 
 }
 
 /**
- * Extract and parse a JSON object from model output.
- * Handles markdown code blocks (```json ... ```) and plain JSON.
+ * Extract one top-level JSON object from model output.
+ * - Strips markdown code blocks (```json ... ``` or ``` ... ```).
+ * - Finds the object by brace-matching from first '{' so trailing text with '}' is ignored.
+ * - Removes trailing commas before } or ] so invalid JSON from the model is accepted.
  */
 export function parseJsonObject<T = unknown>(raw: string): T {
   let text = raw.trim()
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (codeBlockMatch) text = codeBlockMatch[1].trim()
-  const first = text.indexOf('{')
-  const last = text.lastIndexOf('}')
-  if (first === -1 || last === -1 || last <= first) {
-    throw new Error('Model output did not contain a JSON object')
+  const start = text.indexOf('{')
+  if (start === -1) throw new Error('Model output did not contain a JSON object')
+  let depth = 0
+  let end = -1
+  const inString = (quote: string) => (i: number) => {
+    let j = i
+    while (j < text.length) {
+      if (text[j] === '\\') { j += 2; continue }
+      if (text[j] === quote) return j
+      j++
+    }
+    return -1
   }
-  const jsonText = text.slice(first, last + 1)
+  for (let i = start; i < text.length; i++) {
+    const c = text[i]
+    if (c === '"' || c === "'") {
+      const close = inString(c)(i + 1)
+      if (close === -1) break
+      i = close
+      continue
+    }
+    if (c === '{') depth++
+    else if (c === '}') {
+      depth--
+      if (depth === 0) { end = i; break }
+    }
+  }
+  if (end === -1) throw new Error('Model output did not contain a complete JSON object')
+  let jsonText = text.slice(start, end + 1)
+  jsonText = jsonText.replace(/,(\s*[}\]])/g, '$1')
   try {
     return JSON.parse(jsonText) as T
   } catch (e) {

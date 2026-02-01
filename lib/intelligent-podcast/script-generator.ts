@@ -166,6 +166,7 @@ Retourne un objet json :
   ]
 }
 
+Output ONLY the raw JSON object: no markdown, no \`\`\` code block, no text before or after. No trailing commas in arrays or objects.
 IMPORTANT : Les IDs des concepts doivent correspondre à ceux fournis dans la liste.`
       : `You are an expert in creating educational podcast content.
 
@@ -205,6 +206,7 @@ Return a json object:
   ]
 }
 
+Output ONLY the raw JSON object: no markdown, no \`\`\` code block, no text before or after. No trailing commas in arrays or objects.
 IMPORTANT: Concept IDs must match those provided in the list.`
 
   let raw: string
@@ -231,12 +233,13 @@ IMPORTANT: Concept IDs must match those provided in the list.`
     throw new Error('Failed to parse chapters')
   }
 
-  const rawChapters = Array.isArray(parsed?.chapters) ? parsed.chapters : []
+  const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : []
   if (rawChapters.length === 0) {
-    console.warn('No chapters in model response; using single fallback chapter. Raw (first 800):', raw.slice(0, 800))
+    console.error('Model returned no chapters. Raw (first 1000 chars):', raw.slice(0, 1000))
+    throw new Error('Failed to parse chapters')
   }
 
-  const sanitized = (rawChapters.length > 0 ? rawChapters : [{ id: 'chapter-1', title: 'Main content', summary: '', estimatedDuration: targetSeconds, concepts: [], difficulty: 'medium' as const }])
+  const sanitized = rawChapters
     .map((ch: any, idx: number) => ({
       id: String(ch?.id ?? `chapter-${idx + 1}`),
       title: String(ch?.title ?? `Chapter ${idx + 1}`),
@@ -270,8 +273,8 @@ IMPORTANT: Concept IDs must match those provided in the list.`
 
   return {
     chapters,
-    title: parsed?.title && String(parsed.title).trim() ? String(parsed.title) : 'Podcast sans titre',
-    description: parsed?.description && String(parsed.description).trim() ? String(parsed.description) : '',
+    title: (parsed.title && String(parsed.title).trim()) ? String(parsed.title) : 'Podcast sans titre',
+    description: (parsed.description && String(parsed.description).trim()) ? String(parsed.description) : '',
   }
 }
 
