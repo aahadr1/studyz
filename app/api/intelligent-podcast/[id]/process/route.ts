@@ -8,7 +8,8 @@ import { generateMultiVoiceAudio } from '@/lib/intelligent-podcast/audio-generat
 import { DocumentContent, VoiceProfile, PodcastChapter, PodcastSegment } from '@/types/intelligent-podcast'
 
 export const runtime = 'nodejs'
-export const maxDuration = 900 // long-running generation
+// Vercel Pro Serverless Functions require maxDuration between 1 and 800.
+export const maxDuration = 800 // long-running generation (resumable)
 
 async function createAuthClient() {
   const cookieStore = await cookies()
