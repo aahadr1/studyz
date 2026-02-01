@@ -65,6 +65,8 @@ export default function NewPodcastPage() {
   }
   
   const convertFilesInBackground = async (filesToConvert: UploadedFile[]) => {
+    const supabase = createClient()
+
     for (const fileObj of filesToConvert) {
       try {
         // Update status to converting
@@ -74,22 +76,49 @@ export default function NewPodcastPage() {
 
         console.log(`[Convert] Converting ${fileObj.name} to images...`)
 
-        // Convert PDF to images in browser (same as MCQ flow)
-        const pageImages = await convertPdfToImagesClient(fileObj.file, 1.5)
+        // Convert PDF to images in browser with LOWER quality to reduce size
+        const pageImages = await convertPdfToImagesClient(fileObj.file, 1.2, 0.6)
         
         console.log(`[Convert] ✅ ${fileObj.name}: ${pageImages.length} pages`)
 
-        // Update status to ready with page images
+        // Upload images to Supabase Storage to avoid 413 error
+        const uploadedImageUrls: Array<{ page_number: number; url: string }> = []
+        
+        for (const pageImg of pageImages) {
+          // Convert data URL to blob
+          const blob = await (await fetch(pageImg.dataUrl)).blob()
+          
+          // Upload to storage
+          const imagePath = `podcast-pages/${Date.now()}-${fileObj.id}-page-${pageImg.pageNumber}.jpg`
+          const { error: uploadError } = await supabase.storage
+            .from('podcast-documents')
+            .upload(imagePath, blob, { contentType: 'image/jpeg' })
+
+          if (uploadError) {
+            console.error(`[Convert] Failed to upload page ${pageImg.pageNumber}:`, uploadError)
+            throw uploadError
+          }
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('podcast-documents')
+            .getPublicUrl(imagePath)
+
+          uploadedImageUrls.push({
+            page_number: pageImg.pageNumber,
+            url: publicUrl
+          })
+        }
+
+        console.log(`[Convert] Uploaded ${uploadedImageUrls.length} page images to storage`)
+
+        // Update status to ready with image URLs (not base64)
         setUploadedFiles((prev) =>
           prev.map((f) =>
             f.id === fileObj.id
               ? { 
                   ...f, 
                   status: 'ready',
-                  pageImages: pageImages.map(p => ({
-                    page_number: p.pageNumber,
-                    url: p.dataUrl
-                  }))
+                  pageImages: uploadedImageUrls
                 }
               : f
           )
