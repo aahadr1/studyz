@@ -6,6 +6,7 @@
 import type { VoiceProfile } from '@/types/intelligent-podcast'
 
 const TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
+const GEMINI_NATIVE_TTS_MODEL = 'gemini-2.5-flash-preview-native-audio-dialog'
 
 /** Language code to Google TTS locale (languageCode for voice). */
 const LANG_TO_LOCALE: Record<string, string> = {
@@ -29,6 +30,12 @@ function getVoiceName(locale: string, voiceId: string): string {
 function getApiKey(): string {
   const key = process.env.GOOGLE_CLOUD_API_KEY
   if (!key) throw new Error('GOOGLE_CLOUD_API_KEY is not set')
+  return key
+}
+
+function getGeminiKey(): string {
+  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+  if (!key) throw new Error('GEMINI_API_KEY (AI Studio) is not set')
   return key
 }
 
@@ -94,15 +101,75 @@ export interface ConversationSegment {
 }
 
 /**
- * "Conversation" mode: not supported as a single API call in Cloud TTS.
- * Caller should use per-segment generation; this throws so audio-generator falls back.
+ * Multi-speaker conversation using Gemini native audio dialog (preview).
+ * If Gemini native TTS fails, caller should fall back to per-segment generation.
  */
 export async function generateGeminiConversationAudio(
   _segments: ConversationSegment[],
   _language: string,
   _conversationPrompt: string
 ): Promise<TTSResult> {
-  throw new Error(
-    'Google Cloud TTS does not support multi-speaker conversation in one call; use per-segment generation.'
-  )
+  const apiKey = getGeminiKey()
+  if (!_segments.length) {
+    throw new Error('No segments provided for conversation audio')
+  }
+
+  // Build a dialogue script with speaker labels that Gemini can render with multiple voices.
+  const script = _segments
+    .map(
+      (s) =>
+        `${s.speaker.toUpperCase()}: ${s.text.trim().replace(/\s+/g, ' ')}`
+    )
+    .join('\n')
+
+  const prompt = `${_conversationPrompt}\n\nGenerate natural multi-speaker audio for the following dialogue. Use distinct voices per speaker role (Host, Expert, Simplifier):\n\n${script}`
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_NATIVE_TTS_MODEL}:generateContent?key=${encodeURIComponent(
+    apiKey
+  )}`
+
+  const body = {
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: prompt }],
+      },
+    ],
+    // Response as audio
+    response_mime_type: 'audio/wav',
+    generationConfig: {
+      temperature: 0.6,
+    },
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Gemini native audio error (${res.status}): ${errText}`)
+  }
+
+  const data = (await res.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType: string; data: string } }> } }>
+  }
+
+  const audioBase64 =
+    data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data
+
+  if (!audioBase64) {
+    throw new Error('Gemini native audio did not return inlineData audio')
+  }
+
+  // Rough duration estimate: 135 wpm ~ 2.25 wps
+  const totalWords = _segments.reduce((sum, s) => sum + s.text.split(/\s+/).filter(Boolean).length, 0)
+  const duration = Math.max(1, (totalWords / 135) * 60)
+
+  return {
+    audioUrl: `data:audio/wav;base64,${audioBase64}`,
+    duration,
+  }
 }
