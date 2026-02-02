@@ -82,7 +82,13 @@ export async function generateGeminiTTSAudio(
 
   if (!res.ok) {
     const errText = await res.text()
-    throw new Error(`Gemini TTS failed (${res.status}): ${errText}`)
+    const hint =
+      res.status === 401
+        ? 'Hint: Gemini TTS needs an AI Studio key (GEMINI_API_KEY/GOOGLE_API_KEY). Vertex/Cloud keys are rejected.'
+        : res.status === 429
+          ? 'Hint: Gemini TTS quota/rate limit exceeded. Increase Vertex AI generative quotas or wait for reset.'
+          : ''
+    throw new Error(`Gemini TTS failed (${res.status}): ${errText}${hint ? ' | ' + hint : ''}`)
   }
 
   const data = (await res.json()) as {

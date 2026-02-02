@@ -114,7 +114,7 @@ export async function runGemini3Flash(params: GeminiRunParams): Promise<string> 
     const errText = await res.text()
     const hint =
       res.status === 401
-        ? 'Hint: AI Studio (GEMINI_API_KEY/GOOGLE_API_KEY) keys only; Vertex/Cloud API keys are rejected. Check that billing is active and the AI Studio key is set.'
+        ? 'Hint: Gemini requires an AI Studio key (GEMINI_API_KEY/GOOGLE_API_KEY). Vertex/Cloud API keys are rejected. Verify the key value and that billing is active in the same project.'
         : res.status === 429
           ? 'Hint: Gemini quota/rate limit exceeded in this project/region. Increase Vertex AI generative quotas or wait for reset.'
           : ''
