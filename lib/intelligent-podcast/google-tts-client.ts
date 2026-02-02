@@ -5,7 +5,8 @@
 
 import type { VoiceProfile } from '@/types/intelligent-podcast'
 
-const TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
+const TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize' // legacy (kept for reference)
+const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts'
 const GEMINI_NATIVE_TTS_MODEL = 'gemini-2.5-flash-preview-native-audio-dialog'
 
 /** Language code to Google TTS locale (languageCode for voice). */
@@ -27,12 +28,6 @@ function getVoiceName(locale: string, voiceId: string): string {
   return map[voiceId] || `${base}-Neural2-F`
 }
 
-function getApiKey(): string {
-  const key = process.env.GOOGLE_CLOUD_API_KEY
-  if (!key) throw new Error('GOOGLE_CLOUD_API_KEY is not set')
-  return key
-}
-
 function getGeminiKey(): string {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY (AI Studio) is not set')
@@ -45,7 +40,7 @@ export interface TTSResult {
 }
 
 /**
- * Synthesize one segment via Google Cloud TTS REST API.
+ * Synthesize one segment via Gemini native TTS (preview, higher quality than Cloud TTS).
  */
 export async function generateGeminiTTSAudio(
   text: string,
@@ -57,18 +52,29 @@ export async function generateGeminiTTSAudio(
   const locale = LANG_TO_LOCALE[language] || LANG_TO_LOCALE.en
   const voiceName = getVoiceName(locale, voiceProfile.voiceId)
 
-  const apiKey = getApiKey()
-  const url = `${TTS_URL}?key=${encodeURIComponent(apiKey)}`
-  const body: {
-    input: { text: string }
-    voice: { languageCode: string; name: string }
-    audioConfig: { audioEncoding: 'MP3'; sampleRateHertz: number }
-  } = {
-    input: { text: trimmed },
-    voice: { languageCode: locale, name: voiceName },
-    audioConfig: {
-      audioEncoding: 'MP3',
-      sampleRateHertz: 24000,
+  const apiKey = getGeminiKey()
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(
+    apiKey
+  )}`
+
+  const body = {
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: trimmed }],
+      },
+    ],
+    // Ask explicitly for audio and voice
+    response_mime_type: 'audio/wav',
+    generationConfig: {
+      temperature: 0.6,
+      topP: 0.95,
+    },
+    speechConfig: {
+      voiceConfig: {
+        voiceName, // maps Kore/Charon/Aoede -> locale-specific names
+        languageCode: locale,
+      },
     },
   }
 
@@ -80,17 +86,27 @@ export async function generateGeminiTTSAudio(
 
   if (!res.ok) {
     const errText = await res.text()
-    throw new Error(`Google TTS failed (${res.status}): ${errText}`)
+    throw new Error(`Gemini TTS failed (${res.status}): ${errText}`)
   }
 
-  const data = (await res.json()) as { audioContent?: string }
-  const b64 = data.audioContent
-  if (!b64) throw new Error('Google TTS did not return audioContent')
+  const data = (await res.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType: string; data: string } }> } }>
+  }
 
-  const audioUrl = `data:audio/mpeg;base64,${b64}`
+  const audioBase64 =
+    data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data
+
+  if (!audioBase64) {
+    throw new Error('Gemini TTS did not return inlineData audio')
+  }
+
   const wordCount = trimmed.split(/\s+/).filter(Boolean).length
   const duration = Math.max(1, (wordCount / 135) * 60)
-  return { audioUrl, duration }
+
+  return {
+    audioUrl: `data:audio/wav;base64,${audioBase64}`,
+    duration,
+  }
 }
 
 /** Conversation segment for multi-speaker (we do not merge; caller falls back to per-segment). */
