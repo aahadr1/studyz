@@ -112,7 +112,13 @@ export async function runGemini3Flash(params: GeminiRunParams): Promise<string> 
 
   if (!res.ok) {
     const errText = await res.text()
-    throw new Error(`Gemini API error (${res.status}): ${errText}`)
+    const hint =
+      res.status === 401
+        ? 'Hint: AI Studio (GEMINI_API_KEY/GOOGLE_API_KEY) keys only; Vertex/Cloud API keys are rejected. Check that billing is active and the AI Studio key is set.'
+        : res.status === 429
+          ? 'Hint: Gemini quota/rate limit exceeded in this project/region. Increase Vertex AI generative quotas or wait for reset.'
+          : ''
+    throw new Error(`Gemini API error (${res.status}): ${errText}${hint ? ' | ' + hint : ''}`)
   }
 
   const data = (await res.json()) as {
