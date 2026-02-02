@@ -176,8 +176,8 @@ async function generateIndividualSegments(
         audioUrl = result.audioUrl
         actualDuration = result.duration
       } else {
-        // Default to OpenAI TTS
-        const result = await generateOpenAIAudio(segment.text, voiceProfile, language)
+        // Default to Google TTS to avoid OpenAI dependency
+        const result = await generateGeminiTTSAudio(segment.text, voiceProfile, language)
         audioUrl = result.audioUrl
         actualDuration = result.duration
       }
