@@ -695,6 +695,15 @@ OUTPUT:
         }
       )
       console.log(`[Podcast ${podcastId}] Audio generation completed for batch`)
+
+      // Detect silent total failure (e.g., provider credentials/quota issues) so we don't loop forever.
+      const withAudioCount = batchWithAudio.filter(s => s.audioUrl && s.audioUrl.length > 0).length
+      if (withAudioCount === 0) {
+        throw new Error(
+          `Audio provider returned no audio URLs for batch (provider=${voiceProvider}). ` +
+          `Check TTS credentials/quota; generation aborted to avoid loop.`
+        )
+      }
     } catch (audioError: any) {
       console.error(`[Podcast ${podcastId}] Audio generation failed:`, audioError)
       throw new Error(`Audio generation failed: ${audioError.message}`)
