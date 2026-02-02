@@ -64,18 +64,14 @@ export async function generateGeminiTTSAudio(
         parts: [{ text: trimmed }],
       },
     ],
-    // Ask explicitly for audio and voice
-    response_mime_type: 'audio/wav',
+    response_mime_type: 'audio/mp3', // request audio response directly
     generationConfig: {
       temperature: 0.6,
       topP: 0.95,
     },
-    speechConfig: {
-      voiceConfig: {
-        voiceName, // maps Kore/Charon/Aoede -> locale-specific names
-        languageCode: locale,
-      },
-    },
+    // Voice selection is not yet GA for preview TTS; include hint in prompt instead.
+    // Keeping voiceName variables in case API adds support; currently we let model choose best voice.
+    // speech_config is omitted to avoid mismatched casing issues.
   }
 
   const res = await fetch(url, {
@@ -90,11 +86,21 @@ export async function generateGeminiTTSAudio(
   }
 
   const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType: string; data: string } }> } }>
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{
+          inlineData?: { mimeType: string; data: string }
+          inline_data?: { mime_type: string; data: string }
+        }>
+      }
+    }>
   }
 
   const audioBase64 =
-    data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data
+    data.candidates
+      ?.flatMap((c) => c.content?.parts || [])
+      ?.map((p) => p.inlineData?.data || p.inline_data?.data)
+      ?.find((d) => !!d)
 
   if (!audioBase64) {
     throw new Error('Gemini TTS did not return inlineData audio')
@@ -104,7 +110,7 @@ export async function generateGeminiTTSAudio(
   const duration = Math.max(1, (wordCount / 135) * 60)
 
   return {
-    audioUrl: `data:audio/wav;base64,${audioBase64}`,
+    audioUrl: `data:audio/mpeg;base64,${audioBase64}`,
     duration,
   }
 }
