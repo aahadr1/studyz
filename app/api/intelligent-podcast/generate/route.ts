@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       targetDuration = 30,
       language = 'auto',
       style = 'conversational',
-      voiceProvider = 'openai',
+      voiceProvider = 'gemini',
       userPrompt = '',
     } = body as {
       documents?: Array<{
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       targetDuration?: number
       language?: string
       style?: 'educational' | 'conversational' | 'technical' | 'storytelling'
-      voiceProvider?: 'openai' | 'elevenlabs' | 'playht'
+      voiceProvider?: 'openai' | 'elevenlabs' | 'playht' | 'gemini'
       userPrompt?: string
     }
 

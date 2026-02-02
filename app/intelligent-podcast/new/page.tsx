@@ -24,7 +24,7 @@ export default function NewPodcastPage() {
   const [targetDuration, setTargetDuration] = useState(30)
   const [language, setLanguage] = useState('auto')
   const [style, setStyle] = useState('conversational')
-  const [voiceProvider, setVoiceProvider] = useState('openai')
+  const [voiceProvider, setVoiceProvider] = useState('gemini')
   const [userPrompt, setUserPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -562,15 +562,16 @@ export default function NewPodcastPage() {
 
             {/* Voice Provider */}
             <div>
-              <label className="block text-sm font-medium mb-2">Voice Quality</label>
+              <label className="block text-sm font-medium mb-2">Voice Quality / Provider</label>
               <select
                 value={voiceProvider}
                 onChange={(e) => setVoiceProvider(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2"
               >
-                <option value="openai">OpenAI (Good quality, fast)</option>
-                <option value="elevenlabs">ElevenLabs (Premium quality)</option>
-                <option value="playht">PlayHT (High quality)</option>
+                <option value="gemini">Google Gemini (multi-voice, fastest)</option>
+                <option value="openai">OpenAI (good quality, fast)</option>
+                <option value="elevenlabs">ElevenLabs (premium quality)</option>
+                <option value="playht">PlayHT (high quality)</option>
               </select>
             </div>
           </div>
