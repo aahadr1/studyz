@@ -19,13 +19,13 @@ const LANG_TO_LOCALE: Record<string, string> = {
 
 /** Map our voiceId (Kore, Charon, Aoede) + locale to Google TTS voice name. */
 function getVoiceName(locale: string, voiceId: string): string {
-  const base = locale
+  // Map to Gemini native voice names (preview set)
   const map: Record<string, string> = {
-    Kore: `${base}-Neural2-F`,
-    Charon: `${base}-Neural2-D`,
-    Aoede: `${base}-Neural2-J`,
+    Kore: 'Puck',      // bright female
+    Charon: 'Phoenix', // warm male
+    Aoede: 'Hana',     // friendly female
   }
-  return map[voiceId] || `${base}-Neural2-F`
+  return map[voiceId] || 'Puck'
 }
 
 function getGeminiKey(): string {
@@ -64,14 +64,21 @@ export async function generateGeminiTTSAudio(
         parts: [{ text: trimmed }],
       },
     ],
+    response_modality: 'audio',
     response_mime_type: 'audio/mp3', // request audio response directly
     generationConfig: {
       temperature: 0.6,
       topP: 0.95,
     },
-    // Voice selection is not yet GA for preview TTS; include hint in prompt instead.
-    // Keeping voiceName variables in case API adds support; currently we let model choose best voice.
-    // speech_config is omitted to avoid mismatched casing issues.
+    outputAudioConfig: {
+      audioEncoding: 'MP3',
+    },
+    speechConfig: {
+      voiceConfig: {
+        voiceName,
+        languageCode: locale,
+      },
+    },
   }
 
   const res = await fetch(url, {

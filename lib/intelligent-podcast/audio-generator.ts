@@ -11,13 +11,8 @@ export async function generateMultiVoiceAudio(
   language: string,
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
-  const isGeminiProvider = voiceProfiles.some(v => v.provider === 'gemini')
   console.log(`[Audio] generateMultiVoiceAudio: segments=${segments.length}, provider=${voiceProfiles[0]?.provider ?? 'unknown'}, hasOnProgress=${Boolean(onProgress)}`)
-
-  if (isGeminiProvider && segments.length > 1) {
-    console.log(`[Audio] Using Gemini conversation mode for ${segments.length} segments`)
-    return generateGeminiConversation(segments, voiceProfiles, language, onProgress)
-  }
+  // Force per-segment generation so every segment uses Gemini 2.5 Flash TTS (or provider-specific)
   console.log(`[Audio] Using individual segment generation for ${segments.length} segments`)
   return generateIndividualSegments(segments, voiceProfiles, language, onProgress)
 }
@@ -31,6 +26,8 @@ async function generateGeminiConversation(
   language: string,
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
+  // Conversation mode is currently disabled in generateMultiVoiceAudio to ensure per-segment Gemini 2.5 Flash TTS.
+  // This function remains for potential future use.
   console.log(`[Audio] Starting Gemini conversation generation for ${segments.length} segments`)
 
   if (onProgress) {
