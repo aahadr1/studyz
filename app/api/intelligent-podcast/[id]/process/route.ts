@@ -641,10 +641,11 @@ OUTPUT:
     }
 
     // STEP B: Generate audio in batches. maxDuration=800s — if we exceed it, Vercel kills the function
-    // before we can persist, so the next request sees 0 progress and "restarts". We persist incrementally
-    // (every PERSIST_EVERY_N_UPLOADS) so partial progress survives timeout.
-    const BATCH_SIZE = 50
-    const PERSIST_EVERY_N_UPLOADS = 5
+    // before we can persist, so the next request sees 0 progress and "restarts". We now:
+    // 1) Use smaller batches (default 10) to stay well under the execution ceiling
+    // 2) Persist after every single upload so no completed segment is ever lost
+    const BATCH_SIZE = 10
+    const PERSIST_EVERY_N_UPLOADS = 1
     const batch = remaining.slice(0, BATCH_SIZE)
 
     console.log(`[Podcast ${podcastId}] Processing batch of ${batch.length} segments (max ${BATCH_SIZE} per run)`)
