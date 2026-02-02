@@ -569,7 +569,6 @@ export default function NewPodcastPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2"
               >
                 <option value="gemini">Google Gemini (multi-voice, fastest)</option>
-                <option value="openai">OpenAI (good quality, fast)</option>
                 <option value="elevenlabs">ElevenLabs (premium quality)</option>
                 <option value="playht">PlayHT (high quality)</option>
               </select>

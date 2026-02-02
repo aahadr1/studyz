@@ -82,12 +82,19 @@ export async function POST(request: NextRequest) {
       targetDuration?: number
       language?: string
       style?: 'educational' | 'conversational' | 'technical' | 'storytelling'
-      voiceProvider?: 'openai' | 'elevenlabs' | 'playht' | 'gemini'
+      voiceProvider?: 'elevenlabs' | 'playht' | 'gemini'
       userPrompt?: string
     }
 
     if (!documents || documents.length === 0) {
       return NextResponse.json({ error: 'At least one document is required' }, { status: 400 })
+    }
+
+    if (!['elevenlabs', 'playht', 'gemini'].includes(voiceProvider)) {
+      return NextResponse.json(
+        { error: 'Unsupported voice provider', details: 'Use gemini, elevenlabs, or playht.' },
+        { status: 400 }
+      )
     }
 
     // Require page_images (MCQ-style: client renders PDF -> images)

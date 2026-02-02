@@ -57,12 +57,12 @@ function cleanTextForTTSFallback(text: string): string {
   return cleaned
 }
 
-export async function makeTtsReadyText(text: string, openai: OpenAI, language: TtsLanguage): Promise<string> {
+export async function makeTtsReadyText(text: string, _openai: OpenAI | null | undefined, language: TtsLanguage): Promise<string> {
   // IMPORTANT:
   // This function must NEVER shorten/summarize content, otherwise podcast audio
   // can become much shorter than the generated script. Use deterministic cleanup only.
   // (We keep the OpenAI param for API compatibility with callers.)
-  void openai
+  void _openai
   void language
   return cleanTextForTTSFallback(String(text || ''))
 }
@@ -132,4 +132,3 @@ export async function generateTtsAudioUrl(params: {
 
   return { audioUrl: String(prediction.output), voiceId, language: params.language, speed: safeSpeed }
 }
-

@@ -1,6 +1,5 @@
 import { PodcastSegment, VoiceProfile, PredictedQuestion } from '@/types/intelligent-podcast'
 import { makeTtsReadyText } from '../tts'
-import { getOpenAI } from './openai-client'
 import { generateGeminiTTSAudio, generateGeminiConversationAudio } from './google-tts-client'
 
 /**
@@ -248,8 +247,7 @@ async function generateElevenLabsAudio(
     throw new Error('ElevenLabs API key not configured')
   }
 
-  const openai = getOpenAI()
-  const cleanedText = await makeTtsReadyText(text, openai, language as any)
+  const cleanedText = await makeTtsReadyText(text, null, language as any)
 
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceProfile.voiceId}`,
@@ -306,8 +304,7 @@ async function generatePlayHTAudio(
     throw new Error('PlayHT credentials not configured')
   }
 
-  const openai = getOpenAI()
-  const cleanedText = await makeTtsReadyText(text, openai, language as any)
+  const cleanedText = await makeTtsReadyText(text, null, language as any)
 
   const response = await fetch('https://api.play.ht/api/v2/tts', {
     method: 'POST',
@@ -349,92 +346,7 @@ async function generatePlayHTAudio(
 }
 
 /**
- * Generate audio using OpenAI TTS (fallback, already available)
- */
-async function generateOpenAIAudio(
-  text: string,
-  voiceProfile: VoiceProfile,
-  language: string
-): Promise<{ audioUrl: string; duration: number }> {
-  console.log(`[Audio] Starting OpenAI TTS for ${text.length} characters`)
-  
-  if (!text || text.trim().length === 0) {
-    throw new Error('Cannot generate audio for empty text')
-  }
-  
-  if (text.length > 4096) {
-    console.warn(`[Audio] Text too long (${text.length} chars), truncating to 4096`)
-    text = text.slice(0, 4096)
-  }
-
-  const openai = getOpenAI()
-  let cleanedText: string
-  
-  try {
-    cleanedText = await makeTtsReadyText(text, openai, language as any)
-    console.log(`[Audio] Text cleaned, length: ${cleanedText.length}`)
-  } catch (cleanError) {
-    console.warn(`[Audio] Text cleaning failed, using original:`, cleanError)
-    cleanedText = text
-  }
-
-  // Map role to OpenAI voice
-  const voiceMap: Record<string, any> = {
-    host: 'nova', // Female
-    expert: 'onyx', // Male
-    simplifier: 'shimmer', // Female
-  }
-
-  const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'alloy'
-
-  try {
-    console.log(`[Audio] Calling OpenAI TTS with voice: ${voice}, text length: ${cleanedText.length}`)
-    
-    // Add timeout wrapper for the TTS call
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('TTS timeout after 30 seconds')), 30000)
-    })
-    
-    const ttsPromise = openai.audio.speech.create({
-      model: 'tts-1', // Use standard model for reliability
-      voice: voice as any,
-      input: cleanedText,
-      speed: 1.0,
-    })
-
-    const response = await Promise.race([ttsPromise, timeoutPromise]) as any
-    console.log(`[Audio] OpenAI TTS response received`)
-
-    const audioBuffer = await response.arrayBuffer()
-    console.log(`[Audio] Audio buffer size: ${audioBuffer.byteLength} bytes`)
-    
-    const audioBase64 = Buffer.from(audioBuffer).toString('base64')
-    const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
-
-    // Estimate duration more accurately
-    const wordCount = cleanedText.split(/\s+/).filter(Boolean).length
-    const estimatedDuration = Math.max(1, (wordCount / 135) * 60) // Ensure minimum 1 second
-
-    console.log(`[Audio] OpenAI TTS completed successfully - Words: ${wordCount}, Duration: ${estimatedDuration.toFixed(1)}s`)
-
-    return {
-      audioUrl,
-      duration: estimatedDuration,
-    }
-  } catch (ttsError: any) {
-    console.error(`[Audio] OpenAI TTS failed:`, ttsError)
-    console.error(`[Audio] Error details:`, {
-      message: ttsError.message,
-      code: ttsError.code,
-      type: ttsError.type,
-      status: ttsError.status
-    })
-    throw new Error(`OpenAI TTS failed: ${ttsError.message || 'Unknown error'}`)
-  }
-}
-
-/**
- * Pre-generate audio for predicted questions
+ * Pre-generate audio for predicted questions (uses Gemini TTS)
  */
 export async function generatePredictedQuestionsAudio(
   questions: PredictedQuestion[],
@@ -454,8 +366,8 @@ export async function generatePredictedQuestionsAudio(
     }
 
     try {
-      // Generate audio for the answer using host voice
-      const result = await generateOpenAIAudio(question.answer, hostVoice, language)
+      // Generate audio for the answer using host voice via Gemini TTS
+      const result = await generateGeminiTTSAudio(question.answer, hostVoice, language)
 
       processedQuestions.push({
         ...question,
