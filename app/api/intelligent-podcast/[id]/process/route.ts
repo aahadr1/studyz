@@ -640,9 +640,11 @@ OUTPUT:
       return NextResponse.json({ success: true })
     }
 
-    // STEP B: Generate audio in batches. maxDuration=800s per invocation — process as many segments as fit.
-    // ~5–15s per TTS segment → aim for up to ~80 segments per run to use the full window.
-    const BATCH_SIZE = 80
+    // STEP B: Generate audio in batches. maxDuration=800s — if we exceed it, Vercel kills the function
+    // before we can persist, so the next request sees 0 progress and "restarts". We persist incrementally
+    // (every PERSIST_EVERY_N_UPLOADS) so partial progress survives timeout.
+    const BATCH_SIZE = 50
+    const PERSIST_EVERY_N_UPLOADS = 5
     const batch = remaining.slice(0, BATCH_SIZE)
 
     console.log(`[Podcast ${podcastId}] Processing batch of ${batch.length} segments (max ${BATCH_SIZE} per run)`)
@@ -734,9 +736,38 @@ OUTPUT:
       const { data: publicData } = supabase.storage.from('podcast-audio').getPublicUrl(path)
       byId[seg.id] = { ...seg, audioUrl: publicData.publicUrl }
       uploadedCount++
+
+      // Persist incrementally so if the function is killed by timeout (800s), progress is not lost
+      const isLast = i === batchWithAudio.length - 1
+      const shouldPersist = isLast || (uploadedCount % PERSIST_EVERY_N_UPLOADS === 0)
+      if (shouldPersist) {
+        const merged = segments.map((s) => byId[s.id] || s)
+        const timingsPartial = recomputeTimings(merged)
+        const chaptersPartial = recomputeChapterTimes(chapters, timingsPartial.segments)
+        const doneCount = timingsPartial.segments.filter(
+          (s: any) => typeof s?.audioUrl === 'string' && s.audioUrl.length > 0
+        ).length
+        const pct = timingsPartial.segments.length > 0 ? doneCount / timingsPartial.segments.length : 0
+        const { error: incError } = await supabase
+          .from('intelligent_podcasts')
+          .update({
+            duration: timingsPartial.totalDuration,
+            chapters: chaptersPartial,
+            segments: timingsPartial.segments,
+            status: 'generating',
+            generation_progress: Math.min(92, 65 + Math.round(pct * 27)),
+            description: `Audio generation: ${doneCount}/${timingsPartial.segments.length} segments completed`,
+          })
+          .eq('id', podcastId)
+          .eq('user_id', user.id)
+        if (incError) {
+          console.error(`[Podcast ${podcastId}] Incremental persist failed at ${uploadedCount}:`, incError.message)
+        } else {
+          console.log(`[Podcast ${podcastId}] Incremental persist: ${doneCount}/${timingsPartial.segments.length} segments saved`)
+        }
+      }
     }
 
-    console.log(`[Podcast ${podcastId}] Upload complete: ${uploadedCount} files. Merging segments and persisting...`)
     const mergedSegments = segments.map((s) => byId[s.id] || s)
     const timings = recomputeTimings(mergedSegments)
     const updatedChapters = recomputeChapterTimes(chapters, timings.segments)
@@ -744,10 +775,8 @@ OUTPUT:
     const newRemaining = timings.segments.filter((s: any) => !(typeof s?.audioUrl === 'string' && s.audioUrl.length > 0))
     const newCompleted = timings.segments.length - newRemaining.length
     const newPctAudio = timings.segments.length > 0 ? newCompleted / timings.segments.length : 0
-    
-    // Log progress changes
-    const progressChange = newCompleted - completed
-    console.log(`[Podcast ${podcastId}] Persisting: newCompleted=${newCompleted}, total=${timings.segments.length}, change=+${progressChange}`)
+
+    console.log(`[Podcast ${podcastId}] Upload complete: ${uploadedCount} files. Final persist: ${newCompleted}/${timings.segments.length}`)
 
     const { data: updatedRow, error: segmentsUpdateError } = await supabase
       .from('intelligent_podcasts')
@@ -765,33 +794,12 @@ OUTPUT:
       .single()
 
     if (segmentsUpdateError || !updatedRow) {
-      console.error(`[Podcast ${podcastId}] Segments update failed (audio batch not persisted):`, segmentsUpdateError)
+      console.error(`[Podcast ${podcastId}] Final segments update failed:`, segmentsUpdateError)
       throw new Error(
         segmentsUpdateError
           ? `Failed to save audio progress: ${segmentsUpdateError.message}. Retry may duplicate work.`
           : 'Failed to persist segments (no row updated). Check RLS or row existence.'
       )
-    }
-
-    // Verify persistence: re-fetch and ensure at least newCompleted segments have audioUrl
-    const { data: verifyRow, error: verifyError } = await supabase
-      .from('intelligent_podcasts')
-      .select('segments')
-      .eq('id', podcastId)
-      .eq('user_id', user.id)
-      .single()
-
-    if (!verifyError && Array.isArray(verifyRow?.segments)) {
-      const withAudio = (verifyRow.segments as any[]).filter(
-        (s: any) => typeof s?.audioUrl === 'string' && s.audioUrl.length > 0
-      ).length
-      console.log(`[Podcast ${podcastId}] Verify: DB now has ${withAudio}/${verifyRow.segments.length} segments with audioUrl (expected >= ${newCompleted})`)
-      if (withAudio < newCompleted) {
-        console.error(`[Podcast ${podcastId}] Persistence mismatch: wrote ${newCompleted} but DB has ${withAudio}`)
-        throw new Error(`Audio progress was not fully saved (DB has ${withAudio}, expected ${newCompleted}). Please try again.`)
-      }
-    } else {
-      console.warn(`[Podcast ${podcastId}] Could not verify persistence:`, verifyError?.message)
     }
 
     return NextResponse.json({
