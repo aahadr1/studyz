@@ -17,15 +17,14 @@ const LANG_TO_LOCALE: Record<string, string> = {
   de: 'de-DE',
 }
 
-/** Map our voiceId (Kore, Charon, Aoede) + locale to Google TTS voice name. */
-function getVoiceName(locale: string, voiceId: string): string {
-  // Map to Gemini native voice names (preview set)
+/** Map our voiceId (Kore, Charon, Aoede) to Gemini prebuilt voice names. */
+function getVoiceName(_locale: string, voiceId: string): string {
   const map: Record<string, string> = {
-    Kore: 'Puck',      // bright female
-    Charon: 'Phoenix', // warm male
-    Aoede: 'Hana',     // friendly female
+    Kore: 'Kore',
+    Charon: 'Charon',
+    Aoede: 'Aoede',
   }
-  return map[voiceId] || 'Puck'
+  return map[voiceId] || 'Kore'
 }
 
 function getGeminiKey(): string {
@@ -60,23 +59,19 @@ export async function generateGeminiTTSAudio(
   const body = {
     contents: [
       {
-        role: 'user',
         parts: [{ text: trimmed }],
       },
     ],
-    response_modality: 'audio',
-    response_mime_type: 'audio/mp3', // request audio response directly
     generationConfig: {
+      responseModalities: ['AUDIO'],
       temperature: 0.6,
       topP: 0.95,
-    },
-    outputAudioConfig: {
-      audioEncoding: 'MP3',
-    },
-    speechConfig: {
-      voiceConfig: {
-        voiceName,
-        languageCode: locale,
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: {
+            voiceName,
+          },
+        },
       },
     },
   }
@@ -166,13 +161,11 @@ export async function generateGeminiConversationAudio(
   const body = {
     contents: [
       {
-        role: 'user',
         parts: [{ text: prompt }],
       },
     ],
-    // Response as audio
-    response_mime_type: 'audio/wav',
     generationConfig: {
+      responseModalities: ['AUDIO'],
       temperature: 0.6,
     },
   }
