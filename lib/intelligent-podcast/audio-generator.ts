@@ -1,6 +1,7 @@
 import { PodcastSegment, VoiceProfile, PredictedQuestion } from '@/types/intelligent-podcast'
 import { makeTtsReadyText } from '../tts'
-import { generateGeminiTTSAudio, generateGeminiConversationAudio } from './google-tts-client'
+// Gemini TTS disabled; OpenAI only
+import getOpenAI from '../openai'
 
 /**
  * Generate audio for all podcast segments with multiple voices
@@ -12,7 +13,6 @@ export async function generateMultiVoiceAudio(
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
   console.log(`[Audio] generateMultiVoiceAudio: segments=${segments.length}, provider=${voiceProfiles[0]?.provider ?? 'unknown'}, hasOnProgress=${Boolean(onProgress)}`)
-  // Force per-segment generation so every segment uses Gemini 2.5 Flash TTS (or provider-specific)
   console.log(`[Audio] Using individual segment generation for ${segments.length} segments`)
   return generateIndividualSegments(segments, voiceProfiles, language, onProgress)
 }
@@ -159,25 +159,10 @@ async function generateIndividualSegments(
 
       console.log(`[Audio] Starting TTS for segment ${segmentNumber}...`)
       
-      if (voiceProfile.provider === 'gemini') {
-        // Use Google Cloud Gemini TTS
-        const result = await generateGeminiTTSAudio(segment.text, voiceProfile, language)
-        audioUrl = result.audioUrl
-        actualDuration = result.duration
-      } else if (voiceProfile.provider === 'elevenlabs') {
-        const result = await generateElevenLabsAudio(segment.text, voiceProfile, language)
-        audioUrl = result.audioUrl
-        actualDuration = result.duration
-      } else if (voiceProfile.provider === 'playht') {
-        const result = await generatePlayHTAudio(segment.text, voiceProfile, language)
-        audioUrl = result.audioUrl
-        actualDuration = result.duration
-      } else {
-        // Default to Google TTS to avoid OpenAI dependency
-        const result = await generateGeminiTTSAudio(segment.text, voiceProfile, language)
-        audioUrl = result.audioUrl
-        actualDuration = result.duration
-      }
+      // Only OpenAI TTS is supported for podcast audio
+      const result = await generateOpenAIAudio(segment.text, voiceProfile, language)
+      audioUrl = result.audioUrl
+      actualDuration = result.duration
 
       processedSegments.push({
         ...segment,
@@ -364,7 +349,7 @@ export async function generatePredictedQuestionsAudio(
 
     try {
       // Generate audio for the answer using host voice via Gemini TTS
-      const result = await generateGeminiTTSAudio(question.answer, hostVoice, language)
+      const result = await generateOpenAIAudio(question.answer, hostVoice, language)
 
       processedQuestions.push({
         ...question,
@@ -414,4 +399,54 @@ export async function postProcessAudio(audioUrl: string): Promise<string> {
 
   console.log('[Audio] Post-processing not implemented - using original audio')
   return audioUrl
+}
+
+/**
+ * Generate audio using OpenAI TTS (tts-1)
+ */
+async function generateOpenAIAudio(
+  text: string,
+  voiceProfile: VoiceProfile,
+  language: string
+): Promise<{ audioUrl: string; duration: number }> {
+  if (!text || text.trim().length === 0) {
+    throw new Error('Cannot generate audio for empty text')
+  }
+
+  // Clean / trim input
+  const openai = getOpenAI()
+  let cleanedText = text.slice(0, 5000)
+  try {
+    cleanedText = await makeTtsReadyText(cleanedText, openai as any, language as any)
+  } catch {
+    // ignore cleaning errors, use raw
+  }
+
+  // Map role to OpenAI voice
+  const voiceMap: Record<string, string> = {
+    host: 'alloy',
+    expert: 'onyx',
+    simplifier: 'shimmer',
+  }
+  const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'alloy'
+
+  // Call OpenAI TTS
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TTS timeout after 30s')), 30000))
+  const ttsPromise = (openai as any).audio.speech.create({
+    model: 'tts-1',
+    voice,
+    input: cleanedText,
+    speed: 1.0,
+  })
+
+  const response = (await Promise.race([ttsPromise, timeout])) as any
+  const audioBuffer = await response.arrayBuffer()
+  const audioBase64 = Buffer.from(audioBuffer).toString('base64')
+  const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
+
+  // Estimate duration
+  const wordCount = cleanedText.split(/\s+/).filter(Boolean).length
+  const duration = Math.max(1, (wordCount / 135) * 60)
+
+  return { audioUrl, duration }
 }

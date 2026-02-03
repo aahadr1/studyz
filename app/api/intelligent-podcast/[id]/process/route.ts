@@ -66,67 +66,33 @@ export async function POST(
     }
   }
 
-  const geminiProfiles: VoiceProfile[] = [
-    {
-      id: 'host-voice',
-      role: 'host',
-      name: 'Sophie',
-      provider: 'gemini',
-      voiceId: 'Kore',
-      description: 'Engaging female host who guides conversations with warmth and curiosity',
-    },
-    {
-      id: 'expert-voice',
-      role: 'expert',
-      name: 'Marcus',
-      provider: 'gemini',
-      voiceId: 'Charon',
-      description: 'Authoritative male expert who explains complex topics with confidence',
-    },
-    {
-      id: 'simplifier-voice',
-      role: 'simplifier',
-      name: 'Emma',
-      provider: 'gemini',
-      voiceId: 'Aoede',
-      description: 'Friendly female simplifier who makes difficult concepts accessible',
-    },
-  ]
-
-  const voiceProfilesForProvider = (provider: 'elevenlabs' | 'playht' | 'gemini'): VoiceProfile[] => {
-    if (provider === 'gemini') return geminiProfiles
-
-    if (provider === 'elevenlabs') {
-      return [
-        {
-          id: 'host-voice',
-          role: 'host',
-          name: 'Sophie',
-          provider: 'elevenlabs',
-          voiceId: '21m00Tcm4TlvDq8ikWAM',
-          description: 'Curious host who guides the conversation and asks sharp questions',
-        },
-        {
-          id: 'expert-voice',
-          role: 'expert',
-          name: 'Marcus',
-          provider: 'elevenlabs',
-          voiceId: 'pNInz6obpgDQGcFmaJgB',
-          description: 'Deep expert who explains mechanisms, details, and nuance',
-        },
-        {
-          id: 'simplifier-voice',
-          role: 'simplifier',
-          name: 'Emma',
-          provider: 'elevenlabs',
-          voiceId: 'EXAVITQu4vr4xnSDxMaL',
-          description: 'Simplifier who uses analogies and step-by-step explanations',
-        },
-      ]
-    }
-
-    // NOTE: PlayHT voice IDs are project-specific; until configured, reuse Gemini voices.
-    return geminiProfiles
+  const voiceProfilesForProvider = (): VoiceProfile[] => {
+    return [
+      {
+        id: 'host-voice',
+        role: 'host',
+        name: 'Sophie',
+        provider: 'openai',
+        voiceId: 'alloy',
+        description: 'Curious host who guides the conversation and asks sharp questions',
+      },
+      {
+        id: 'expert-voice',
+        role: 'expert',
+        name: 'Marcus',
+        provider: 'openai',
+        voiceId: 'onyx',
+        description: 'Deep expert who explains mechanisms, details, and nuance',
+      },
+      {
+        id: 'simplifier-voice',
+        role: 'simplifier',
+        name: 'Emma',
+        provider: 'openai',
+        voiceId: 'shimmer',
+        description: 'Simplifier who uses analogies and step-by-step explanations',
+      },
+    ]
   }
 
   const audioBytesFromUrl = async (audioUrl: string): Promise<{ bytes: Buffer; contentType: string }> => {
@@ -240,12 +206,8 @@ OUTPUT:
         ? existing.language
         : (config?.language && config.language !== 'auto' ? config.language : 'en')
 
-    let voiceProvider: 'elevenlabs' | 'playht' | 'gemini' = (config?.voiceProvider as any) || 'gemini'
-    if (!['elevenlabs', 'playht', 'gemini'].includes(voiceProvider)) {
-      console.warn(`[Podcast ${podcastId}] Unsupported voiceProvider ${voiceProvider}, defaulting to gemini`)
-      voiceProvider = 'gemini'
-    }
-    const voiceProfiles = voiceProfilesForProvider(voiceProvider)
+    const voiceProvider = 'openai'
+    const voiceProfiles = voiceProfilesForProvider()
 
     // STEP A: If script not present, do OCR + analysis + script, and save immediately (so audio can resume later).
     if (!hasScript) {

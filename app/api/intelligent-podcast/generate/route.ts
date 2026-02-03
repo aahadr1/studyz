@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       targetDuration = 30,
       language = 'auto',
       style = 'conversational',
-      voiceProvider = 'gemini',
+      voiceProvider = 'openai',
       userPrompt = '',
     } = body as {
       documents?: Array<{
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       targetDuration?: number
       language?: string
       style?: 'educational' | 'conversational' | 'technical' | 'storytelling'
-      voiceProvider?: 'elevenlabs' | 'playht' | 'gemini'
+      voiceProvider?: 'openai'
       userPrompt?: string
     }
 
@@ -90,9 +90,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'At least one document is required' }, { status: 400 })
     }
 
-    if (!['elevenlabs', 'playht', 'gemini'].includes(voiceProvider)) {
+    if (voiceProvider !== 'openai') {
       return NextResponse.json(
-        { error: 'Unsupported voice provider', details: 'Use gemini, elevenlabs, or playht.' },
+        { error: 'Unsupported voice provider', details: 'Only openai TTS is supported.' },
         { status: 400 }
       )
     }

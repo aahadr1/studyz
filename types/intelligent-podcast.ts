@@ -170,7 +170,7 @@ export interface VoiceProfile {
   id: string
   role: 'host' | 'expert' | 'simplifier'
   name: string
-  provider: 'elevenlabs' | 'playht' | 'gemini'
+  provider: 'openai'
   voiceId: string
   description: string
   sampleAudioUrl?: string
