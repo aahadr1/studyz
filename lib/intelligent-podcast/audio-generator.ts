@@ -328,21 +328,21 @@ async function generateOpenAIAudio(
     // ignore cleaning errors, use raw
   }
 
-  // Map role to OpenAI voice
+  // Map role to OpenAI warmer voices
   const voiceMap: Record<string, string> = {
-    host: 'alloy',
+    host: 'nova',
     expert: 'onyx',
     simplifier: 'shimmer',
   }
-  const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'alloy'
+  const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'nova'
 
   // Call OpenAI TTS
   const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TTS timeout after 30s')), 30000))
   const ttsPromise = (openai as any).audio.speech.create({
-    model: 'tts-1',
+    model: 'tts-1-hd',
     voice,
     input: cleanedText,
-    speed: 1.0,
+    speed: 0.93,
   })
 
   const response = (await Promise.race([ttsPromise, timeout])) as any
