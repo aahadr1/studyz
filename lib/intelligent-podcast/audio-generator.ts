@@ -308,7 +308,7 @@ export async function postProcessAudio(audioUrl: string): Promise<string> {
 }
 
 /**
- * Generate audio using OpenAI TTS (tts-1)
+ * Generate audio using OpenAI TTS (gpt-4o-mini-tts)
  */
 async function generateOpenAIAudio(
   text: string,
@@ -328,27 +328,27 @@ async function generateOpenAIAudio(
     // ignore cleaning errors, use raw
   }
 
-  // Map role to warmer voices and vary speed slightly to avoid monotone delivery
+  // Map role to voices and speaking instructions for gpt-4o-mini-tts
   const voiceMap: Record<string, string> = {
     host: 'shimmer',    // soft, inviting
     expert: 'onyx',     // rich, authoritative
     simplifier: 'nova', // bright, energetic
   }
-  const speedMap: Record<string, number> = {
-    host: 0.97,
-    expert: 1.0,
-    simplifier: 1.02,
+  const instructionsMap: Record<string, string> = {
+    host: 'Speak in a warm, curious, and conversational tone like a friendly podcast host. Be engaging and inviting, with natural pauses and emphasis. Vary your intonation to keep the listener interested.',
+    expert: 'Speak in a confident, authoritative, and knowledgeable tone like a subject-matter expert on a podcast. Be clear and articulate, with a rich and steady delivery. Use natural emphasis on key terms.',
+    simplifier: 'Speak in a bright, energetic, and approachable tone like someone who loves making complex things simple. Be enthusiastic and use a lively pace with natural variation in pitch and rhythm.',
   }
   const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'shimmer'
-  const speed = speedMap[voiceProfile.role] ?? 0.98
+  const instructions = instructionsMap[voiceProfile.role] || instructionsMap.host
 
-  // Call OpenAI TTS
+  // Call OpenAI TTS with gpt-4o-mini-tts for natural, expressive speech
   const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TTS timeout after 30s')), 30000))
   const ttsPromise = (openai as any).audio.speech.create({
-    model: 'tts-1-hd',
+    model: 'gpt-4o-mini-tts',
     voice,
     input: cleanedText,
-    speed,
+    instructions,
   })
 
   const response = (await Promise.race([ttsPromise, timeout])) as any
