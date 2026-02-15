@@ -8,8 +8,7 @@ import { runGemini3Flash } from '@/lib/intelligent-podcast/gemini-client'
 import { DocumentContent, VoiceProfile, PodcastChapter, PodcastSegment } from '@/types/intelligent-podcast'
 
 export const runtime = 'nodejs'
-// Vercel Pro Serverless Functions require maxDuration between 1 and 800.
-export const maxDuration = 800 // long-running generation (resumable)
+export const maxDuration = 300 // Vercel Hobby max; generation is resumable across invocations
 
 async function createAuthClient() {
   const cookieStore = await cookies()
@@ -577,7 +576,7 @@ OUTPUT:
       return NextResponse.json({ success: true })
     }
 
-    // STEP B: Generate audio in batches. maxDuration=800s — if we exceed it, Vercel kills the function
+    // STEP B: Generate audio in batches. maxDuration=300s — if we exceed it, Vercel kills the function
     // before we can persist, so the next request sees 0 progress and "restarts". We now:
     // 1) Use smaller batches (default 10) to stay well under the execution ceiling
     // 2) Persist after every single upload so no completed segment is ever lost
