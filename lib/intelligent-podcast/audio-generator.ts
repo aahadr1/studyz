@@ -308,7 +308,7 @@ export async function postProcessAudio(audioUrl: string): Promise<string> {
 }
 
 /**
- * Generate audio using OpenAI TTS (tts-1)
+ * Generate audio using OpenAI gpt-4o-mini-tts (steerable, natural-sounding)
  */
 async function generateOpenAIAudio(
   text: string,
@@ -328,27 +328,28 @@ async function generateOpenAIAudio(
     // ignore cleaning errors, use raw
   }
 
-  // Map role to warmer voices and vary speed slightly to avoid monotone delivery
+  // Map role to expressive voices (coral/sage/ash recommended for gpt-4o-mini-tts)
   const voiceMap: Record<string, string> = {
-    host: 'shimmer',    // soft, inviting
-    expert: 'onyx',     // rich, authoritative
-    simplifier: 'nova', // bright, energetic
+    host: 'coral',      // warm, engaging, conversational
+    expert: 'ash',      // deep, authoritative, clear
+    simplifier: 'sage', // bright, friendly, approachable
   }
-  const speedMap: Record<string, number> = {
-    host: 0.97,
-    expert: 1.0,
-    simplifier: 1.02,
+  // Role-specific speaking style instructions for gpt-4o-mini-tts
+  const instructionsMap: Record<string, string> = {
+    host: 'You are a warm, curious podcast host. Speak in a natural conversational tone with genuine enthusiasm. Vary your pacing — speed up slightly when excited about a topic, pause briefly before key points for emphasis. Use rising intonation for questions. Sound like you are having a real conversation, not reading a script.',
+    expert: 'You are a knowledgeable expert being interviewed on a podcast. Speak with calm authority and confidence. Use a measured, thoughtful pace. Emphasize key technical terms naturally. Occasionally pause to let important points land. Sound passionate about your subject but never condescending.',
+    simplifier: 'You are a friendly educator who makes complex topics accessible. Speak with warmth and energy. Use an encouraging, upbeat tone. Slow down when explaining difficult concepts and speed up during casual transitions. Sound genuinely excited to help the listener understand.',
   }
-  const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'shimmer'
-  const speed = speedMap[voiceProfile.role] ?? 0.98
+  const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'coral'
+  const instructions = instructionsMap[voiceProfile.role] || instructionsMap.host
 
-  // Call OpenAI TTS
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TTS timeout after 30s')), 30000))
+  // Call OpenAI TTS (gpt-4o-mini-tts with steerable instructions)
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TTS timeout after 60s')), 60000))
   const ttsPromise = (openai as any).audio.speech.create({
-    model: 'tts-1-hd',
+    model: 'gpt-4o-mini-tts',
     voice,
     input: cleanedText,
-    speed,
+    instructions,
   })
 
   const response = (await Promise.race([ttsPromise, timeout])) as any

@@ -73,7 +73,7 @@ export async function POST(
         role: 'host',
         name: 'Sophie',
         provider: 'openai',
-        voiceId: 'alloy',
+        voiceId: 'coral',
         description: 'Curious host who guides the conversation and asks sharp questions',
       },
       {
@@ -81,7 +81,7 @@ export async function POST(
         role: 'expert',
         name: 'Marcus',
         provider: 'openai',
-        voiceId: 'onyx',
+        voiceId: 'ash',
         description: 'Deep expert who explains mechanisms, details, and nuance',
       },
       {
@@ -89,7 +89,7 @@ export async function POST(
         role: 'simplifier',
         name: 'Emma',
         provider: 'openai',
-        voiceId: 'shimmer',
+        voiceId: 'sage',
         description: 'Simplifier who uses analogies and step-by-step explanations',
       },
     ]
