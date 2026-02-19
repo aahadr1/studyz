@@ -41,7 +41,7 @@ export interface PodcastChapter {
 export interface PodcastSegment {
   id: string
   chapterId: string
-  speaker: 'host' | 'expert' | 'simplifier'
+  speaker: 'host' | 'expert'
   text: string
   audioUrl?: string
   duration: number
@@ -168,7 +168,7 @@ export interface PodcastSession {
 
 export interface VoiceProfile {
   id: string
-  role: 'host' | 'expert' | 'simplifier'
+  role: 'host' | 'expert'
   name: string
   provider: 'gemini' | 'openai'
   voiceId: string

@@ -9,27 +9,17 @@ import {
   type MultiSpeakerSegmentInput,
 } from './google-tts-client'
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-type SingleGroup = { type: 'single'; index: number }
-type MultiGroup  = { type: 'multi'; indices: number[] }
-type Group = SingleGroup | MultiGroup
-
-// Max segments to bundle in a single multi-speaker call (2–4 turns)
-const CROSSOVER_MAX_SEGMENTS = 4
-// Max words per individual segment to qualify for multi-speaker batching
-const CROSSOVER_MAX_WORDS_PER_SEGMENT = 200
+/** Max chars per multi-speaker chunk (matches google-tts-client MULTI_SPEAKER_CHAR_LIMIT) */
+const CHUNK_CHAR_LIMIT = 3000
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Generate audio for all podcast segments using Gemini 2.5 TTS.
+ * Generate audio for all podcast segments using Gemini 2.5 multi-speaker TTS.
  *
- * Hybrid strategy:
- * - Consecutive 2-speaker exchanges (crossover groups) → Gemini multi-speaker call
- *   → PCM split proportionally → per-segment WAV URLs
- * - Solo turns and 3-speaker moments → Gemini single-speaker call per segment
- * - If multi-speaker call fails → retry each segment individually (single-speaker)
+ * Strategy: group ALL consecutive segments into multi-speaker chunks (≤3000 chars),
+ * synthesize each chunk in a single API call, then split the PCM back per-segment.
+ * Falls back to single-speaker per-segment only if the multi-speaker call fails.
  */
 export async function generateMultiVoiceAudio(
   segments: PodcastSegment[],
@@ -37,18 +27,8 @@ export async function generateMultiVoiceAudio(
   language: string,
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
-  console.log(`[Audio] generateMultiVoiceAudio: ${segments.length} segments, hybrid mode`)
-  return generateHybridSegments(segments, voiceProfiles, language, onProgress)
-}
+  console.log(`[Audio] generateMultiVoiceAudio: ${segments.length} segments, multi-speaker mode`)
 
-// ─── Core hybrid engine ─────────────────────────────────────────────────────
-
-async function generateHybridSegments(
-  segments: PodcastSegment[],
-  voiceProfiles: VoiceProfile[],
-  language: string,
-  onProgress?: (current: number, total: number, step: string) => Promise<void> | void
-): Promise<PodcastSegment[]> {
   if (segments.length === 0) {
     console.warn('[Audio] No segments provided')
     return []
@@ -61,99 +41,90 @@ async function generateHybridSegments(
     )
   )
 
-  // Detect groups: multi-speaker crossover bundles vs single-speaker segments
-  const groups = detectCrossoverGroups(segments, cleanedTexts)
-
-  const multiGroupCount = groups.filter(g => g.type === 'multi').length
-  const singleGroupCount = groups.filter(g => g.type === 'single').length
-  console.log(`[Audio] Groups: ${groups.length} total — ${multiGroupCount} multi-speaker, ${singleGroupCount} single-speaker`)
+  // Group segments into multi-speaker chunks
+  const chunks = buildChunks(segments, cleanedTexts)
+  console.log(`[Audio] Grouped ${segments.length} segments into ${chunks.length} multi-speaker chunks`)
 
   // Result array aligned with original segments
   const results: Array<{ audioUrl: string; duration: number }> = new Array(segments.length)
   let completedSegments = 0
 
-  for (const group of groups) {
-    if (group.type === 'single') {
-      const idx = group.index
-      const segment = segments[idx]
-      const cleanedText = cleanedTexts[idx]
+  for (const chunk of chunks) {
+    const indices = chunk.indices
+    const groupSegments = indices.map(i => segments[i])
 
-      if (onProgress) {
-        await onProgress(completedSegments, segments.length, `Generating audio — ${segment.speaker} (segment ${idx + 1}/${segments.length})`)
+    if (onProgress) {
+      const speakers = [...new Set(groupSegments.map(s => s.speaker))].join('+')
+      await onProgress(
+        completedSegments,
+        segments.length,
+        `Multi-speaker chunk (${speakers}) — segments ${indices[0] + 1}–${indices[indices.length - 1] + 1}`
+      )
+    }
+
+    const chunkInputs: MultiSpeakerSegmentInput[] = indices.map((origIdx, i) => {
+      const seg = segments[origIdx]
+      const voiceId = ROLE_VOICE_MAP[seg.speaker] || 'Aoede'
+      const displayName = ROLE_DISPLAY_NAME[seg.speaker] || seg.speaker
+      return {
+        id: seg.id || String(origIdx),
+        text: cleanedTexts[origIdx],
+        role: seg.speaker,
+        voiceId,
+        displayName,
       }
+    })
 
-      const voiceProfile = resolveVoiceProfile(segment.speaker, voiceProfiles)
-      const result = await generateSingleSegment(cleanedText, voiceProfile, language, idx + 1, segments.length)
-      results[idx] = result
-      completedSegments++
+    // Filter out segments with empty text
+    const validInputs = chunkInputs.filter(s => s.text.trim().length > 0)
 
-      if (onProgress) {
-        await onProgress(completedSegments, segments.length, `Segment ${idx + 1}/${segments.length} done`)
-      }
-
-      // Rate-limit buffer between calls
-      await delay(200)
-
-    } else {
-      // Multi-speaker crossover group
-      const indices = group.indices
-      const groupSegments = indices.map(i => segments[i])
-      const groupTexts = indices.map(i => cleanedTexts[i])
-
-      if (onProgress) {
-        const speakers = [...new Set(groupSegments.map(s => s.speaker))].join('+')
-        await onProgress(
-          completedSegments,
-          segments.length,
-          `Multi-speaker chunk (${speakers}) — segments ${indices[0] + 1}–${indices[indices.length - 1] + 1}`
-        )
-      }
-
-      const chunkInputs: MultiSpeakerSegmentInput[] = indices.map((origIdx, i) => {
-        const seg = segments[origIdx]
-        const voiceId = ROLE_VOICE_MAP[seg.speaker] || 'Aoede'
-        const displayName = ROLE_DISPLAY_NAME[seg.speaker] || seg.speaker
-        return {
-          id: seg.id || String(origIdx),
-          text: groupTexts[i],
-          role: seg.speaker,
-          voiceId,
-          displayName,
-        }
-      })
-
+    if (validInputs.length >= 2) {
+      // Multi-speaker path
       try {
-        const { results: chunkResults } = await generateGeminiMultiSpeakerChunk(chunkInputs, language)
-        for (let i = 0; i < indices.length; i++) {
-          const origIdx = indices[i]
-          results[origIdx] = {
-            audioUrl: chunkResults[i]?.audioUrl ?? '',
-            duration: chunkResults[i]?.duration ?? 0,
+        const { results: chunkResults } = await generateGeminiMultiSpeakerChunk(validInputs, language)
+        // Map results back by segment id
+        const resultById = new Map(chunkResults.map(r => [r.id, r]))
+        for (const origIdx of indices) {
+          const seg = segments[origIdx]
+          const id = seg.id || String(origIdx)
+          const result = resultById.get(id)
+          if (result) {
+            results[origIdx] = { audioUrl: result.audioUrl, duration: result.duration }
+          } else {
+            results[origIdx] = { audioUrl: '', duration: 0 }
           }
           completedSegments++
         }
-        console.log(`[Audio] ✅ Multi-speaker chunk done: ${indices.length} segments`)
+        console.log(`[Audio] Multi-speaker chunk done: ${indices.length} segments`)
       } catch (err: any) {
-        console.error(`[Audio] ❌ Multi-speaker chunk failed, falling back to single-speaker:`, err?.message ?? err)
-
-        // Fallback: generate each segment individually
-        for (let i = 0; i < indices.length; i++) {
-          const origIdx = indices[i]
-          const seg = segments[origIdx]
-          const voiceProfile = resolveVoiceProfile(seg.speaker, voiceProfiles)
-          results[origIdx] = await generateSingleSegment(groupTexts[i], voiceProfile, language, origIdx + 1, segments.length)
-          completedSegments++
-          if (i < indices.length - 1) await delay(200)
-        }
+        console.error(`[Audio] Multi-speaker chunk failed, falling back to single-speaker:`, err?.message ?? err)
+        await fallbackSingleSpeaker(indices, segments, cleanedTexts, voiceProfiles, language, results)
+        completedSegments += indices.length
       }
-
-      if (onProgress) {
-        await onProgress(completedSegments, segments.length, `Chunk complete — ${completedSegments}/${segments.length} segments done`)
+    } else if (validInputs.length === 1) {
+      // Only one valid segment in chunk — use single-speaker
+      const origIdx = indices.find(i => cleanedTexts[i].trim().length > 0) ?? indices[0]
+      const voiceProfile = resolveVoiceProfile(segments[origIdx].speaker, voiceProfiles)
+      results[origIdx] = await generateSingleSegment(cleanedTexts[origIdx], voiceProfile, language)
+      // Mark empty segments
+      for (const i of indices) {
+        if (i !== origIdx) results[i] = { audioUrl: '', duration: 0 }
       }
-
-      // Slightly larger pause after multi-speaker calls (heavier endpoint)
-      await delay(400)
+      completedSegments += indices.length
+    } else {
+      // All segments in chunk are empty
+      for (const i of indices) {
+        results[i] = { audioUrl: '', duration: 0 }
+      }
+      completedSegments += indices.length
     }
+
+    if (onProgress) {
+      await onProgress(completedSegments, segments.length, `${completedSegments}/${segments.length} segments done`)
+    }
+
+    // Rate-limit between API calls
+    await delay(300)
   }
 
   // Merge results back into segments
@@ -169,76 +140,68 @@ async function generateHybridSegments(
   return processed
 }
 
-// ─── Crossover group detection ───────────────────────────────────────────────
+// ─── Chunk builder ──────────────────────────────────────────────────────────
 
-/**
- * Scan segments and partition them into groups:
- * - A "multi" group is a run of 2–4 consecutive segments that:
- *   - Contains exactly 2 distinct speakers
- *   - Each segment has ≤ CROSSOVER_MAX_WORDS_PER_SEGMENT words
- *   - Combined cleaned text is within Gemini's multi-speaker char limit
- * - Everything else becomes a "single" group
- */
-function detectCrossoverGroups(segments: PodcastSegment[], cleanedTexts: string[]): Group[] {
-  const groups: Group[] = []
-  let i = 0
-
-  while (i < segments.length) {
-    // Try to extend a crossover window starting at i
-    const windowEnd = findCrossoverWindowEnd(segments, cleanedTexts, i)
-
-    if (windowEnd > i) {
-      // Valid multi-speaker window [i, windowEnd)
-      groups.push({ type: 'multi', indices: range(i, windowEnd) })
-      i = windowEnd
-    } else {
-      groups.push({ type: 'single', index: i })
-      i++
-    }
-  }
-
-  return groups
+interface Chunk {
+  indices: number[]
 }
 
 /**
- * Find the furthest end index (exclusive) of a valid crossover window starting at `start`.
- * Returns `start` if no multi-speaker window is possible.
+ * Group all segments into multi-speaker chunks that fit within the char limit.
+ * Since we only have 2 speakers (host + expert), all segments are eligible.
  */
-function findCrossoverWindowEnd(segments: PodcastSegment[], cleanedTexts: string[], start: number): number {
-  const startSpeaker = segments[start].speaker
-  const startWordCount = wordCount(cleanedTexts[start])
+function buildChunks(segments: PodcastSegment[], cleanedTexts: string[]): Chunk[] {
+  const chunks: Chunk[] = []
+  let currentIndices: number[] = []
+  let currentChars = 0
 
-  // First segment must itself be short enough
-  if (startWordCount > CROSSOVER_MAX_WORDS_PER_SEGMENT) return start
+  for (let i = 0; i < segments.length; i++) {
+    const text = cleanedTexts[i]
+    const speaker = segments[i].speaker
+    const displayName = ROLE_DISPLAY_NAME[speaker] || speaker
+    const segChars = text.length + displayName.length + 2 // "Name: text"
 
-  let speakers = new Set<string>([startSpeaker])
-  let bestEnd = start // no valid window yet
-
-  for (let j = start + 1; j < segments.length && j - start < CROSSOVER_MAX_SEGMENTS; j++) {
-    const seg = segments[j]
-    const text = cleanedTexts[j]
-    const words = wordCount(text)
-
-    // Segment too long for batching
-    if (words > CROSSOVER_MAX_WORDS_PER_SEGMENT) break
-
-    const newSpeakers = new Set([...speakers, seg.speaker])
-
-    // More than 2 distinct speakers → can't use multi-speaker API
-    if (newSpeakers.size > 2) break
-
-    // Would exceed char limit
-    if (!canUseMultiSpeaker(buildDummyInputs(segments, cleanedTexts, start, j + 1))) break
-
-    speakers = newSpeakers
-
-    // Need at least 2 segments with 2 distinct speakers to qualify
-    if (speakers.size === 2) {
-      bestEnd = j + 1
+    // Start new chunk if adding this segment would exceed the limit
+    if (currentIndices.length > 0 && currentChars + segChars > CHUNK_CHAR_LIMIT) {
+      chunks.push({ indices: currentIndices })
+      currentIndices = []
+      currentChars = 0
     }
+
+    currentIndices.push(i)
+    currentChars += segChars
   }
 
-  return bestEnd
+  // Push final chunk
+  if (currentIndices.length > 0) {
+    chunks.push({ indices: currentIndices })
+  }
+
+  return chunks
+}
+
+// ─── Fallback single-speaker ────────────────────────────────────────────────
+
+async function fallbackSingleSpeaker(
+  indices: number[],
+  segments: PodcastSegment[],
+  cleanedTexts: string[],
+  voiceProfiles: VoiceProfile[],
+  language: string,
+  results: Array<{ audioUrl: string; duration: number }>
+): Promise<void> {
+  for (let i = 0; i < indices.length; i++) {
+    const origIdx = indices[i]
+    const seg = segments[origIdx]
+    const text = cleanedTexts[origIdx]
+    if (!text.trim()) {
+      results[origIdx] = { audioUrl: '', duration: 0 }
+      continue
+    }
+    const voiceProfile = resolveVoiceProfile(seg.speaker, voiceProfiles)
+    results[origIdx] = await generateSingleSegment(text, voiceProfile, language)
+    if (i < indices.length - 1) await delay(200)
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -247,20 +210,15 @@ async function generateSingleSegment(
   text: string,
   voiceProfile: VoiceProfile,
   language: string,
-  segNum: number,
-  totalSegs: number
 ): Promise<{ audioUrl: string; duration: number }> {
   if (!text || text.trim().length === 0) {
-    console.warn(`[Audio] Segment ${segNum} has empty text, skipping`)
     return { audioUrl: '', duration: 0 }
   }
-
   try {
     const result = await generateGeminiTTSAudio(text, voiceProfile, language)
-    console.log(`[Audio] ✅ Segment ${segNum}/${totalSegs} done: ${result.duration.toFixed(1)}s`)
     return { audioUrl: result.audioUrl, duration: result.duration }
   } catch (err: any) {
-    console.error(`[Audio] ❌ Segment ${segNum} failed:`, err?.message ?? err)
+    console.error(`[Audio] Single-speaker fallback failed:`, err?.message ?? err)
     return { audioUrl: '', duration: 0 }
   }
 }
@@ -269,32 +227,8 @@ function resolveVoiceProfile(speaker: string, voiceProfiles: VoiceProfile[]): Vo
   return voiceProfiles.find(v => v.role === speaker) ?? voiceProfiles[0]
 }
 
-function wordCount(text: string): number {
-  return text.split(/\s+/).filter(Boolean).length
-}
-
-function range(start: number, end: number): number[] {
-  return Array.from({ length: end - start }, (_, i) => i + start)
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-/** Build dummy MultiSpeakerSegmentInput[] for canUseMultiSpeaker char-limit check */
-function buildDummyInputs(
-  segments: PodcastSegment[],
-  cleanedTexts: string[],
-  start: number,
-  end: number
-): MultiSpeakerSegmentInput[] {
-  return segments.slice(start, end).map((seg, i) => ({
-    id: seg.id || String(start + i),
-    text: cleanedTexts[start + i],
-    role: seg.speaker,
-    voiceId: ROLE_VOICE_MAP[seg.speaker] || 'Aoede',
-    displayName: ROLE_DISPLAY_NAME[seg.speaker] || seg.speaker,
-  }))
 }
 
 // ─── Predicted Q&A ──────────────────────────────────────────────────────────
@@ -330,9 +264,6 @@ export async function generatePredictedQuestionsAudio(
 
 // ─── Stubs ───────────────────────────────────────────────────────────────────
 
-/**
- * Placeholder — audio merging not implemented; segments play sequentially.
- */
 export async function mergeAudioSegments(
   segments: PodcastSegment[]
 ): Promise<{ finalAudioUrl: string; duration: number }> {
@@ -340,9 +271,6 @@ export async function mergeAudioSegments(
   return { finalAudioUrl: '', duration: totalDuration }
 }
 
-/**
- * Placeholder — post-processing not implemented.
- */
 export async function postProcessAudio(audioUrl: string): Promise<string> {
   return audioUrl
 }

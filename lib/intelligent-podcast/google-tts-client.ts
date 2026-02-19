@@ -1,6 +1,6 @@
 /**
  * Gemini 2.5 TTS client — same technology powering NotebookLM Audio Overviews.
- * Supports both single-speaker (any of the 3 roles) and multi-speaker (2-role crossover chunks).
+ * Supports both single-speaker and multi-speaker (2-speaker dialogue chunks).
  * Uses REST API only (no SDK). Requires GEMINI_API_KEY from Google AI Studio.
  */
 
@@ -14,20 +14,18 @@ const PCM_BYTES_PER_SAMPLE = 2 // 16-bit
 
 /** Default voice per role — Gemini prebuilt voice names */
 export const ROLE_VOICE_MAP: Record<string, string> = {
-  host: 'Aoede',       // breezy, natural
-  expert: 'Charon',    // informative, clear
-  simplifier: 'Zephyr', // bright, cheerful
+  host: 'Aoede',    // breezy, natural — the curious host
+  expert: 'Charon', // informative, clear — the knowledgeable expert
 }
 
 /** Display names used as speaker labels in multi-speaker scripts */
 export const ROLE_DISPLAY_NAME: Record<string, string> = {
-  host: 'Sophie',
-  expert: 'Marcus',
-  simplifier: 'Emma',
+  host: 'Alex',
+  expert: 'Jamie',
 }
 
-/** Multi-speaker input limit: ~1800 chars of dialogue text (conservative, avoids cutoff) */
-const MULTI_SPEAKER_CHAR_LIMIT = 1800
+/** Multi-speaker input limit: 3000 chars (real limit is ~4000 bytes / 5min audio; 3000 is safe) */
+const MULTI_SPEAKER_CHAR_LIMIT = 3000
 
 function getGeminiKey(): string {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
@@ -43,7 +41,7 @@ export interface TTSResult {
 export interface MultiSpeakerSegmentInput {
   id: string
   text: string
-  role: string // 'host' | 'expert' | 'simplifier'
+  role: string // 'host' | 'expert'
   voiceId: string
   displayName: string
 }
@@ -101,7 +99,7 @@ export async function generateGeminiMultiSpeakerChunk(
     throw new Error('Multi-speaker chunk requires at least 2 segments')
   }
 
-  // Build dialogue script: "Sophie: text\nMarcus: text\n..."
+  // Build dialogue script: "Alex: text\nJamie: text\n..."
   const script = segments
     .map(s => `${s.displayName}: ${s.text.trim().replace(/\s+/g, ' ')}`)
     .join('\n')
@@ -138,12 +136,12 @@ export async function generateGeminiMultiSpeakerChunk(
 
 /**
  * Check whether a set of segments qualifies for multi-speaker generation.
- * Rules: exactly 2 distinct roles, combined text within char limit.
+ * Rules: at least 2 segments, at most 2 distinct roles, combined text within char limit.
  */
 export function canUseMultiSpeaker(segments: MultiSpeakerSegmentInput[]): boolean {
   if (segments.length < 2) return false
   const roles = new Set(segments.map(s => s.role))
-  if (roles.size !== 2) return false
+  if (roles.size > 2) return false
   const totalChars = segments.reduce((sum, s) => sum + s.text.length + s.displayName.length + 2, 0)
   return totalChars <= MULTI_SPEAKER_CHAR_LIMIT
 }

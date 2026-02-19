@@ -70,26 +70,18 @@ export async function POST(
       {
         id: 'host-voice',
         role: 'host',
-        name: 'Sophie',
+        name: 'Alex',
         provider: 'gemini',
         voiceId: 'Aoede',
-        description: 'Curious host who guides the conversation and asks sharp questions',
+        description: 'Curious, relatable host who asks what the listener would ask, reacts naturally, uses analogies to simplify',
       },
       {
         id: 'expert-voice',
         role: 'expert',
-        name: 'Marcus',
+        name: 'Jamie',
         provider: 'gemini',
         voiceId: 'Charon',
-        description: 'Deep expert who explains mechanisms, details, and nuance',
-      },
-      {
-        id: 'simplifier-voice',
-        role: 'simplifier',
-        name: 'Emma',
-        provider: 'gemini',
-        voiceId: 'Zephyr',
-        description: 'Simplifier who uses analogies and step-by-step explanations',
+        description: 'Knowledgeable but approachable expert who explains with genuine enthusiasm and informal language',
       },
     ]
   }

@@ -403,7 +403,7 @@ export default function NewPodcastPage() {
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">Create Intelligent Podcast</h1>
           <p className="text-gray-400">
-            Transform your documents into an engaging, interactive multi-voice podcast
+            Transform your documents into a natural, human-sounding 2-host podcast
           </p>
         </div>
 
@@ -564,7 +564,7 @@ export default function NewPodcastPage() {
             <div>
               <label className="block text-sm font-medium mb-2">Voice Engine</label>
               <div className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 flex items-center justify-between">
-                <span>Gemini 2.5 TTS — Aoede · Charon · Zephyr</span>
+                <span>Gemini 2.5 TTS — Aoede (Alex) · Charon (Jamie)</span>
                 <span className="text-xs text-blue-400 font-medium">Same as NotebookLM</span>
               </div>
             </div>
@@ -574,7 +574,7 @@ export default function NewPodcastPage() {
           <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-6">
             <h3 className="text-xl font-semibold mb-3">✨ Intelligent Features</h3>
             <ul className="space-y-2 text-sm text-gray-300">
-              <li>✅ <strong>3 distinct voices</strong> - Gemini 2.5 TTS (same as NotebookLM)</li>
+              <li>✅ <strong>2 natural voices</strong> - Gemini 2.5 multi-speaker TTS (same as NotebookLM)</li>
               <li>✅ <strong>Knowledge Graph</strong> - Concepts and relationships mapped</li>
               <li>✅ <strong>Chapter navigation</strong> - Jump to any topic instantly</li>
               <li>✅ <strong>Interactive Q&A</strong> - Ask questions with voice (Realtime API)</li>

@@ -1,7 +1,22 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { IntelligentPodcast, PodcastSegment, PodcastChapter } from '@/types/intelligent-podcast'
+
+const SPEAKER_NAMES: Record<string, string> = {
+  host: 'Alex',
+  expert: 'Jamie',
+}
+
+const SPEAKER_COLORS: Record<string, string> = {
+  host: 'bg-purple-600',
+  expert: 'bg-blue-600',
+}
+
+const SPEAKER_ACTIVE_BG: Record<string, string> = {
+  host: 'bg-purple-900/50 border-l-4 border-purple-500',
+  expert: 'bg-blue-900/50 border-l-4 border-blue-500',
+}
 
 interface PodcastPlayerProps {
   podcast: IntelligentPodcast
@@ -15,17 +30,27 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0)
   const [showTranscript, setShowTranscript] = useState(true)
   const [isDownloading, setIsDownloading] = useState(false)
-  
+
   const audioRef = useRef<HTMLAudioElement>(null)
+  const transcriptRef = useRef<HTMLDivElement>(null)
+  const segmentRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const currentSegment = podcast.segments[currentSegmentIndex]
   const currentChapter = podcast.chapters.find(
     ch => currentTime >= ch.startTime && currentTime <= ch.endTime
   )
 
+  // Auto-scroll transcript to current segment
+  const scrollToSegment = useCallback((index: number) => {
+    const el = segmentRefs.current.get(index)
+    if (el && transcriptRef.current) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [])
+
   // Play/pause toggle
   const togglePlayPause = () => {
     if (!audioRef.current) return
-    
+
     if (isPlaying) {
       audioRef.current.pause()
     } else {
@@ -40,6 +65,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
       const nextIndex = currentSegmentIndex + 1
       setCurrentSegmentIndex(nextIndex)
       setCurrentTime(podcast.segments[nextIndex].timestamp)
+      scrollToSegment(nextIndex)
     }
   }
 
@@ -49,6 +75,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
       const prevIndex = currentSegmentIndex - 1
       setCurrentSegmentIndex(prevIndex)
       setCurrentTime(podcast.segments[prevIndex].timestamp)
+      scrollToSegment(prevIndex)
     }
   }
 
@@ -73,9 +100,10 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
       const index = podcast.segments.findIndex(s => s.id === segment.id)
       if (index !== currentSegmentIndex) {
         setCurrentSegmentIndex(index)
+        scrollToSegment(index)
       }
     }
-  }, [currentTime, podcast.segments])
+  }, [currentTime, podcast.segments, currentSegmentIndex, scrollToSegment])
 
   // Load segment audio when changed
   useEffect(() => {
@@ -131,6 +159,19 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     }
   }
 
+  // Click on a segment to jump to it
+  const jumpToSegment = (index: number) => {
+    setCurrentSegmentIndex(index)
+    setCurrentTime(podcast.segments[index].timestamp)
+    if (audioRef.current && podcast.segments[index]?.audioUrl) {
+      audioRef.current.src = podcast.segments[index].audioUrl
+      audioRef.current.playbackRate = playbackRate
+      if (isPlaying) {
+        audioRef.current.play()
+      }
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-gray-900 text-white">
       {/* Header */}
@@ -146,7 +187,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
             className="px-4 py-2 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             title={canDownload ? 'Download all audio segments as a zip' : 'Available once all audio is generated'}
           >
-            {isDownloading ? 'Preparing…' : 'Download whole podcast'}
+            {isDownloading ? 'Preparing...' : 'Download whole podcast'}
           </button>
         </div>
         {currentChapter && (
@@ -161,41 +202,49 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
       <div className="flex-1 flex overflow-hidden">
         {/* Transcript panel */}
         {showTranscript && (
-          <div className="flex-1 p-6 overflow-y-auto">
-            <div className="max-w-3xl mx-auto space-y-4">
-              {podcast.segments.map((segment, idx) => (
-                <div
-                  key={segment.id}
-                  className={`p-4 rounded-lg transition-all ${
-                    idx === currentSegmentIndex
-                      ? 'bg-blue-900/50 border-l-4 border-blue-500'
-                      : 'bg-gray-800/30'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                        segment.speaker === 'host' ? 'bg-purple-600' :
-                        segment.speaker === 'expert' ? 'bg-blue-600' :
-                        'bg-green-600'
-                      }`}>
-                        {segment.speaker.charAt(0).toUpperCase()}
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-xs text-gray-400 mb-1">
-                        {formatTime(segment.timestamp)} • {segment.speaker}
-                      </div>
-                      <div className="text-gray-200">{segment.text}</div>
-                      {segment.isQuestionBreakpoint && (
-                        <div className="mt-2 text-xs text-yellow-400">
-                          💡 Good moment to ask a question
+          <div ref={transcriptRef} className="flex-1 p-6 overflow-y-auto">
+            <div className="max-w-3xl mx-auto space-y-2">
+              {podcast.segments.map((segment, idx) => {
+                const isActive = idx === currentSegmentIndex
+                const speakerName = SPEAKER_NAMES[segment.speaker] || segment.speaker
+                const avatarColor = SPEAKER_COLORS[segment.speaker] || 'bg-gray-600'
+                const activeBg = SPEAKER_ACTIVE_BG[segment.speaker] || 'bg-blue-900/50 border-l-4 border-blue-500'
+
+                return (
+                  <div
+                    key={segment.id}
+                    ref={(el) => {
+                      if (el) segmentRefs.current.set(idx, el)
+                    }}
+                    onClick={() => jumpToSegment(idx)}
+                    className={`p-3 rounded-lg transition-all cursor-pointer hover:bg-gray-800/60 ${
+                      isActive ? activeBg : 'bg-gray-800/20'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${avatarColor}`}>
+                          {speakerName.charAt(0)}
                         </div>
-                      )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs font-medium text-gray-300">{speakerName}</span>
+                          <span className="text-xs text-gray-500">{formatTime(segment.timestamp)}</span>
+                        </div>
+                        <div className={`text-sm leading-relaxed ${isActive ? 'text-white' : 'text-gray-300'}`}>
+                          {segment.text}
+                        </div>
+                        {segment.isQuestionBreakpoint && (
+                          <div className="mt-1 text-xs text-yellow-400">
+                            Good moment to ask a question
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -262,22 +311,22 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
               disabled={currentSegmentIndex === 0}
               className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-50"
             >
-              ⏮
+              Previous
             </button>
-            
+
             <button
               onClick={togglePlayPause}
               className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center text-2xl"
             >
-              {isPlaying ? '⏸' : '▶️'}
+              {isPlaying ? 'Pause' : 'Play'}
             </button>
-            
+
             <button
               onClick={nextSegment}
               disabled={currentSegmentIndex === podcast.segments.length - 1}
               className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-50"
             >
-              ⏭
+              Next
             </button>
           </div>
 
@@ -317,14 +366,14 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
                   : 'bg-gray-700 opacity-50 cursor-not-allowed'
               }`}
             >
-              🎤 Ask Question
+              Ask Question
             </button>
           </div>
         </div>
 
         {/* Current speaker indicator */}
         <div className="mt-4 text-center text-sm text-gray-400">
-          Currently speaking: <span className="font-semibold text-white capitalize">{currentSegment?.speaker}</span>
+          Currently speaking: <span className="font-semibold text-white">{SPEAKER_NAMES[currentSegment?.speaker] || currentSegment?.speaker}</span>
         </div>
       </div>
     </div>
