@@ -1,10 +1,10 @@
 import { PodcastSegment, VoiceProfile, PredictedQuestion } from '@/types/intelligent-podcast'
 import { makeTtsReadyText } from '../tts'
-// Gemini TTS disabled; OpenAI only
-import getOpenAI from '../openai'
+import { generateGeminiTTSAudio } from './google-tts-client'
 
 /**
- * Generate audio for all podcast segments with multiple voices
+ * Generate audio for all podcast segments using Gemini 2.5 TTS
+ * (same technology as NotebookLM Audio Overviews).
  */
 export async function generateMultiVoiceAudio(
   segments: PodcastSegment[],
@@ -12,13 +12,12 @@ export async function generateMultiVoiceAudio(
   language: string,
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
-  console.log(`[Audio] generateMultiVoiceAudio: segments=${segments.length}, provider=${voiceProfiles[0]?.provider ?? 'unknown'}, hasOnProgress=${Boolean(onProgress)}`)
-  console.log(`[Audio] Using individual segment generation for ${segments.length} segments`)
+  console.log(`[Audio] generateMultiVoiceAudio: segments=${segments.length}, provider=gemini, hasOnProgress=${Boolean(onProgress)}`)
   return generateIndividualSegments(segments, voiceProfiles, language, onProgress)
 }
 
 /**
- * Generate individual segments (fallback method)
+ * Generate audio segment-by-segment via Gemini TTS.
  */
 async function generateIndividualSegments(
   segments: PodcastSegment[],
@@ -26,10 +25,10 @@ async function generateIndividualSegments(
   language: string,
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
-  console.log(`[Audio] Starting individual audio generation for ${segments.length} segments`)
+  console.log(`[Audio] Starting Gemini TTS generation for ${segments.length} segments`)
 
   if (segments.length === 0) {
-    console.warn(`[Audio] No segments provided for audio generation`)
+    console.warn(`[Audio] No segments provided`)
     return []
   }
 
@@ -39,202 +38,53 @@ async function generateIndividualSegments(
     const segment = segments[i]
     const segmentNumber = i + 1
 
-    console.log(`[Audio] Processing segment ${segmentNumber}/${segments.length}: ${segment.id}`)
-
-    // Update progress before starting
     if (onProgress) {
-      const step = `Generating audio for segment ${segmentNumber}/${segments.length} (${segment.speaker})`
-      await onProgress(i, segments.length, step)
+      await onProgress(i, segments.length, `Generating audio for segment ${segmentNumber}/${segments.length} (${segment.speaker})`)
     }
 
-    // Validate segment
     if (!segment.text || segment.text.trim().length === 0) {
       console.warn(`[Audio] Segment ${segmentNumber} has empty text, skipping`)
       processedSegments.push(segment)
       continue
     }
 
-    // Find the appropriate voice profile for this speaker
     const voiceProfile = voiceProfiles.find((v) => v.role === segment.speaker) || voiceProfiles[0]
-    console.log(`[Audio] Using voice profile: ${voiceProfile.role} (${voiceProfile.provider})`)
 
     try {
-      // Generate audio based on provider
-      let audioUrl: string
-      let actualDuration: number
+      const cleanedText = await makeTtsReadyText(segment.text, null, language as any).catch(() => segment.text)
 
-      console.log(`[Audio] Starting TTS for segment ${segmentNumber}...`)
-      
-      // Only OpenAI TTS is supported for podcast audio
-      const result = await generateOpenAIAudio(segment.text, voiceProfile, language)
-      audioUrl = result.audioUrl
-      actualDuration = result.duration
+      const result = await generateGeminiTTSAudio(cleanedText, voiceProfile, language)
 
-      processedSegments.push({
-        ...segment,
-        audioUrl,
-        duration: actualDuration,
-      })
+      processedSegments.push({ ...segment, audioUrl: result.audioUrl, duration: result.duration })
 
-      console.log(`[Audio] ✅ Segment ${segmentNumber} completed: ${actualDuration.toFixed(1)}s, audio length: ${audioUrl.length} chars`)
+      console.log(`[Audio] ✅ Segment ${segmentNumber}/${segments.length} done: ${result.duration.toFixed(1)}s`)
 
       if (onProgress) {
-        const step = `Segment ${segmentNumber}/${segments.length} audio generated`
-        console.log(`[Audio] onProgress after segment ${segmentNumber}: (${segmentNumber}, ${segments.length}, "${step}")`)
-        await onProgress(segmentNumber, segments.length, step)
+        await onProgress(segmentNumber, segments.length, `Segment ${segmentNumber}/${segments.length} audio generated`)
       }
-
     } catch (error: any) {
-      console.error(`[Audio] ❌ Failed to generate audio for segment ${segmentNumber}/${segments.length}:`, error?.message ?? error)
-      console.error(`[Audio] Segment details:`, {
-        id: segment.id,
-        speaker: segment.speaker,
-        textLength: segment.text?.length ?? 0,
-        textPreview: segment.text?.slice(0, 100) + '...'
-      })
-      console.error(`[Audio] Error details:`, { message: error?.message, code: error?.code, name: error?.name })
+      console.error(`[Audio] ❌ Segment ${segmentNumber} failed:`, error?.message ?? error)
+      processedSegments.push({ ...segment, audioUrl: '', duration: 0 })
 
-      // Add segment without audio but don't fail the entire process
-      processedSegments.push({
-        ...segment,
-        audioUrl: '', // Empty audio URL indicates failure
-        duration: 0
-      })
-
-      // Still update progress to show we attempted this segment
       if (onProgress) {
-        const step = `Segment ${segmentNumber}/${segments.length} failed (continuing...)`
-        await onProgress(segmentNumber, segments.length, step)
+        await onProgress(segmentNumber, segments.length, `Segment ${segmentNumber}/${segments.length} failed (continuing...)`)
       }
     }
 
-    // Small delay between segments to avoid rate limiting
+    // Small delay between segments to stay within Gemini TTS rate limits
     if (i < segments.length - 1) {
-      console.log(`[Audio] Waiting 200ms before next segment...`)
-      await new Promise(resolve => setTimeout(resolve, 200))
+      await new Promise(resolve => setTimeout(resolve, 300))
     }
   }
 
   const successCount = processedSegments.filter(s => s.audioUrl && s.audioUrl.length > 0).length
-  console.log(`[Audio] Individual generation completed: ${successCount}/${segments.length} segments successful`)
-  
+  console.log(`[Audio] Generation complete: ${successCount}/${segments.length} segments successful`)
+
   return processedSegments
 }
 
 /**
- * Generate audio using ElevenLabs (highest quality)
- */
-async function generateElevenLabsAudio(
-  text: string,
-  voiceProfile: VoiceProfile,
-  language: string
-): Promise<{ audioUrl: string; duration: number }> {
-  const apiKey = process.env.ELEVENLABS_API_KEY
-
-  if (!apiKey) {
-    throw new Error('ElevenLabs API key not configured')
-  }
-
-  const cleanedText = await makeTtsReadyText(text, null, language as any)
-
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceProfile.voiceId}`,
-    {
-      method: 'POST',
-      headers: {
-        'xi-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text: cleanedText,
-        model_id: 'eleven_turbo_v2_5', // Fastest model
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.5,
-          use_speaker_boost: true,
-        },
-      }),
-    }
-  )
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`ElevenLabs error: ${error}`)
-  }
-
-  const audioBuffer = await response.arrayBuffer()
-  const audioBase64 = Buffer.from(audioBuffer).toString('base64')
-  const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
-
-  // Estimate duration (rough: ~150 words per minute)
-  const wordCount = cleanedText.split(/\s+/).length
-  const estimatedDuration = (wordCount / 150) * 60
-
-  return {
-    audioUrl,
-    duration: estimatedDuration,
-  }
-}
-
-/**
- * Generate audio using PlayHT
- */
-async function generatePlayHTAudio(
-  text: string,
-  voiceProfile: VoiceProfile,
-  language: string
-): Promise<{ audioUrl: string; duration: number }> {
-  const userId = process.env.PLAYHT_USER_ID
-  const apiKey = process.env.PLAYHT_API_KEY
-
-  if (!userId || !apiKey) {
-    throw new Error('PlayHT credentials not configured')
-  }
-
-  const cleanedText = await makeTtsReadyText(text, null, language as any)
-
-  const response = await fetch('https://api.play.ht/api/v2/tts', {
-    method: 'POST',
-    headers: {
-      'AUTHORIZATION': apiKey,
-      'X-USER-ID': userId,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      text: cleanedText,
-      voice: voiceProfile.voiceId,
-      quality: 'premium',
-      output_format: 'mp3',
-      speed: 1,
-      sample_rate: 24000,
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`PlayHT error: ${error}`)
-  }
-
-  const result = await response.json()
-  const audioUrl = result.url || result.audio_url
-
-  if (!audioUrl) {
-    throw new Error('PlayHT did not return audio URL')
-  }
-
-  // Estimate duration
-  const wordCount = cleanedText.split(/\s+/).length
-  const estimatedDuration = (wordCount / 150) * 60
-
-  return {
-    audioUrl,
-    duration: estimatedDuration,
-  }
-}
-
-/**
- * Pre-generate audio for predicted questions (uses Gemini TTS)
+ * Pre-generate audio for predicted Q&A answers using host voice.
  */
 export async function generatePredictedQuestionsAudio(
   questions: PredictedQuestion[],
@@ -244,122 +94,37 @@ export async function generatePredictedQuestionsAudio(
 ): Promise<PredictedQuestion[]> {
   console.log(`[Audio] Generating audio for ${questions.length} predicted questions`)
 
-  const processedQuestions: PredictedQuestion[] = []
+  const processed: PredictedQuestion[] = []
 
   for (let i = 0; i < questions.length; i++) {
-    const question = questions[i]
-
-    if (onProgress) {
-      onProgress(i + 1, questions.length)
-    }
+    if (onProgress) onProgress(i + 1, questions.length)
 
     try {
-      // Generate audio for the answer using host voice via Gemini TTS
-      const result = await generateOpenAIAudio(question.answer, hostVoice, language)
-
-      processedQuestions.push({
-        ...question,
-        audioUrl: result.audioUrl,
-      })
+      const result = await generateGeminiTTSAudio(questions[i].answer, hostVoice, language)
+      processed.push({ ...questions[i], audioUrl: result.audioUrl })
     } catch (error) {
       console.error(`[Audio] Failed to generate audio for question ${i + 1}:`, error)
-      processedQuestions.push(question)
+      processed.push(questions[i])
     }
   }
 
-  console.log('[Audio] Predicted questions audio generation completed')
-  return processedQuestions
+  console.log('[Audio] Predicted questions audio generation complete')
+  return processed
 }
 
 /**
- * Merge audio segments into a single file (requires FFmpeg)
- * This is a placeholder - actual implementation would require FFmpeg processing
+ * Placeholder — audio merging not implemented; segments play sequentially.
  */
 export async function mergeAudioSegments(
   segments: PodcastSegment[]
 ): Promise<{ finalAudioUrl: string; duration: number }> {
-  // For now, we'll just return the segments as-is
-  // In production, you would use FFmpeg to merge all audio files
-  console.log('[Audio] Audio merging not implemented - segments will be played sequentially')
-
   const totalDuration = segments.reduce((sum, seg) => sum + seg.duration, 0)
-
-  return {
-    finalAudioUrl: '', // Would be the merged audio file URL
-    duration: totalDuration,
-  }
+  return { finalAudioUrl: '', duration: totalDuration }
 }
 
 /**
- * Post-process audio (normalize volume, add transitions)
- * This is a placeholder - actual implementation would require audio processing
+ * Placeholder — post-processing not implemented.
  */
 export async function postProcessAudio(audioUrl: string): Promise<string> {
-  // In production, you would:
-  // 1. Download the audio
-  // 2. Normalize volume with FFmpeg
-  // 3. Add fade in/out effects
-  // 4. Compress for web delivery
-  // 5. Upload to storage
-  // 6. Return new URL
-
-  console.log('[Audio] Post-processing not implemented - using original audio')
   return audioUrl
-}
-
-/**
- * Generate audio using OpenAI gpt-4o-mini-tts (steerable, natural-sounding)
- */
-async function generateOpenAIAudio(
-  text: string,
-  voiceProfile: VoiceProfile,
-  language: string
-): Promise<{ audioUrl: string; duration: number }> {
-  if (!text || text.trim().length === 0) {
-    throw new Error('Cannot generate audio for empty text')
-  }
-
-  // Clean / trim input
-  const openai = getOpenAI()
-  let cleanedText = text.slice(0, 5000)
-  try {
-    cleanedText = await makeTtsReadyText(cleanedText, openai as any, language as any)
-  } catch {
-    // ignore cleaning errors, use raw
-  }
-
-  // Map role to expressive voices (coral/sage/ash recommended for gpt-4o-mini-tts)
-  const voiceMap: Record<string, string> = {
-    host: 'coral',      // warm, engaging, conversational
-    expert: 'ash',      // deep, authoritative, clear
-    simplifier: 'sage', // bright, friendly, approachable
-  }
-  // Role-specific speaking style instructions for gpt-4o-mini-tts
-  const instructionsMap: Record<string, string> = {
-    host: 'You are a warm, curious podcast host. Speak in a natural conversational tone with genuine enthusiasm. Vary your pacing — speed up slightly when excited about a topic, pause briefly before key points for emphasis. Use rising intonation for questions. Sound like you are having a real conversation, not reading a script.',
-    expert: 'You are a knowledgeable expert being interviewed on a podcast. Speak with calm authority and confidence. Use a measured, thoughtful pace. Emphasize key technical terms naturally. Occasionally pause to let important points land. Sound passionate about your subject but never condescending.',
-    simplifier: 'You are a friendly educator who makes complex topics accessible. Speak with warmth and energy. Use an encouraging, upbeat tone. Slow down when explaining difficult concepts and speed up during casual transitions. Sound genuinely excited to help the listener understand.',
-  }
-  const voice = voiceProfile.voiceId || voiceMap[voiceProfile.role] || 'coral'
-  const instructions = instructionsMap[voiceProfile.role] || instructionsMap.host
-
-  // Call OpenAI TTS (gpt-4o-mini-tts with steerable instructions)
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TTS timeout after 60s')), 60000))
-  const ttsPromise = (openai as any).audio.speech.create({
-    model: 'gpt-4o-mini-tts',
-    voice,
-    input: cleanedText,
-    instructions,
-  })
-
-  const response = (await Promise.race([ttsPromise, timeout])) as any
-  const audioBuffer = await response.arrayBuffer()
-  const audioBase64 = Buffer.from(audioBuffer).toString('base64')
-  const audioUrl = `data:audio/mpeg;base64,${audioBase64}`
-
-  // Estimate duration
-  const wordCount = cleanedText.split(/\s+/).filter(Boolean).length
-  const duration = Math.max(1, (wordCount / 135) * 60)
-
-  return { audioUrl, duration }
 }

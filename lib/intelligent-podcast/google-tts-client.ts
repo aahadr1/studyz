@@ -1,30 +1,17 @@
 /**
- * Lightweight Google Cloud Text-to-Speech client using REST API only (no SDK).
- * Use GOOGLE_CLOUD_API_KEY in env. Keeps bundle small for Vercel.
+ * Gemini 2.5 TTS client — same technology powering NotebookLM Audio Overviews.
+ * Uses REST API only (no SDK). Requires GEMINI_API_KEY from Google AI Studio.
  */
 
 import type { VoiceProfile } from '@/types/intelligent-podcast'
 
-const TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize' // legacy (kept for reference)
 const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts'
-const GEMINI_NATIVE_TTS_MODEL = 'gemini-2.5-flash-preview-native-audio-dialog'
 
-/** Language code to Google TTS locale (languageCode for voice). */
-const LANG_TO_LOCALE: Record<string, string> = {
-  en: 'en-US',
-  fr: 'fr-FR',
-  es: 'es-ES',
-  de: 'de-DE',
-}
-
-/** Map our voiceId (Kore, Charon, Aoede) to Gemini prebuilt voice names. */
-function getVoiceName(_locale: string, voiceId: string): string {
-  const map: Record<string, string> = {
-    Kore: 'Kore',
-    Charon: 'Charon',
-    Aoede: 'Aoede',
-  }
-  return map[voiceId] || 'Kore'
+/** Default voice mapping: role → Gemini prebuilt voice name. */
+const ROLE_VOICE_MAP: Record<string, string> = {
+  host: 'Aoede',     // breezy, natural — great for podcast host
+  expert: 'Charon',  // informative, clear — fits authoritative expert
+  simplifier: 'Zephyr', // bright, cheerful — approachable simplifier
 }
 
 function getGeminiKey(): string {
@@ -39,58 +26,58 @@ export interface TTSResult {
 }
 
 /**
- * Synthesize one segment via Gemini native TTS (preview, higher quality than Cloud TTS).
+ * Synthesize one segment via Gemini 2.5 TTS.
+ * Returns a base64 data URL ready for HTML5 audio playback.
  */
 export async function generateGeminiTTSAudio(
   text: string,
   voiceProfile: VoiceProfile,
-  language: string
+  _language: string
 ): Promise<TTSResult> {
   if (!text?.trim()) throw new Error('Cannot generate audio for empty text')
   const trimmed = text.length > 5000 ? text.slice(0, 5000) : text
-  const locale = LANG_TO_LOCALE[language] || LANG_TO_LOCALE.en
-  const voiceName = getVoiceName(locale, voiceProfile.voiceId)
+
+  const voiceName = voiceProfile.voiceId || ROLE_VOICE_MAP[voiceProfile.role] || 'Aoede'
 
   const apiKey = getGeminiKey()
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(
-    apiKey
-  )}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
 
   const body = {
-    contents: [
-      {
-        parts: [{ text: trimmed }],
-      },
-    ],
+    contents: [{ parts: [{ text: trimmed }] }],
     generationConfig: {
       responseModalities: ['AUDIO'],
-      temperature: 0.6,
-      topP: 0.95,
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName,
-          },
+          prebuiltVoiceConfig: { voiceName },
         },
       },
     },
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 60000)
+
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
 
   if (!res.ok) {
     const errText = await res.text()
     const hint =
       res.status === 401
-        ? 'Hint: Gemini TTS needs an AI Studio key (GEMINI_API_KEY/GOOGLE_API_KEY). Vertex/Cloud keys are rejected.'
+        ? ' | Hint: Gemini TTS needs an AI Studio key (GEMINI_API_KEY). Vertex/Cloud keys are rejected.'
         : res.status === 429
-          ? 'Hint: Gemini TTS quota/rate limit exceeded. Increase Vertex AI generative quotas or wait for reset.'
+          ? ' | Hint: Gemini TTS rate limit exceeded. Wait and retry.'
           : ''
-    throw new Error(`Gemini TTS failed (${res.status}): ${errText}${hint ? ' | ' + hint : ''}`)
+    throw new Error(`Gemini TTS failed (${res.status}): ${errText}${hint}`)
   }
 
   const data = (await res.json()) as {
@@ -104,100 +91,65 @@ export async function generateGeminiTTSAudio(
     }>
   }
 
-  const audioBase64 =
-    data.candidates
-      ?.flatMap((c) => c.content?.parts || [])
-      ?.map((p) => p.inlineData?.data || p.inline_data?.data)
-      ?.find((d) => !!d)
+  // Extract base64 audio (handle both camelCase and snake_case field names)
+  const audioBase64 = data.candidates
+    ?.flatMap((c) => c.content?.parts || [])
+    ?.map((p) => p.inlineData?.data || p.inline_data?.data)
+    ?.find((d) => !!d)
 
   if (!audioBase64) {
-    throw new Error('Gemini TTS did not return inlineData audio')
+    throw new Error('Gemini TTS returned no audio data')
   }
+
+  // Detect MIME type from response (Gemini returns PCM/WAV by default)
+  const mimeType = data.candidates
+    ?.flatMap((c) => c.content?.parts || [])
+    ?.map((p) => p.inlineData?.mimeType || p.inline_data?.mime_type)
+    ?.find((m) => !!m) || 'audio/L16;rate=24000'
+
+  // For PCM/L16 audio, wrap as WAV; otherwise use the MIME type as-is
+  const isRawPcm = mimeType.startsWith('audio/L16') || mimeType.startsWith('audio/pcm')
+  const dataUrlMime = isRawPcm ? 'audio/wav' : mimeType
+  const audioUrl = isRawPcm
+    ? pcmToWavDataUrl(audioBase64, 24000)
+    : `data:${dataUrlMime};base64,${audioBase64}`
 
   const wordCount = trimmed.split(/\s+/).filter(Boolean).length
   const duration = Math.max(1, (wordCount / 135) * 60)
 
-  return {
-    audioUrl: `data:audio/mpeg;base64,${audioBase64}`,
-    duration,
-  }
-}
-
-/** Conversation segment for multi-speaker (we do not merge; caller falls back to per-segment). */
-export interface ConversationSegment {
-  text: string
-  speaker: string
-  voiceProfile: VoiceProfile
+  return { audioUrl, duration }
 }
 
 /**
- * Multi-speaker conversation using Gemini native audio dialog (preview).
- * If Gemini native TTS fails, caller should fall back to per-segment generation.
+ * Convert raw PCM16 base64 to a proper WAV data URL so browsers can play it.
  */
-export async function generateGeminiConversationAudio(
-  _segments: ConversationSegment[],
-  _language: string,
-  _conversationPrompt: string
-): Promise<TTSResult> {
-  const apiKey = getGeminiKey()
-  if (!_segments.length) {
-    throw new Error('No segments provided for conversation audio')
-  }
+function pcmToWavDataUrl(pcmBase64: string, sampleRate: number): string {
+  const pcmBytes = Buffer.from(pcmBase64, 'base64')
+  const numChannels = 1
+  const bitsPerSample = 16
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8)
+  const blockAlign = numChannels * (bitsPerSample / 8)
+  const dataSize = pcmBytes.length
+  const headerSize = 44
+  const wav = Buffer.alloc(headerSize + dataSize)
 
-  // Build a dialogue script with speaker labels that Gemini can render with multiple voices.
-  const script = _segments
-    .map(
-      (s) =>
-        `${s.speaker.toUpperCase()}: ${s.text.trim().replace(/\s+/g, ' ')}`
-    )
-    .join('\n')
+  // RIFF header
+  wav.write('RIFF', 0)
+  wav.writeUInt32LE(36 + dataSize, 4)
+  wav.write('WAVE', 8)
+  // fmt chunk
+  wav.write('fmt ', 12)
+  wav.writeUInt32LE(16, 16)
+  wav.writeUInt16LE(1, 20) // PCM
+  wav.writeUInt16LE(numChannels, 22)
+  wav.writeUInt32LE(sampleRate, 24)
+  wav.writeUInt32LE(byteRate, 28)
+  wav.writeUInt16LE(blockAlign, 32)
+  wav.writeUInt16LE(bitsPerSample, 34)
+  // data chunk
+  wav.write('data', 36)
+  wav.writeUInt32LE(dataSize, 40)
+  pcmBytes.copy(wav, headerSize)
 
-  const prompt = `${_conversationPrompt}\n\nGenerate natural multi-speaker audio for the following dialogue. Use distinct voices per speaker role (Host, Expert, Simplifier):\n\n${script}`
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_NATIVE_TTS_MODEL}:generateContent?key=${encodeURIComponent(
-    apiKey
-  )}`
-
-  const body = {
-    contents: [
-      {
-        parts: [{ text: prompt }],
-      },
-    ],
-    generationConfig: {
-      responseModalities: ['AUDIO'],
-      temperature: 0.6,
-    },
-  }
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const errText = await res.text()
-    throw new Error(`Gemini native audio error (${res.status}): ${errText}`)
-  }
-
-  const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType: string; data: string } }> } }>
-  }
-
-  const audioBase64 =
-    data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data
-
-  if (!audioBase64) {
-    throw new Error('Gemini native audio did not return inlineData audio')
-  }
-
-  // Rough duration estimate: 135 wpm ~ 2.25 wps
-  const totalWords = _segments.reduce((sum, s) => sum + s.text.split(/\s+/).filter(Boolean).length, 0)
-  const duration = Math.max(1, (totalWords / 135) * 60)
-
-  return {
-    audioUrl: `data:audio/wav;base64,${audioBase64}`,
-    duration,
-  }
+  return `data:audio/wav;base64,${wav.toString('base64')}`
 }

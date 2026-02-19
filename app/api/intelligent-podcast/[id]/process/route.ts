@@ -71,24 +71,24 @@ export async function POST(
         id: 'host-voice',
         role: 'host',
         name: 'Sophie',
-        provider: 'openai',
-        voiceId: 'coral',
+        provider: 'gemini',
+        voiceId: 'Aoede',
         description: 'Curious host who guides the conversation and asks sharp questions',
       },
       {
         id: 'expert-voice',
         role: 'expert',
         name: 'Marcus',
-        provider: 'openai',
-        voiceId: 'ash',
+        provider: 'gemini',
+        voiceId: 'Charon',
         description: 'Deep expert who explains mechanisms, details, and nuance',
       },
       {
         id: 'simplifier-voice',
         role: 'simplifier',
         name: 'Emma',
-        provider: 'openai',
-        voiceId: 'sage',
+        provider: 'gemini',
+        voiceId: 'Zephyr',
         description: 'Simplifier who uses analogies and step-by-step explanations',
       },
     ]
@@ -205,7 +205,6 @@ OUTPUT:
         ? existing.language
         : (config?.language && config.language !== 'auto' ? config.language : 'en')
 
-    const voiceProvider = 'openai'
     const voiceProfiles = voiceProfilesForProvider()
 
     // STEP A: If script not present, do OCR + analysis + script, and save immediately (so audio can resume later).
@@ -615,7 +614,7 @@ OUTPUT:
 
     let batchWithAudio: PodcastSegment[]
     try {
-      console.log(`[Podcast ${podcastId}] Starting audio generation: validBatch=${validBatch.length}, voiceProvider=${voiceProvider}, language=${finalLanguage}`)
+      console.log(`[Podcast ${podcastId}] Starting audio generation: validBatch=${validBatch.length}, provider=gemini, language=${finalLanguage}`)
       console.log(`[Podcast ${podcastId}] First 3 segment IDs in batch:`, validBatch.slice(0, 3).map(s => s.id))
       batchWithAudio = await generateMultiVoiceAudio(
         validBatch,
@@ -636,8 +635,8 @@ OUTPUT:
       const withAudioCount = batchWithAudio.filter(s => s.audioUrl && s.audioUrl.length > 0).length
       if (withAudioCount === 0) {
         throw new Error(
-          `Audio provider returned no audio URLs for batch (provider=${voiceProvider}). ` +
-          `Check TTS credentials/quota; generation aborted to avoid loop.`
+          `Audio provider returned no audio URLs for batch (provider=gemini). ` +
+          `Check GEMINI_API_KEY/quota; generation aborted to avoid loop.`
         )
       }
     } catch (audioError: any) {

@@ -24,7 +24,7 @@ export default function NewPodcastPage() {
   const [targetDuration, setTargetDuration] = useState(30)
   const [language, setLanguage] = useState('auto')
   const [style, setStyle] = useState('conversational')
-  const [voiceProvider, setVoiceProvider] = useState('openai')
+  const voiceProvider = 'gemini'
   const [userPrompt, setUserPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -413,7 +413,7 @@ export default function NewPodcastPage() {
           <div className="bg-gray-900 rounded-lg p-6">
             <h3 className="text-xl font-semibold mb-4">Source Documents</h3>
               <p className="text-gray-400 text-sm mb-4">
-                Upload PDF documents. Your browser converts them into page images, then the backend transcribes those images with GPT vision, generates a long script with Gemini, and creates audio.
+                Upload PDF documents. Your browser converts them to page images, the backend transcribes them with Gemini vision, generates a long-form script, and synthesizes audio with Gemini 2.5 TTS.
               </p>
             
             {/* Drag & Drop Zone */}
@@ -560,16 +560,13 @@ export default function NewPodcastPage() {
               </select>
             </div>
 
-            {/* Voice Provider */}
+            {/* Voice Engine */}
             <div>
-              <label className="block text-sm font-medium mb-2">Voice Provider</label>
-              <select
-                value={voiceProvider}
-                onChange={(e) => setVoiceProvider(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2"
-              >
-                <option value="openai">OpenAI TTS (alloy/onyx/shimmer)</option>
-              </select>
+              <label className="block text-sm font-medium mb-2">Voice Engine</label>
+              <div className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-300 flex items-center justify-between">
+                <span>Gemini 2.5 TTS — Aoede · Charon · Zephyr</span>
+                <span className="text-xs text-blue-400 font-medium">Same as NotebookLM</span>
+              </div>
             </div>
           </div>
 
@@ -577,7 +574,7 @@ export default function NewPodcastPage() {
           <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-6">
             <h3 className="text-xl font-semibold mb-3">✨ Intelligent Features</h3>
             <ul className="space-y-2 text-sm text-gray-300">
-              <li>✅ <strong>3 distinct voices</strong> - Host, Expert, Simplifier</li>
+              <li>✅ <strong>3 distinct voices</strong> - Gemini 2.5 TTS (same as NotebookLM)</li>
               <li>✅ <strong>Knowledge Graph</strong> - Concepts and relationships mapped</li>
               <li>✅ <strong>Chapter navigation</strong> - Jump to any topic instantly</li>
               <li>✅ <strong>Interactive Q&A</strong> - Ask questions with voice (Realtime API)</li>
