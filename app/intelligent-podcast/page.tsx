@@ -9,10 +9,16 @@ interface PodcastSummary {
   id: string
   title: string
   description: string
-  duration: number // seconds
+  duration: number
   language: string
   status: string
   created_at: string
+}
+
+const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
+  ready: { label: 'Ready', class: 'badge-success' },
+  generating: { label: 'Generating', class: 'badge-warning' },
+  error: { label: 'Error', class: 'badge-error' },
 }
 
 export default function PodcastsListPage() {
@@ -43,10 +49,7 @@ export default function PodcastsListPage() {
         .order('created_at', { ascending: false })
         .limit(50)
 
-      if (error) {
-        throw error
-      }
-
+      if (error) throw error
       setPodcasts((data as PodcastSummary[]) || [])
     } catch (err) {
       console.error('Failed to fetch podcasts:', err)
@@ -57,81 +60,103 @@ export default function PodcastsListPage() {
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
+    if (mins < 1) return 'Less than a minute'
     return `${mins} min`
   }
 
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 0) return 'Today'
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays} days ago`
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-background text-text-primary">
+      <div className="max-w-4xl mx-auto px-6 py-10">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-10">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Intelligent Podcasts</h1>
-            <p className="text-gray-400">
-              Your AI-powered interactive learning podcasts
-            </p>
+            <h1 className="heading-1">Podcasts</h1>
+            <p className="caption mt-1">Your generated audio conversations</p>
           </div>
-          <Link
-            href="/intelligent-podcast/new"
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 font-semibold rounded-lg transition-colors"
-          >
-            + Create New Podcast
+          <Link href="/intelligent-podcast/new" className="btn-primary">
+            New podcast
           </Link>
         </div>
 
-        {/* Podcasts grid */}
+        <div className="divider mb-8" />
+
+        {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            <div className="spinner spinner-lg" />
           </div>
         ) : podcasts.length === 0 ? (
           <div className="text-center py-20">
-            <div className="text-6xl mb-4">🎙️</div>
-            <h3 className="text-2xl font-semibold mb-2">No podcasts yet</h3>
-            <p className="text-gray-400 mb-6">
-              Create your first intelligent podcast from your documents
+            <p className="text-text-tertiary text-lg mb-2">No podcasts yet</p>
+            <p className="text-text-muted text-sm mb-8">
+              Create your first podcast from your documents
             </p>
-            <Link
-              href="/intelligent-podcast/new"
-              className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 font-semibold rounded-lg transition-colors"
-            >
-              Get Started
+            <Link href="/intelligent-podcast/new" className="btn-primary">
+              Get started
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {podcasts.map((podcast) => (
-              <div
-                key={podcast.id}
-                onClick={() => router.push(`/intelligent-podcast/${podcast.id}`)}
-                className="bg-gray-900 rounded-lg p-6 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-800"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="text-3xl">🎧</div>
-                  <div className={`px-2 py-1 rounded text-xs font-semibold ${
-                    podcast.status === 'ready' ? 'bg-green-900 text-green-300' :
-                    podcast.status === 'generating' ? 'bg-yellow-900 text-yellow-300' :
-                    'bg-red-900 text-red-300'
-                  }`}>
-                    {podcast.status}
+          <div className="space-y-1">
+            {podcasts.map((podcast) => {
+              const status = STATUS_CONFIG[podcast.status] || STATUS_CONFIG.error
+
+              return (
+                <div
+                  key={podcast.id}
+                  onClick={() => router.push(`/intelligent-podcast/${podcast.id}`)}
+                  className="flex items-center gap-4 px-4 py-4 -mx-4 rounded-xl cursor-pointer transition-all duration-150 hover:bg-elevated group"
+                >
+                  {/* Icon */}
+                  <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center flex-shrink-0 group-hover:border-border-light transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-text-tertiary">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                      <line x1="8" y1="23" x2="16" y2="23" />
+                    </svg>
                   </div>
-                </div>
 
-                <h3 className="text-xl font-semibold mb-2">{podcast.title}</h3>
-                <p className="text-gray-400 text-sm mb-4 line-clamp-2">
-                  {podcast.description}
-                </p>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-medium text-text-primary truncate">
+                        {podcast.title}
+                      </h3>
+                      <span className={`badge ${status.class} flex-shrink-0`}>
+                        {status.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-tertiary mt-0.5 truncate">
+                      {podcast.description}
+                    </p>
+                  </div>
 
-                <div className="flex items-center gap-4 text-sm text-gray-500">
-                  <div>⏱ {formatDuration(podcast.duration)}</div>
-                  <div className="uppercase">{podcast.language}</div>
-                </div>
+                  {/* Meta */}
+                  <div className="flex items-center gap-4 flex-shrink-0 text-xs text-text-muted">
+                    <span>{formatDuration(podcast.duration)}</span>
+                    <span className="uppercase">{podcast.language}</span>
+                    <span>{formatDate(podcast.created_at)}</span>
+                  </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-800 text-xs text-gray-600">
-                  Created {new Date(podcast.created_at).toLocaleDateString()}
+                  {/* Arrow */}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-text-muted group-hover:text-text-tertiary transition-colors flex-shrink-0">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

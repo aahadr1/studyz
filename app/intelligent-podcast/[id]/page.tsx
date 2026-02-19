@@ -26,9 +26,7 @@ export default function PodcastPage() {
   const fetchPodcast = async () => {
     try {
       const response = await fetch(`/api/intelligent-podcast/${podcastId}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch podcast')
-      }
+      if (!response.ok) throw new Error('Failed to fetch podcast')
       const data = await response.json()
       setPodcast(data)
     } catch (err: any) {
@@ -51,35 +49,31 @@ export default function PodcastPage() {
   const handleResumeInteraction = () => {
     setShowInteraction(false)
     setInterruptContext(null)
-    // Resume playback handled by player component
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <div className="text-white text-xl">Loading podcast...</div>
-        </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="spinner spinner-lg" />
       </div>
     )
   }
 
   if (error || !podcast) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
-        <div className="bg-red-900/50 border border-red-600 rounded-lg p-6 max-w-md">
-          <h2 className="text-2xl font-bold text-white mb-2">Error</h2>
-          <p className="text-red-200">{error || 'Podcast not found'}</p>
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="text-center max-w-md">
+          <p className="text-text-primary text-lg font-medium mb-2">Something went wrong</p>
+          <p className="text-text-tertiary text-sm">{error || 'Podcast not found'}</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen bg-gray-950">
+    <div className="h-screen bg-background">
       <PodcastPlayer podcast={podcast} onInterrupt={handleInterrupt} />
-      
+
       {showInteraction && interruptContext && (
         <RealtimeInteraction
           podcastId={podcastId}

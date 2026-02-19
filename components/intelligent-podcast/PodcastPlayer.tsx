@@ -1,21 +1,16 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { IntelligentPodcast, PodcastSegment, PodcastChapter } from '@/types/intelligent-podcast'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { IntelligentPodcast, PodcastSegment } from '@/types/intelligent-podcast'
 
 const SPEAKER_NAMES: Record<string, string> = {
   host: 'Alex',
   expert: 'Jamie',
 }
 
-const SPEAKER_COLORS: Record<string, string> = {
-  host: 'bg-purple-600',
-  expert: 'bg-blue-600',
-}
-
-const SPEAKER_ACTIVE_BG: Record<string, string> = {
-  host: 'bg-purple-900/50 border-l-4 border-purple-500',
-  expert: 'bg-blue-900/50 border-l-4 border-blue-500',
+const SPEAKER_TEXT_COLORS: Record<string, string> = {
+  host: 'text-mode-test',
+  expert: 'text-mode-study',
 }
 
 // WAV constants (must match TTS output: 24kHz, 16-bit, mono)
@@ -26,7 +21,7 @@ const BITS_PER_SAMPLE = 16
 const WAV_HEADER_SIZE = 44
 
 interface SegmentTimeRange {
-  start: number // seconds offset in the merged audio
+  start: number
   end: number
 }
 
@@ -41,7 +36,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const [totalDuration, setTotalDuration] = useState(podcast.duration || 0)
   const [playbackRate, setPlaybackRate] = useState(1.0)
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0)
-  const [showTranscript, setShowTranscript] = useState(true)
+  const [showChapters, setShowChapters] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
 
   // Merged audio state
@@ -53,6 +48,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const transcriptRef = useRef<HTMLDivElement>(null)
   const segmentRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const progressRef = useRef<HTMLDivElement>(null)
 
   const currentSegment = podcast.segments[currentSegmentIndex]
   const currentChapter = podcast.chapters.find(
@@ -78,7 +74,6 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
       }
 
       try {
-        // Fetch all segment audio in parallel (batched to avoid overwhelming the browser)
         const FETCH_BATCH = 10
         const pcmChunks: ArrayBuffer[] = []
         const ranges: SegmentTimeRange[] = []
@@ -106,14 +101,12 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
             if (cancelled) return
 
             if (buf && buf.byteLength > WAV_HEADER_SIZE) {
-              // Strip the 44-byte WAV header to get raw PCM
               const pcm = buf.slice(WAV_HEADER_SIZE)
               pcmChunks.push(pcm)
               const durationSec = pcm.byteLength / (SAMPLE_RATE * BYTES_PER_SAMPLE * NUM_CHANNELS)
               ranges.push({ start: currentOffset, end: currentOffset + durationSec })
               currentOffset += durationSec
             } else {
-              // Empty or failed segment: insert tiny silence (0.1s)
               const silenceBytes = Math.round(0.1 * SAMPLE_RATE * BYTES_PER_SAMPLE)
               pcmChunks.push(new ArrayBuffer(silenceBytes))
               ranges.push({ start: currentOffset, end: currentOffset + 0.1 })
@@ -129,28 +122,25 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
         if (cancelled) return
 
-        // Concatenate all PCM into one WAV
         const totalPcmBytes = pcmChunks.reduce((sum, c) => sum + c.byteLength, 0)
         const wavBuffer = new ArrayBuffer(WAV_HEADER_SIZE + totalPcmBytes)
         const view = new DataView(wavBuffer)
         const bytes = new Uint8Array(wavBuffer)
 
-        // Write WAV header
         writeString(view, 0, 'RIFF')
         view.setUint32(4, 36 + totalPcmBytes, true)
         writeString(view, 8, 'WAVE')
         writeString(view, 12, 'fmt ')
-        view.setUint32(16, 16, true) // chunk size
-        view.setUint16(20, 1, true)  // PCM format
+        view.setUint32(16, 16, true)
+        view.setUint16(20, 1, true)
         view.setUint16(22, NUM_CHANNELS, true)
         view.setUint32(24, SAMPLE_RATE, true)
-        view.setUint32(28, SAMPLE_RATE * NUM_CHANNELS * BYTES_PER_SAMPLE, true) // byte rate
-        view.setUint16(32, NUM_CHANNELS * BYTES_PER_SAMPLE, true) // block align
+        view.setUint32(28, SAMPLE_RATE * NUM_CHANNELS * BYTES_PER_SAMPLE, true)
+        view.setUint16(32, NUM_CHANNELS * BYTES_PER_SAMPLE, true)
         view.setUint16(34, BITS_PER_SAMPLE, true)
         writeString(view, 36, 'data')
         view.setUint32(40, totalPcmBytes, true)
 
-        // Copy PCM data
         let offset = WAV_HEADER_SIZE
         for (const chunk of pcmChunks) {
           bytes.set(new Uint8Array(chunk), offset)
@@ -174,22 +164,15 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     }
 
     mergeAudio()
-
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [podcast.segments])
 
-  // Clean up blob URL on unmount or when it changes
   useEffect(() => {
     return () => {
-      if (mergedAudioUrl) {
-        URL.revokeObjectURL(mergedAudioUrl)
-      }
+      if (mergedAudioUrl) URL.revokeObjectURL(mergedAudioUrl)
     }
   }, [mergedAudioUrl])
 
-  // Set merged audio as source when ready
   useEffect(() => {
     if (audioRef.current && mergedAudioUrl) {
       audioRef.current.src = mergedAudioUrl
@@ -197,7 +180,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     }
   }, [mergedAudioUrl])
 
-  // ─── Segment tracking from continuous playback time ──────────────────────
+  // ─── Segment tracking ──────────────────────────────────────────────────
 
   const findSegmentAtTime = useCallback((time: number): number => {
     if (segmentRanges.length === 0) return 0
@@ -207,19 +190,15 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     return 0
   }, [segmentRanges])
 
-  // Auto-scroll transcript to current segment
   const scrollToSegment = useCallback((index: number) => {
     const el = segmentRefs.current.get(index)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [])
 
-  // ─── Controls ────────────────────────────────────────────────────────────
+  // ─── Controls ──────────────────────────────────────────────────────────
 
   const togglePlayPause = () => {
     if (!audioRef.current || !mergedAudioUrl) return
-
     if (isPlaying) {
       audioRef.current.pause()
       setIsPlaying(false)
@@ -229,16 +208,11 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   }
 
   const nextSegment = () => {
-    if (currentSegmentIndex < segmentRanges.length - 1) {
-      const nextIdx = currentSegmentIndex + 1
-      seekToSegment(nextIdx)
-    }
+    if (currentSegmentIndex < segmentRanges.length - 1) seekToSegment(currentSegmentIndex + 1)
   }
 
   const previousSegment = () => {
-    if (currentSegmentIndex > 0) {
-      seekToSegment(currentSegmentIndex - 1)
-    }
+    if (currentSegmentIndex > 0) seekToSegment(currentSegmentIndex - 1)
   }
 
   const seekToSegment = (index: number) => {
@@ -261,23 +235,33 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     }
   }
 
-  const handleInterrupt = () => {
-    if (audioRef.current) {
-      audioRef.current.pause()
-    }
-    setIsPlaying(false)
-    if (currentSegment) {
-      onInterrupt(currentSegment.id, currentTime)
-    }
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressRef.current || totalDuration === 0) return
+    const rect = progressRef.current.getBoundingClientRect()
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    seekToTime(pct * totalDuration)
   }
 
-  // ─── Audio event handlers ────────────────────────────────────────────────
+  const handleInterrupt = () => {
+    if (audioRef.current) audioRef.current.pause()
+    setIsPlaying(false)
+    if (currentSegment) onInterrupt(currentSegment.id, currentTime)
+  }
+
+  const cyclePlaybackRate = () => {
+    const rates = [1, 1.25, 1.5, 2, 0.75]
+    const currentIdx = rates.indexOf(playbackRate)
+    const nextRate = rates[(currentIdx + 1) % rates.length]
+    setPlaybackRate(nextRate)
+    if (audioRef.current) audioRef.current.playbackRate = nextRate
+  }
+
+  // ─── Audio events ──────────────────────────────────────────────────────
 
   const handleTimeUpdate = () => {
     if (!audioRef.current) return
     const t = audioRef.current.currentTime
     setCurrentTime(t)
-
     const idx = findSegmentAtTime(t)
     if (idx !== currentSegmentIndex) {
       setCurrentSegmentIndex(idx)
@@ -285,11 +269,9 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     }
   }
 
-  const handleEnded = () => {
-    setIsPlaying(false)
-  }
+  const handleEnded = () => setIsPlaying(false)
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
+  // ─── Helpers ───────────────────────────────────────────────────────────
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -310,12 +292,10 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
         method: 'GET',
         credentials: 'include',
       })
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err?.error || 'Download failed')
       }
-
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -333,11 +313,12 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     }
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  const progressPct = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0
+
+  // ─── Render ────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 text-white">
-      {/* Hidden audio element — plays the single merged blob */}
+    <div className="flex flex-col h-full bg-background text-text-primary">
       <audio
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
@@ -345,221 +326,258 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
         preload="auto"
       />
 
-      {/* Header */}
-      <div className="p-6 border-b border-gray-800">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold mb-2 truncate">{podcast.title}</h1>
-            <p className="text-gray-400">{podcast.description}</p>
-          </div>
-          <button
-            onClick={downloadWholePodcast}
-            disabled={!canDownload || isDownloading}
-            className="px-4 py-2 rounded bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-            title={canDownload ? 'Download all audio segments as a zip' : 'Available once all audio is generated'}
-          >
-            {isDownloading ? 'Preparing...' : 'Download whole podcast'}
-          </button>
-        </div>
-        {currentChapter && (
-          <div className="mt-4 p-3 bg-gray-800 rounded-lg">
-            <div className="text-sm text-gray-400">Current Chapter</div>
-            <div className="font-semibold">{currentChapter.title}</div>
-          </div>
-        )}
-      </div>
-
       {/* Loading overlay */}
       {isLoadingAudio && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-400 mb-2">Preparing audio...</p>
-            <div className="w-48 mx-auto bg-gray-700 rounded-full h-2 overflow-hidden">
+            <div className="spinner spinner-lg mx-auto mb-4" />
+            <p className="text-text-secondary text-sm mb-3">Preparing audio...</p>
+            <div className="w-48 mx-auto bg-elevated rounded-full h-1 overflow-hidden">
               <div
-                className="bg-blue-500 h-full transition-[width] duration-300"
+                className="bg-text-tertiary h-full transition-[width] duration-300 rounded-full"
                 style={{ width: `${loadProgress}%` }}
               />
             </div>
-            <p className="text-xs text-gray-500 mt-2">{loadProgress}% loaded</p>
+            <p className="text-xs text-text-muted mt-2 mono">{loadProgress}%</p>
           </div>
         </div>
       )}
 
-      {/* Main content area (shown after audio is loaded) */}
+      {/* Main content */}
       {!isLoadingAudio && (
         <>
-          <div className="flex-1 flex overflow-hidden">
-            {/* Transcript panel */}
-            {showTranscript && (
-              <div ref={transcriptRef} className="flex-1 p-6 overflow-y-auto">
-                <div className="max-w-3xl mx-auto space-y-2">
-                  {podcast.segments.map((segment, idx) => {
-                    const isActive = idx === currentSegmentIndex
-                    const speakerName = SPEAKER_NAMES[segment.speaker] || segment.speaker
-                    const avatarColor = SPEAKER_COLORS[segment.speaker] || 'bg-gray-600'
-                    const activeBg = SPEAKER_ACTIVE_BG[segment.speaker] || 'bg-blue-900/50 border-l-4 border-blue-500'
-                    const segTime = segmentRanges[idx]
-
-                    return (
-                      <div
-                        key={segment.id}
-                        ref={(el) => {
-                          if (el) segmentRefs.current.set(idx, el)
-                        }}
-                        onClick={() => seekToSegment(idx)}
-                        className={`p-3 rounded-lg transition-all cursor-pointer hover:bg-gray-800/60 ${
-                          isActive ? activeBg : 'bg-gray-800/20'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${avatarColor}`}>
-                              {speakerName.charAt(0)}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-xs font-medium text-gray-300">{speakerName}</span>
-                              <span className="text-xs text-gray-500">
-                                {segTime ? formatTime(segTime.start) : formatTime(segment.timestamp)}
-                              </span>
-                            </div>
-                            <div className={`text-sm leading-relaxed ${isActive ? 'text-white' : 'text-gray-300'}`}>
-                              {segment.text}
-                            </div>
-                            {segment.isQuestionBreakpoint && (
-                              <div className="mt-1 text-xs text-yellow-400">
-                                Good moment to ask a question
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+          {/* Top bar */}
+          <div className="flex items-center justify-between px-6 h-14 border-b border-border flex-shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <a href="/intelligent-podcast" className="btn-ghost p-1.5 -ml-1.5">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </a>
+              <div className="min-w-0">
+                <h1 className="text-sm font-medium truncate">{podcast.title}</h1>
               </div>
-            )}
+            </div>
 
-            {/* Chapters sidebar */}
-            <div className="w-80 border-l border-gray-800 p-4 overflow-y-auto">
-              <h3 className="text-lg font-semibold mb-4">Chapters</h3>
-              <div className="space-y-2">
-                {podcast.chapters.map((chapter) => (
-                  <button
-                    key={chapter.id}
-                    onClick={() => seekToTime(chapter.startTime)}
-                    className={`w-full text-left p-3 rounded-lg transition-colors ${
-                      currentChapter?.id === chapter.id
-                        ? 'bg-blue-600'
-                        : 'bg-gray-800 hover:bg-gray-700'
-                    }`}
-                  >
-                    <div className="font-medium">{chapter.title}</div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {formatTime(chapter.startTime)} - {formatTime(chapter.endTime)}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Difficulty: {chapter.difficulty}
-                    </div>
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowChapters(!showChapters)}
+                className={`btn-ghost text-xs px-3 py-1.5 ${showChapters ? 'bg-elevated text-text-primary' : ''}`}
+              >
+                Chapters
+              </button>
+              <button
+                onClick={downloadWholePodcast}
+                disabled={!canDownload || isDownloading}
+                className="btn-ghost p-1.5 disabled:opacity-30"
+                title="Download podcast"
+              >
+                {isDownloading ? (
+                  <div className="spinner spinner-sm" />
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
 
-          {/* Player controls */}
-          <div className="border-t border-gray-800 p-6">
-            {/* Progress bar */}
-            <div className="mb-4">
-              <input
-                type="range"
-                min="0"
-                max={totalDuration}
-                step="0.1"
-                value={currentTime}
-                onChange={(e) => seekToTime(Number(e.target.value))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-sm text-gray-400 mt-1">
-                <span>{formatTime(currentTime)}</span>
-                <span>{formatTime(totalDuration)}</span>
+          {/* Content area */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Transcript */}
+            <div ref={transcriptRef} className="flex-1 overflow-y-auto">
+              {/* Podcast info header */}
+              <div className="px-6 py-6 border-b border-border">
+                <h2 className="heading-2 mb-1">{podcast.title}</h2>
+                <p className="text-sm text-text-tertiary">{podcast.description}</p>
+                {currentChapter && (
+                  <div className="mt-4 flex items-center gap-2">
+                    <span className="label">Now playing</span>
+                    <span className="text-sm text-text-secondary">{currentChapter.title}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Segments */}
+              <div className="px-6 py-4">
+                {podcast.segments.map((segment, idx) => {
+                  const isActive = idx === currentSegmentIndex
+                  const speakerName = SPEAKER_NAMES[segment.speaker] || segment.speaker
+                  const speakerColor = SPEAKER_TEXT_COLORS[segment.speaker] || 'text-text-secondary'
+                  const segTime = segmentRanges[idx]
+
+                  // Check if this is a chapter boundary
+                  const chapterStart = podcast.chapters.find(ch => {
+                    if (!segTime) return false
+                    return Math.abs(ch.startTime - segTime.start) < 2
+                  })
+
+                  return (
+                    <div key={segment.id}>
+                      {chapterStart && idx > 0 && (
+                        <div className="flex items-center gap-3 py-4">
+                          <div className="flex-1 border-t border-border" />
+                          <span className="label flex-shrink-0">{chapterStart.title}</span>
+                          <div className="flex-1 border-t border-border" />
+                        </div>
+                      )}
+                      <div
+                        ref={(el) => { if (el) segmentRefs.current.set(idx, el) }}
+                        onClick={() => seekToSegment(idx)}
+                        className={`flex gap-3 py-2.5 px-3 -mx-3 rounded-lg cursor-pointer transition-all duration-100 ${
+                          isActive
+                            ? 'bg-elevated'
+                            : 'hover:bg-surface'
+                        }`}
+                      >
+                        {/* Time */}
+                        <span className="text-xs text-text-muted mono w-10 flex-shrink-0 pt-0.5 text-right">
+                          {segTime ? formatTime(segTime.start) : formatTime(segment.timestamp)}
+                        </span>
+
+                        {/* Speaker + Text */}
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-xs font-medium ${speakerColor}`}>
+                            {speakerName}
+                          </span>
+                          <p className={`text-sm leading-relaxed mt-0.5 ${
+                            isActive ? 'text-text-primary' : 'text-text-secondary'
+                          }`}>
+                            {segment.text}
+                          </p>
+                          {segment.isQuestionBreakpoint && isActive && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleInterrupt() }}
+                              className="mt-1.5 text-xs text-mode-challenge hover:text-mode-challenge/80 transition-colors"
+                            >
+                              Ask a question
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
-            {/* Control buttons */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+            {/* Chapters sidebar */}
+            {showChapters && (
+              <div className="w-72 border-l border-border overflow-y-auto flex-shrink-0">
+                <div className="p-4">
+                  <h3 className="label mb-4">Chapters</h3>
+                  <div className="space-y-1">
+                    {podcast.chapters.map((chapter) => {
+                      const isActive = currentChapter?.id === chapter.id
+                      return (
+                        <button
+                          key={chapter.id}
+                          onClick={() => seekToTime(chapter.startTime)}
+                          className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-150 ${
+                            isActive
+                              ? 'bg-elevated text-text-primary'
+                              : 'text-text-secondary hover:bg-surface hover:text-text-primary'
+                          }`}
+                        >
+                          <div className="text-sm font-medium">{chapter.title}</div>
+                          <div className="text-xs text-text-muted mt-0.5 mono">
+                            {formatTime(chapter.startTime)}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom player bar */}
+          <div className="border-t border-border flex-shrink-0">
+            {/* Progress bar */}
+            <div
+              ref={progressRef}
+              onClick={handleProgressClick}
+              className="h-1 bg-elevated cursor-pointer group relative"
+            >
+              <div
+                className="h-full bg-text-primary transition-[width] duration-100"
+                style={{ width: `${progressPct}%` }}
+              />
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-text-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ left: `calc(${progressPct}% - 6px)` }}
+              />
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center justify-between px-6 py-3">
+              {/* Left: time */}
+              <div className="flex items-center gap-2 w-28">
+                <span className="text-xs text-text-muted mono">
+                  {formatTime(currentTime)}
+                </span>
+                <span className="text-xs text-text-muted">/</span>
+                <span className="text-xs text-text-muted mono">
+                  {formatTime(totalDuration)}
+                </span>
+              </div>
+
+              {/* Center: playback controls */}
+              <div className="flex items-center gap-3">
                 <button
                   onClick={previousSegment}
                   disabled={currentSegmentIndex === 0}
-                  className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-50"
+                  className="btn-ghost p-2 disabled:opacity-30"
                 >
-                  Previous
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/>
+                  </svg>
                 </button>
 
                 <button
                   onClick={togglePlayPause}
                   disabled={!mergedAudioUrl}
-                  className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center text-2xl"
+                  className="w-10 h-10 rounded-full bg-text-primary text-background flex items-center justify-center hover:bg-accent-hover transition-all duration-150 disabled:opacity-30 hover:scale-[1.05] active:scale-[0.95]"
                 >
-                  {isPlaying ? 'Pause' : 'Play'}
+                  {isPlaying ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="6" y="4" width="4" height="16" rx="1"/>
+                      <rect x="14" y="4" width="4" height="16" rx="1"/>
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="ml-0.5">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  )}
                 </button>
 
                 <button
                   onClick={nextSegment}
                   disabled={currentSegmentIndex === podcast.segments.length - 1}
-                  className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-50"
+                  className="btn-ghost p-2 disabled:opacity-30"
                 >
-                  Next
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                  </svg>
                 </button>
               </div>
 
-              <div className="flex items-center gap-4">
-                <select
-                  value={playbackRate}
-                  onChange={(e) => {
-                    const rate = Number(e.target.value)
-                    setPlaybackRate(rate)
-                    if (audioRef.current) {
-                      audioRef.current.playbackRate = rate
-                    }
-                  }}
-                  className="bg-gray-800 text-white px-3 py-2 rounded"
-                >
-                  <option value="0.5">0.5x</option>
-                  <option value="0.75">0.75x</option>
-                  <option value="1">1x</option>
-                  <option value="1.25">1.25x</option>
-                  <option value="1.5">1.5x</option>
-                  <option value="2">2x</option>
-                </select>
-
+              {/* Right: speed + speaker */}
+              <div className="flex items-center gap-3 w-28 justify-end">
                 <button
-                  onClick={() => setShowTranscript(!showTranscript)}
-                  className="px-4 py-2 rounded bg-gray-800 hover:bg-gray-700"
+                  onClick={cyclePlaybackRate}
+                  className="btn-ghost text-xs mono px-2 py-1"
                 >
-                  {showTranscript ? 'Hide' : 'Show'} Transcript
+                  {playbackRate}x
                 </button>
-
-                <button
-                  onClick={handleInterrupt}
-                  disabled={!currentSegment?.isQuestionBreakpoint}
-                  className={`px-6 py-3 rounded-lg font-semibold transition-all ${
-                    currentSegment?.isQuestionBreakpoint
-                      ? 'bg-yellow-600 hover:bg-yellow-700 animate-pulse'
-                      : 'bg-gray-700 opacity-50 cursor-not-allowed'
-                  }`}
-                >
-                  Ask Question
-                </button>
+                <span className="text-xs text-text-muted">
+                  {SPEAKER_NAMES[currentSegment?.speaker] || ''}
+                </span>
               </div>
-            </div>
-
-            {/* Current speaker indicator */}
-            <div className="mt-4 text-center text-sm text-gray-400">
-              Currently speaking: <span className="font-semibold text-white">{SPEAKER_NAMES[currentSegment?.speaker] || currentSegment?.speaker}</span>
             </div>
           </div>
         </>
