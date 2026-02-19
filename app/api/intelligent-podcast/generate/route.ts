@@ -37,24 +37,12 @@ async function createAuthClient() {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.REPLICATE_API_TOKEN) {
-      console.error('[Podcast] REPLICATE_API_TOKEN is not set')
+    if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
+      console.error('[Podcast] GEMINI_API_KEY is not set')
       return NextResponse.json(
-        {
-          error: 'Server configuration error',
-          details: 'Replicate API token is not configured (required for Gemini OCR + script generation)',
-        },
+        { error: 'Server configuration error', details: 'GEMINI_API_KEY is not configured' },
         { status: 500 }
       )
-    }
-
-    if (!process.env.OPENAI_API_KEY) {
-      // Still required for OpenAI TTS + TTS text cleanup used in the audio pipeline
-      console.error('[Podcast] OPENAI_API_KEY is not set')
-      return NextResponse.json({
-        error: 'Server configuration error',
-        details: 'OpenAI API key is not configured'
-      }, { status: 500 })
     }
 
     const supabase = await createAuthClient()
@@ -71,7 +59,7 @@ export async function POST(request: NextRequest) {
       targetDuration = 30,
       language = 'auto',
       style = 'conversational',
-      voiceProvider = 'openai',
+      voiceProvider = 'gemini',
       userPrompt = '',
     } = body as {
       documents?: Array<{
