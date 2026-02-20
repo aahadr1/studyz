@@ -27,42 +27,16 @@ function estimateMinutesFromWords(words: number, wpm: number = 150): number {
   return words / safeWpm
 }
 
-function estimateScriptMetrics(segments: PodcastSegment[]) {
-  const totalWords = segments.reduce((sum, s) => sum + countWords(s.text), 0)
-  const estimatedMinutes = estimateMinutesFromWords(totalWords, 150)
-  const avgWordsPerSegment = segments.length > 0 ? totalWords / segments.length : 0
-  return { totalWords, estimatedMinutes, avgWordsPerSegment }
-}
-
-type RawSegment = {
-  speaker?: string
-  text?: string
-  concepts?: string[]
-  isQuestionBreakpoint?: boolean
-  difficulty?: 'easy' | 'medium' | 'hard'
-}
-
-function sanitizeSpeaker(speaker: any): 'host' | 'expert' {
-  const v = String(speaker || '').toLowerCase().trim()
-  if (v === 'expert') return 'expert'
-  return 'host'
-}
-
-function sanitizeDifficulty(d: any): 'easy' | 'medium' | 'hard' {
-  const v = String(d || '').toLowerCase().trim()
-  if (v === 'easy') return 'easy'
-  if (v === 'hard') return 'hard'
-  return 'medium'
-}
-
 /**
- * Generate intelligent podcast script with chapters, segments, and predicted Q&A
+ * Generate intelligent podcast script as a natural, flowing conversation.
+ * The podcast is generated as ONE continuous piece with topics flowing into each other,
+ * not as separate chapters with their own introductions and conclusions.
  */
 export async function generateIntelligentScript(
   documents: DocumentContent[],
   knowledgeGraph: KnowledgeGraph,
   config: {
-    targetDuration: number // minutes
+    targetDuration: number
     language: string
     style: 'educational' | 'conversational' | 'technical' | 'storytelling'
     voiceProfiles: VoiceProfile[]
@@ -71,520 +45,305 @@ export async function generateIntelligentScript(
 ): Promise<ScriptGenerationResult> {
   console.log('[Script] Starting intelligent script generation...')
 
-  // Step 1: Generate high-level structure (chapters)
-  const chaptersData = await generateChapters(documents, knowledgeGraph, config)
+  // Generate the complete podcast script as one continuous conversation
+  const result = await generatePodcastScript(documents, knowledgeGraph, config)
 
-  // Step 2: Generate detailed segments for each chapter
-  const segmentsData = await generateSegments(chaptersData.chapters, knowledgeGraph, config)
-
-  const metrics = estimateScriptMetrics(segmentsData.segments)
+  const totalWords = result.segments.reduce((sum, s) => sum + countWords(s.text), 0)
+  const estimatedMinutes = estimateMinutesFromWords(totalWords, 150)
+  
   console.log(
-    `[Script] Segments: ${segmentsData.segments.length}, words: ${metrics.totalWords}, estimated minutes: ${metrics.estimatedMinutes.toFixed(
-      1
-    )}, avg words/segment: ${metrics.avgWordsPerSegment.toFixed(1)}`
+    `[Script] Generated: ${result.segments.length} segments, ${totalWords} words, ~${estimatedMinutes.toFixed(1)} min estimated`
   )
 
-  // Step 3: Generate predicted questions with pre-generated answers
+  // Generate predicted questions for interactivity
   const predictedQuestions = await generatePredictedQuestions(
     documents,
     knowledgeGraph,
-    segmentsData.segments,
+    result.segments,
     config.language
   )
 
   console.log('[Script] Script generation completed successfully')
 
   return {
-    chapters: chaptersData.chapters,
-    segments: segmentsData.segments,
+    chapters: result.topics,
+    segments: result.segments,
     predictedQuestions,
-    title: chaptersData.title,
-    description: chaptersData.description,
+    title: result.title,
+    description: result.description,
   }
 }
 
 /**
- * Generate chapter structure for the podcast
+ * Generate the complete podcast as a natural conversation.
+ * This creates a single, cohesive podcast with ONE introduction, 
+ * natural topic transitions, and ONE conclusion.
  */
-async function generateChapters(
+async function generatePodcastScript(
   documents: DocumentContent[],
   knowledgeGraph: KnowledgeGraph,
-  config: { targetDuration: number; language: string; style: string; userPrompt?: string }
-): Promise<{ chapters: PodcastChapter[]; title: string; description: string }> {
-  const targetSeconds = Math.max(1, Math.round((config.targetDuration || 1) * 60))
-  const targetChapters = Math.max(3, Math.round(config.targetDuration / 7.5))
+  config: { targetDuration: number; language: string; style: string; voiceProfiles: VoiceProfile[]; userPrompt?: string }
+): Promise<{
+  topics: PodcastChapter[]
+  segments: PodcastSegment[]
+  title: string
+  description: string
+}> {
+  const targetWords = Math.round(config.targetDuration * 150) // ~150 words per minute
+  const targetSeconds = config.targetDuration * 60
 
   const documentsSummary = documents
     .map((doc) => `Document: ${doc.title}\nContent:\n${doc.content.slice(0, 200000)}`)
     .join('\n\n---\n\n')
 
-  const conceptsSummary = knowledgeGraph.concepts
-    .map((c) => `- ${c.name} (${c.difficulty}): ${c.description}`)
+  const topicsSummary = knowledgeGraph.concepts
+    .map((c) => `- ${c.name}: ${c.description}`)
     .join('\n')
 
-  const systemInstruction =
-    config.language === 'fr'
-      ? `Tu es un expert en creation de contenu podcast educatif.
+  const hostDescription = config.voiceProfiles.find(v => v.role === 'host')?.description || 'A curious and engaging host'
+  const expertDescription = config.voiceProfiles.find(v => v.role === 'expert')?.description || 'A knowledgeable and approachable expert'
 
-DEMANDE UTILISATEUR (a respecter au maximum) :
-${String(config.userPrompt || '').trim() || '(aucune demande specifique)'}
+  const systemInstruction = config.language === 'fr'
+    ? createFrenchPrompt(config, targetWords, targetSeconds, hostDescription, expertDescription)
+    : createEnglishPrompt(config, targetWords, targetSeconds, hostDescription, expertDescription)
 
-Cree une structure en CHAPITRES pour un podcast de ${config.targetDuration} minutes avec 2 intervenants : un hote curieux (Alex) et un expert accessible (Jamie).
+  const prompt = `SOURCE CONTENT:
+${documentsSummary}
 
-STYLE : ${config.style}
+IDENTIFIED TOPICS:
+${topicsSummary}
 
-REGLES :
-1. Cree environ ${targetChapters} chapitres (minimum 3, maximum 10)
-2. Chaque chapitre doit avoir un titre accrocheur, un resume, une duree estimee (secondes), les concepts couverts, un niveau de difficulte
-3. Progression logique du simple au complexe
-4. Equilibre entre les chapitres
-5. IMPORTANT: La somme des "estimatedDuration" DOIT etre proche de ${targetSeconds} secondes (+/-5%)
-6. IMPORTANT: Ce podcast est LONG-FORM. Planifie assez de place pour des discussions profondes, naturelles, avec des exemples, des digressions utiles, et des moments de reflexion.
+${config.userPrompt ? `USER'S SPECIFIC REQUEST:\n${config.userPrompt}\n\n` : ''}Generate the complete podcast script now.`
 
-Retourne un objet json :
-{
-  "title": "Titre accrocheur du podcast",
-  "description": "Description en 2-3 phrases",
-  "chapters": [
-    {
-      "id": "chapter-1",
-      "title": "Introduction : Les bases",
-      "summary": "Resume du chapitre",
-      "estimatedDuration": 300,
-      "concepts": ["concept-1", "concept-2"],
-      "difficulty": "easy"
-    }
-  ]
-}
-
-Output ONLY the raw JSON object: no markdown, no \`\`\` code block, no text before or after. No trailing commas in arrays or objects.
-IMPORTANT : Les IDs des concepts doivent correspondre a ceux fournis dans la liste.`
-      : `You are an expert podcast content architect.
-
-USER DEMAND (follow as closely as possible):
-${String(config.userPrompt || '').trim() || '(no specific demand)'}
-
-Create a CHAPTER structure for a ${config.targetDuration}-minute podcast featuring 2 speakers: a curious host (Alex) and a knowledgeable expert (Jamie).
-
-STYLE: ${config.style}
-
-RULES:
-1. Create about ${targetChapters} chapters (min 3, max 10)
-2. Each chapter needs: catchy title, concise summary, estimated duration (seconds), main concepts, difficulty level
-3. Logical progression: simple to complex
-4. Balance between chapters
-5. IMPORTANT: The sum of all "estimatedDuration" MUST be close to ${targetSeconds} seconds (+/-5%)
-6. IMPORTANT: This is LONG-FORM content. Plan room for deep, natural discussions with examples, useful tangents, and moments of reflection.
-
-Return a json object:
-{
-  "title": "Catchy podcast title",
-  "description": "Description in 2-3 sentences",
-  "chapters": [
-    {
-      "id": "chapter-1",
-      "title": "Introduction: The Basics",
-      "summary": "Chapter summary",
-      "estimatedDuration": 300,
-      "concepts": ["concept-1", "concept-2"],
-      "difficulty": "easy"
-    }
-  ]
-}
-
-Output ONLY the raw JSON object: no markdown, no \`\`\` code block, no text before or after. No trailing commas in arrays or objects.
-IMPORTANT: Concept IDs must match those provided in the list.`
-
-  let raw: string
-  try {
-    raw = await runGemini3Flash({
-      prompt: `Documents:\n${documentsSummary}\n\nAvailable concepts:\n${conceptsSummary}`,
-      systemInstruction,
-      thinkingLevel: 'high',
-      temperature: 0.6,
-      topP: 0.95,
-      maxOutputTokens: 8000,
-    })
-  } catch (err) {
-    console.error('Failed to generate chapters (LLM call):', err)
-    throw new Error('Failed to generate chapters')
-  }
-
-  let parsed: { title?: string; description?: string; chapters?: any[] }
-  try {
-    parsed = parseJsonObject<any>(raw)
-  } catch (parseErr) {
-    console.error('Failed to parse chapters JSON:', parseErr)
-    console.error('Raw response (first 1500 chars):', raw.slice(0, 1500))
-    parsed = { title: '', description: '', chapters: undefined }
-  }
-
-  const rawChapters = Array.isArray(parsed.chapters) ? parsed.chapters : []
-  if (rawChapters.length === 0) {
-    console.warn('Model returned no chapters; using single fallback chapter. Raw (first 1000 chars):', raw.slice(0, 1000))
-    parsed.chapters = [
-      {
-        id: 'chapter-1',
-        title: config.language === 'fr' ? 'Contenu principal' : 'Main content',
-        summary: '',
-        estimatedDuration: targetSeconds,
-        concepts: [],
-        difficulty: 'medium',
-      },
-    ]
-  }
-
-  const sanitized = (Array.isArray(parsed.chapters) ? parsed.chapters : [])
-    .map((ch: any, idx: number) => ({
-      id: String(ch?.id ?? `chapter-${idx + 1}`),
-      title: String(ch?.title ?? `Chapter ${idx + 1}`),
-      summary: String(ch?.summary ?? ''),
-      estimatedDuration: Number.isFinite(Number(ch?.estimatedDuration)) ? Math.max(30, Math.round(Number(ch.estimatedDuration))) : 300,
-      concepts: Array.isArray(ch?.concepts) ? ch.concepts : [],
-      difficulty: (ch?.difficulty === 'easy' || ch?.difficulty === 'hard' ? ch.difficulty : 'medium') as 'easy' | 'medium' | 'hard',
-    }))
-    .slice(0, 10)
-
-  const totalEstimated = sanitized.reduce((sum: number, ch: any) => sum + ch.estimatedDuration, 0)
-  const scale = totalEstimated > 0 ? targetSeconds / totalEstimated : 1
-
-  let cumulativeTime = 0
-  const chapters: PodcastChapter[] = sanitized.map((ch: any, idx: number) => {
-    const isLast = idx === sanitized.length - 1
-    const scaled = Math.max(30, Math.round(ch.estimatedDuration * scale))
-    const startTime = cumulativeTime
-    const endTime = isLast ? targetSeconds : cumulativeTime + scaled
-    cumulativeTime = endTime
-    return {
-      id: ch.id,
-      title: ch.title,
-      startTime,
-      endTime,
-      concepts: ch.concepts || [],
-      difficulty: ch.difficulty || 'medium',
-      summary: ch.summary || '',
-    }
+  const raw = await runGemini3Flash({
+    prompt,
+    systemInstruction,
+    thinkingLevel: 'high',
+    temperature: 0.8,
+    topP: 0.95,
+    maxOutputTokens: 65535,
   })
 
-  return {
-    chapters,
-    title: (parsed.title && String(parsed.title).trim()) ? String(parsed.title) : 'Podcast sans titre',
-    description: (parsed.description && String(parsed.description).trim()) ? String(parsed.description) : '',
-  }
-}
+  try {
+    const parsed = parseJsonObject<{
+      title?: string
+      description?: string
+      topics?: Array<{
+        id?: string
+        title?: string
+        summary?: string
+      }>
+      segments?: Array<{
+        speaker?: string
+        text?: string
+        topicId?: string
+        isQuestionBreakpoint?: boolean
+      }>
+    }>(raw)
 
-/**
- * Generate detailed conversation segments for all chapters
- */
-async function generateSegments(
-  chapters: PodcastChapter[],
-  knowledgeGraph: KnowledgeGraph,
-  config: { language: string; style: string; voiceProfiles: VoiceProfile[]; userPrompt?: string }
-): Promise<{ segments: PodcastSegment[] }> {
-  const allSegments: PodcastSegment[] = []
+    // Process topics (these are for navigation/UI, not rigid structure)
+    const topics: PodcastChapter[] = (parsed.topics || []).map((t, idx) => ({
+      id: t.id || `topic-${idx + 1}`,
+      title: t.title || `Topic ${idx + 1}`,
+      startTime: 0, // Will be computed after audio generation
+      endTime: 0,
+      concepts: [],
+      difficulty: 'medium' as const,
+      summary: t.summary || '',
+    }))
 
-  const expandChapterSegmentsIfNeeded = async (params: {
-    chapterTitle: string
-    chapterSummary: string
-    chapterSeconds: number
-    chapterTargetWords: number
-    conceptsDescription: string
-    currentSegments: RawSegment[]
-    minSegments: number
-    maxSegments: number
-    language: string
-    userPrompt?: string
-  }): Promise<RawSegment[]> => {
-    const currentWords = params.currentSegments.reduce((sum, s) => sum + countWords(s.text || ''), 0)
-    const targetWords = params.chapterTargetWords
-    const ratio = targetWords > 0 ? currentWords / targetWords : 1
+    // Process segments
+    const segments: PodcastSegment[] = (parsed.segments || []).map((seg, idx) => ({
+      id: `segment-${idx}`,
+      chapterId: seg.topicId || topics[0]?.id || 'topic-1',
+      speaker: (seg.speaker === 'expert' ? 'expert' : 'host') as 'host' | 'expert',
+      text: String(seg.text || '').trim(),
+      duration: 0,
+      timestamp: 0,
+      concepts: [],
+      isQuestionBreakpoint: Boolean(seg.isQuestionBreakpoint),
+      difficulty: 'medium' as const,
+    }))
 
-    if (ratio >= 0.75 && params.currentSegments.length >= params.minSegments) return params.currentSegments
-
-    const systemInstruction =
-      params.language === 'fr'
-        ? `Tu es un scénariste expert en podcasts conversationnels naturels.
-
-DEMANDE UTILISATEUR (a respecter au maximum) :
-${String(params.userPrompt || '').trim() || '(aucune demande specifique)'}
-
-Ta mission: EXPANDRE une conversation existante pour atteindre une durée réaliste tout en gardant un ton NATUREL et HUMAIN.
-
-INTERVENANTS :
-- HOST (Alex) : Hote curieux, pose les questions que l'auditeur se poserait, reagit naturellement, utilise des analogies
-- EXPERT (Jamie) : Expert accessible, explique avec passion, utilise un langage informel quand approprié
-
-CONTRAINTES ABSOLUES:
-- Ne résume pas. N'abrège pas.
-- Retourne UNIQUEMENT un objet JSON avec la clé "segments".
-- Chaque segment: speaker ("host" ou "expert"), text, concepts, isQuestionBreakpoint, difficulty.
-- Segments COURTS: 1-3 phrases par segment (15-60 mots). Beaucoup de segments courts.
-- Ajoute des réactions naturelles: "Ah oui!", "Hmm...", "Attends...", des hésitations, des rires.
-- PAS de monologues. Alternance rapide entre les deux intervenants.
-
-OBJECTIF:
-- Durée chapitre: ~${params.chapterSeconds}s
-- Cible mots: ~${targetWords} mots (+/-10%)
-- Nombre segments: entre ${params.minSegments} et ${params.maxSegments}
-`
-        : `You are a natural-sounding podcast script expander.
-
-USER DEMAND (follow as closely as possible):
-${String(params.userPrompt || '').trim() || '(no specific demand)'}
-
-Your job: EXPAND an existing conversation to reach its target duration while keeping it NATURAL and HUMAN-SOUNDING.
-
-SPEAKERS:
-- HOST (Alex): Curious host who asks what the listener would ask, reacts naturally, uses analogies
-- EXPERT (Jamie): Approachable expert who explains with passion, uses informal language when appropriate
-
-HARD CONSTRAINTS:
-- Do not summarize. Do not shorten.
-- Return ONLY a JSON object with key "segments".
-- Each segment: speaker ("host" or "expert"), text, concepts, isQuestionBreakpoint, difficulty.
-- Keep segments SHORT: 1-3 sentences each (15-60 words). Many short segments, not few long ones.
-- Add natural reactions: "Oh!", "Hmm...", "Wait...", hesitations, laughter cues [laughs].
-- NO monologues. Fast back-and-forth between both speakers.
-
-TARGET:
-- Chapter duration: ~${params.chapterSeconds}s
-- Word target: ~${targetWords} words (+/-10%)
-- Segment count: between ${params.minSegments} and ${params.maxSegments}
-`
-
-    const prompt = `Chapter: ${params.chapterTitle}
-Summary: ${params.chapterSummary}
-
-Concepts to cover:
-${params.conceptsDescription}
-
-CURRENT SEGMENTS (to expand):
-${JSON.stringify({ segments: params.currentSegments }, null, 2)}
-`
-
-    try {
-      const raw = await runGemini3Flash({
-        prompt,
-        systemInstruction,
-        thinkingLevel: 'high',
-        temperature: 0.65,
-        topP: 0.95,
-        maxOutputTokens: 65535,
-      })
-      const parsed = parseJsonObject<{ segments?: RawSegment[] }>(raw)
-      const segs = Array.isArray(parsed.segments) ? parsed.segments : []
-      if (segs.length === 0) return params.currentSegments
-      return segs
-    } catch (e) {
-      console.error('[Script] Chapter expansion failed:', e)
-      return params.currentSegments
+    // Estimate timing
+    let timestamp = 0
+    for (const seg of segments) {
+      const words = countWords(seg.text)
+      const duration = (words / 150) * 60 // Convert to seconds
+      seg.timestamp = timestamp
+      seg.duration = duration
+      timestamp += duration
     }
-  }
 
-  // Generate segments for each chapter
-  for (const chapter of chapters) {
-    console.log(`[Script] Generating segments for chapter: ${chapter.title}`)
-
-    const chapterConcepts = knowledgeGraph.concepts.filter((c) => chapter.concepts.includes(c.id))
-
-    const conceptsDescription = chapterConcepts
-      .map((c) => `- ${c.name}: ${c.description}`)
-      .join('\n')
-
-    const chapterSeconds = Math.max(60, Math.round(chapter.endTime - chapter.startTime))
-    const chapterTargetWords = Math.max(250, Math.round((chapterSeconds / 60) * 135))
-    // ~1 turn every 8-10 seconds for natural back-and-forth (much more segments than before)
-    const targetSegmentsForChapter = Math.max(10, Math.round(chapterSeconds / 9))
-
-    const systemPrompt =
-      config.language === 'fr'
-        ? `Tu es un scénariste de podcast qui écrit des dialogues INDISTINGUABLES d'une vraie conversation humaine.
-
-DEMANDE UTILISATEUR (a respecter au maximum) :
-${String(config.userPrompt || '').trim() || '(aucune demande specifique)'}
-
-Ecris la conversation pour ce chapitre de podcast entre Alex (hote) et Jamie (expert).
-Durée cible: ~${chapterSeconds} secondes.
-Budget mots: ~${chapterTargetWords} mots (+/-10%).
-
-INTERVENANTS :
-- HOST (Alex) : ${config.voiceProfiles.find(v => v.role === 'host')?.description || 'Hote curieux et accessible'}
-- EXPERT (Jamie) : ${config.voiceProfiles.find(v => v.role === 'expert')?.description || 'Expert passionné et approchable'}
-
-REGLES POUR UN SON NATUREL ET HUMAIN :
-1. SEGMENTS COURTS : 1-3 phrases par segment. Vise 15-60 mots par segment. Jamais plus de 80 mots.
-2. DISFLUENCES NATURELLES : Inclus "euh", "hmm", "enfin", "genre", "tu vois" aux moments naturels ou quelqu'un réfléchirait. Pas dans chaque segment, mais régulièrement (~20-30% des segments).
-3. REACTIONS : Beaucoup de segments sont juste des réactions : "Ah oui !", "Hmm intéressant...", "Attends, vraiment ?", "C'est dingue", "Ok ok ok". Ces segments font 1-5 mots.
-4. INTERRUPTIONS : Parfois un intervenant coupe l'autre : "Attends attends—", "Non mais—", "Pardon, mais—"
-5. AUTO-CORRECTIONS : "Enfin, en fait...", "Non attends, je reformule", "Comment dire..."
-6. RIRE : Inclus [rires] ou [rire] quand c'est naturel. Un bon podcast a des moments légers.
-7. VARIATION DE RYTHME : Certains segments sont excités et rapides, d'autres sont pensifs et lents.
-8. PAS DE STRUCTURE RIGIDE : Parfois Alex parle 2-3 fois d'affilée. Parfois Jamie fait une parenthèse. C'est une VRAIE conversation.
-9. L'HOTE SIMPLIFIE : Alex reformule ce que Jamie dit en termes simples. "Donc en gros, tu me dis que..."
-10. PAS CHAQUE TOUR N'ENSEIGNE : Certains tours sont juste de l'accord, de la surprise, ou du traitement d'info.
-
-CE QU'IL NE FAUT PAS FAIRE :
-- Pas de "Bonne question !" ou "C'est une excellente question" - c'est robotique
-- Pas de transitions parfaites - la vraie conversation est un peu chaotique
-- Pas de résumés à la fin de chaque concept - c'est trop scolaire
-- Pas de listes numérotées à l'oral - personne ne parle comme ça
-
-STRUCTURE DES SEGMENTS (json) :
-{
-  "segments": [
-    {
-      "speaker": "host",
-      "text": "Ok Jamie, donc aujourd'hui on parle de...",
-      "concepts": ["concept-1"],
-      "isQuestionBreakpoint": false,
-      "difficulty": "easy"
-    },
-    {
-      "speaker": "expert",
-      "text": "Ouais, et euh... c'est un sujet qui me passionne parce que...",
-      "concepts": ["concept-1"],
-      "isQuestionBreakpoint": false,
-      "difficulty": "easy"
-    },
-    {
-      "speaker": "host",
-      "text": "Ah oui ?",
-      "concepts": [],
-      "isQuestionBreakpoint": false,
-      "difficulty": "easy"
-    }
-  ]
-}
-
-Crée environ ${targetSegmentsForChapter} segments (min 10, max 120) pour couvrir tous les concepts du chapitre.
-Output ONLY the raw JSON object.`
-        : `You are a podcast scriptwriter who produces dialogue INDISTINGUISHABLE from a real human conversation.
-
-USER DEMAND (follow as closely as possible):
-${String(config.userPrompt || '').trim() || '(no specific demand)'}
-
-Write the conversation for this podcast chapter between Alex (host) and Jamie (expert).
-Target chapter duration: ~${chapterSeconds} seconds.
-Target word budget: ~${chapterTargetWords} words (+/-10%).
-
-SPEAKERS:
-- HOST (Alex): ${config.voiceProfiles.find(v => v.role === 'host')?.description || 'Curious, relatable host who asks what the listener would ask'}
-- EXPERT (Jamie): ${config.voiceProfiles.find(v => v.role === 'expert')?.description || 'Knowledgeable but approachable expert who explains with genuine enthusiasm'}
-
-RULES FOR NATURAL HUMAN-SOUNDING DIALOGUE:
-1. SHORT SEGMENTS: 1-3 sentences per segment. Aim for 15-60 words per segment. Never exceed 80 words.
-2. NATURAL DISFLUENCIES: Include "um", "uh", "like", "you know", "I mean" at natural thinking points where a human would hesitate. Not in every segment, but regularly (~20-30% of segments).
-3. REACTIONS: Many segments should be JUST reactions: "Oh!", "Hmm, interesting...", "Wait, really?", "That's wild", "Right right right". These segments can be 1-5 words.
-4. INTERRUPTIONS: Sometimes a speaker cuts in: "Wait wait—", "Hold on—", "Sorry, but—"
-5. SELF-CORRECTIONS: "Well, actually...", "No wait, let me rephrase that", "How do I put this..."
-6. LAUGHTER: Include [laughs] or [chuckles] where natural. Good podcasts have light moments.
-7. PACING VARIATION: Some segments are excited and fast, others are thoughtful and slow.
-8. NO RIGID STRUCTURE: Sometimes Alex speaks 2-3 times in a row. Sometimes Jamie goes on a tangent. This is a REAL conversation, not a script.
-9. HOST SIMPLIFIES: Alex rephrases what Jamie says in simple terms. "So basically what you're saying is..."
-10. NOT EVERY TURN TEACHES: Some turns are just agreement, surprise, or processing. "Huh." "Yeah." "That makes sense."
-
-WHAT NOT TO DO:
-- No "Great question!" or "That's an excellent question" — this is robotic and no one talks like this
-- No perfect transitions — real conversations are a bit messy
-- No summaries at the end of each concept — too textbook-like
-- No numbered lists spoken aloud — nobody talks in lists
-- No "Let's move on to..." — real conversations flow naturally from one topic to the next
-
-SEGMENT STRUCTURE (json format):
-{
-  "segments": [
-    {
-      "speaker": "host",
-      "text": "So Jamie, today we're diving into...",
-      "concepts": ["concept-1"],
-      "isQuestionBreakpoint": false,
-      "difficulty": "easy"
-    },
-    {
-      "speaker": "expert",
-      "text": "Yeah, and um... this is something I find really fascinating because...",
-      "concepts": ["concept-1"],
-      "isQuestionBreakpoint": false,
-      "difficulty": "easy"
-    },
-    {
-      "speaker": "host",
-      "text": "Oh really?",
-      "concepts": [],
-      "isQuestionBreakpoint": false,
-      "difficulty": "easy"
-    }
-  ]
-}
-
-Create about ${targetSegmentsForChapter} segments (min 10, max 120) to cover all chapter concepts.
-Output ONLY the raw JSON object.`
-
-    try {
-      const raw = await runGemini3Flash({
-        prompt: `Chapter: ${chapter.title}\n\nSummary: ${chapter.summary}\n\nConcepts to cover:\n${conceptsDescription}`,
-        systemInstruction: systemPrompt,
-        thinkingLevel: 'high',
-        temperature: 0.75,
-        topP: 0.95,
-        maxOutputTokens: 20000,
-      })
-      const parsed = parseJsonObject<any>(raw)
-      const initialSegments: RawSegment[] = Array.isArray(parsed.segments) ? parsed.segments : []
-      // Multiple expansion rounds for better depth
-      let expandedSegments = initialSegments
-      const maxExpansionRounds = 3
-
-      for (let round = 0; round < maxExpansionRounds; round++) {
-        const newSegments = await expandChapterSegmentsIfNeeded({
-          chapterTitle: chapter.title,
-          chapterSummary: chapter.summary,
-          chapterSeconds,
-          chapterTargetWords,
-          conceptsDescription,
-          currentSegments: expandedSegments,
-          minSegments: Math.max(10, Math.min(80, targetSegmentsForChapter)),
-          maxSegments: 120,
-          language: config.language,
-          userPrompt: config.userPrompt,
-        })
-
-        const currentWords = expandedSegments.reduce((sum, s) => sum + countWords(s.text || ''), 0)
-        const newWords = newSegments.reduce((sum, s) => sum + countWords(s.text || ''), 0)
-        const expansionRatio = currentWords > 0 ? newWords / currentWords : 1
-
-        expandedSegments = newSegments
-
-        if (expansionRatio < 1.2 || newWords >= chapterTargetWords * 0.9) break
+    // Update topic time ranges based on segments
+    for (const topic of topics) {
+      const topicSegments = segments.filter(s => s.chapterId === topic.id)
+      if (topicSegments.length > 0) {
+        topic.startTime = Math.min(...topicSegments.map(s => s.timestamp))
+        topic.endTime = Math.max(...topicSegments.map(s => s.timestamp + s.duration))
       }
-
-      const chapterSegments: RawSegment[] = (expandedSegments || [])
-        .filter((s) => s && typeof s === 'object')
-        .slice(0, 120)
-
-      const segmentDuration = chapterSegments.length > 0 ? chapterSeconds / chapterSegments.length : 0
-      let timestamp = chapter.startTime
-
-      chapterSegments.forEach((seg: any, idx: number) => {
-        allSegments.push({
-          id: `${chapter.id}-segment-${idx}`,
-          chapterId: chapter.id,
-          speaker: sanitizeSpeaker(seg.speaker),
-          text: String(seg.text || '').trim(),
-          duration: segmentDuration,
-          timestamp,
-          concepts: Array.isArray(seg.concepts) ? seg.concepts : [],
-          isQuestionBreakpoint: Boolean(seg.isQuestionBreakpoint),
-          difficulty: sanitizeDifficulty(seg.difficulty),
-        })
-        timestamp += segmentDuration
-      })
-    } catch (error) {
-      console.error(`Failed to parse segments for chapter ${chapter.id}:`, error)
     }
-  }
 
-  return { segments: allSegments }
+    return {
+      topics,
+      segments,
+      title: parsed.title || 'Podcast',
+      description: parsed.description || '',
+    }
+  } catch (error) {
+    console.error('Failed to parse podcast script:', error)
+    throw new Error('Failed to generate podcast script')
+  }
+}
+
+function createEnglishPrompt(
+  config: { targetDuration: number; style: string; userPrompt?: string },
+  targetWords: number,
+  targetSeconds: number,
+  hostDescription: string,
+  expertDescription: string
+): string {
+  return `You are writing a podcast script. This podcast features two people having a genuine conversation:
+
+Alex (the host): ${hostDescription}
+Jamie (the expert): ${expertDescription}
+
+THE PODCAST YOU'RE CREATING
+
+Think of your favorite educational podcasts - the ones where you forget you're learning because the conversation is so engaging. That's what you're creating. Two people genuinely excited about a topic, bouncing ideas off each other, sometimes going on tangents, sometimes disagreeing, always making it interesting.
+
+The podcast should be approximately ${config.targetDuration} minutes long (about ${targetWords} words total, ${targetSeconds} seconds).
+
+WHAT MAKES A GREAT PODCAST
+
+The best podcasts feel like eavesdropping on a fascinating conversation between friends. The host is genuinely curious, not just reading questions off a list. The expert shares knowledge like they're explaining something cool to a friend, not lecturing. There are moments of surprise, moments of humor, moments where one person builds on what the other said in unexpected ways.
+
+When the expert explains something complex, they take the time to develop their thoughts fully. Sometimes this means speaking for several sentences in a row - that's natural. A real expert doesn't just give one-line answers. They explain, give examples, make connections, share stories. Let them breathe.
+
+The host doesn't just ask questions. They react genuinely. They make connections. They push back sometimes. They share their own perspective. They summarize in their own words to make sure they understand.
+
+HOW IT FLOWS
+
+This is ONE podcast, not a series of mini-podcasts glued together. There's one opening that draws listeners in, one closing that wraps things up. In between, topics flow naturally from one to another - sometimes with explicit transitions, sometimes the conversation just drifts there organically.
+
+Don't announce "Now we're moving to topic X." Real conversations don't work that way. Instead, let one idea lead to another: "Speaking of that..." or "That actually reminds me of something else..." or sometimes just following the natural thread of the discussion.
+
+The style is: ${config.style}
+
+WHAT TO COVER
+
+Based on the source material, cover all the important information. But don't just recite facts. Transform the content into a conversation where:
+- Complex ideas get broken down through dialogue
+- Examples and analogies make abstract concepts concrete
+- Real-world applications show why this matters
+- The expert can go deeper on fascinating details
+- The host can ask what listeners would want to ask
+
+Add value beyond the source material when it helps: relevant examples, interesting connections, practical applications, thought-provoking questions. Make the content richer, not just repeated.
+
+OUTPUT FORMAT
+
+Return a JSON object with this structure:
+{
+  "title": "An engaging podcast title",
+  "description": "A 2-3 sentence description that makes people want to listen",
+  "topics": [
+    {
+      "id": "topic-1",
+      "title": "Topic title for navigation",
+      "summary": "Brief summary"
+    }
+  ],
+  "segments": [
+    {
+      "speaker": "host",
+      "text": "What they say",
+      "topicId": "topic-1",
+      "isQuestionBreakpoint": false
+    }
+  ]
+}
+
+Each segment is one person's turn speaking. A turn can be a single reaction ("Huh, interesting!") or a longer explanation with multiple sentences. Let the conversation breathe - some turns are short reactions, some are longer explorations of an idea.
+
+Mark isQuestionBreakpoint as true on segments where a listener might naturally want to pause and ask their own question.
+
+Now create the podcast script.`
+}
+
+function createFrenchPrompt(
+  config: { targetDuration: number; style: string; userPrompt?: string },
+  targetWords: number,
+  targetSeconds: number,
+  hostDescription: string,
+  expertDescription: string
+): string {
+  return `Tu écris un script de podcast. Ce podcast met en scène deux personnes ayant une vraie conversation :
+
+Alex (l'animateur) : ${hostDescription}
+Jamie (l'expert) : ${expertDescription}
+
+LE PODCAST QUE TU CRÉES
+
+Pense à tes podcasts éducatifs préférés - ceux où tu oublies que tu apprends parce que la conversation est si captivante. C'est ça que tu crées. Deux personnes véritablement passionnées par un sujet, échangeant des idées, parfois partant sur des tangentes, parfois en désaccord, toujours intéressant.
+
+Le podcast doit durer environ ${config.targetDuration} minutes (environ ${targetWords} mots au total, ${targetSeconds} secondes).
+
+CE QUI FAIT UN EXCELLENT PODCAST
+
+Les meilleurs podcasts donnent l'impression d'écouter discrètement une conversation fascinante entre amis. L'animateur est véritablement curieux, pas juste en train de lire des questions. L'expert partage ses connaissances comme s'il expliquait quelque chose de passionnant à un ami, pas en donnant un cours magistral. Il y a des moments de surprise, d'humour, des moments où l'un rebondit sur ce que l'autre a dit de manière inattendue.
+
+Quand l'expert explique quelque chose de complexe, il prend le temps de développer pleinement ses idées. Parfois ça veut dire parler pendant plusieurs phrases d'affilée - c'est naturel. Un vrai expert ne donne pas que des réponses d'une ligne. Il explique, donne des exemples, fait des connexions, partage des histoires. Laisse-le respirer.
+
+L'animateur ne fait pas que poser des questions. Il réagit sincèrement. Il fait des connexions. Il conteste parfois. Il partage son propre point de vue. Il reformule avec ses propres mots pour s'assurer qu'il a compris.
+
+COMMENT ÇA S'ENCHAÎNE
+
+C'est UN podcast, pas une série de mini-podcasts collés ensemble. Il y a une seule ouverture qui accroche les auditeurs, une seule conclusion qui conclut le tout. Entre les deux, les sujets s'enchaînent naturellement - parfois avec des transitions explicites, parfois la conversation dérive juste organiquement.
+
+N'annonce pas "Maintenant on passe au sujet X." Les vraies conversations ne fonctionnent pas comme ça. Au lieu de ça, laisse une idée mener à une autre : "En parlant de ça..." ou "Ça me fait penser à autre chose..." ou parfois juste en suivant le fil naturel de la discussion.
+
+Le style est : ${config.style}
+
+CE QU'IL FAUT COUVRIR
+
+En te basant sur le contenu source, couvre toutes les informations importantes. Mais ne récite pas juste des faits. Transforme le contenu en une conversation où :
+- Les idées complexes sont décomposées à travers le dialogue
+- Les exemples et analogies rendent les concepts abstraits concrets
+- Les applications concrètes montrent pourquoi c'est important
+- L'expert peut approfondir les détails fascinants
+- L'animateur peut poser ce que les auditeurs voudraient demander
+
+Ajoute de la valeur au-delà du contenu source quand ça aide : exemples pertinents, connexions intéressantes, applications pratiques, questions qui font réfléchir. Rends le contenu plus riche, pas juste répété.
+
+FORMAT DE SORTIE
+
+Retourne un objet JSON avec cette structure :
+{
+  "title": "Un titre de podcast accrocheur",
+  "description": "Une description de 2-3 phrases qui donne envie d'écouter",
+  "topics": [
+    {
+      "id": "topic-1",
+      "title": "Titre du sujet pour la navigation",
+      "summary": "Bref résumé"
+    }
+  ],
+  "segments": [
+    {
+      "speaker": "host",
+      "text": "Ce qu'il dit",
+      "topicId": "topic-1",
+      "isQuestionBreakpoint": false
+    }
+  ]
+}
+
+Chaque segment est le tour de parole d'une personne. Un tour peut être une simple réaction ("Ah, intéressant !") ou une explication plus longue avec plusieurs phrases. Laisse la conversation respirer - certains tours sont des réactions courtes, d'autres sont des explorations plus longues d'une idée.
+
+Marque isQuestionBreakpoint comme true sur les segments où un auditeur pourrait naturellement vouloir faire pause et poser sa propre question.
+
+Maintenant crée le script du podcast.`
 }
 
 /**
@@ -602,66 +361,48 @@ async function generatePredictedQuestions(
     .map((doc) => `${doc.title}: ${doc.content.slice(0, 60000)}`)
     .join('\n\n')
 
-  const conceptsSummary = knowledgeGraph.concepts
+  const topicsSummary = knowledgeGraph.concepts
     .map((c) => `- ${c.name}: ${c.description}`)
     .join('\n')
 
   const systemInstruction =
     language === 'fr'
-      ? `Tu es un expert en anticipation des questions des apprenants.
+      ? `Tu anticipes les questions que les auditeurs pourraient avoir pendant l'écoute du podcast.
 
-Genere 20 questions que les utilisateurs pourraient poser pendant l'ecoute du podcast (anime par Alex et Jamie).
+Génère 15-20 questions naturelles qu'un auditeur curieux pourrait vouloir poser, avec des réponses concises mais utiles.
 
-TYPES DE QUESTIONS :
-1. Demandes de clarification ("Peux-tu expliquer X plus simplement ?")
-2. Approfondissement ("Comment ca marche exactement ?")
-3. Exemples concrets ("Donne-moi un exemple")
-4. Liens avec autres concepts ("Quel est le lien avec Y ?")
-5. Applications pratiques ("Comment utiliser ca ?")
+Varie les types : clarifications, approfondissements, exemples concrets, liens avec d'autres sujets, applications pratiques.
 
-Pour chaque question, fournis une reponse CONCISE (2-3 phrases max).
-
-Retourne un objet json :
+Retourne un JSON :
 {
   "questions": [
     {
-      "question": "Question complete de l'utilisateur",
-      "answer": "Reponse concise et claire",
-      "relevantConcepts": ["concept-1", "concept-2"]
+      "question": "La question de l'auditeur",
+      "answer": "Réponse concise (2-4 phrases)",
+      "relevantConcepts": ["topic-1"]
     }
   ]
-}
+}`
+      : `You anticipate questions listeners might have while listening to the podcast.
 
-Varie les types de questions et couvre tous les concepts importants.`
-      : `You are an expert in anticipating learner questions.
+Generate 15-20 natural questions that a curious listener might want to ask, with concise but helpful answers.
 
-Generate 20 questions that users might ask while listening to the podcast (hosted by Alex and Jamie).
+Vary the types: clarifications, deeper dives, concrete examples, connections to other topics, practical applications.
 
-QUESTION TYPES:
-1. Clarification requests ("Can you explain X more simply?")
-2. Deep dives ("How does this work exactly?")
-3. Concrete examples ("Give me an example")
-4. Links to other concepts ("What's the connection with Y?")
-5. Practical applications ("How do I use this?")
-
-For each question, provide a CONCISE answer (2-3 sentences max).
-
-Return a json object:
+Return a JSON:
 {
   "questions": [
     {
-      "question": "Complete user question",
-      "answer": "Concise and clear answer",
-      "relevantConcepts": ["concept-1", "concept-2"]
+      "question": "The listener's question",
+      "answer": "Concise answer (2-4 sentences)",
+      "relevantConcepts": ["topic-1"]
     }
   ]
-}
-
-Vary question types and cover all important concepts.`
+}`
 
   try {
     const raw = await runGemini3Flash({
-      prompt: `Content:\n${contentSummary}\n\nConcepts:\n${conceptsSummary}`,
+      prompt: `Content:\n${contentSummary}\n\nTopics:\n${topicsSummary}`,
       systemInstruction,
       thinkingLevel: 'high',
       temperature: 0.6,

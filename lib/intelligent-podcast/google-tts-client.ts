@@ -2,6 +2,10 @@
  * Gemini 2.5 TTS client — same technology powering NotebookLM Audio Overviews.
  * Supports both single-speaker and multi-speaker (2-speaker dialogue chunks).
  * Uses REST API only (no SDK). Requires GEMINI_API_KEY from Google AI Studio.
+ * 
+ * VOICE CONSISTENCY: This client ensures that the same speaker always uses
+ * the same voice across all API calls. Alex always sounds like Alex,
+ * Jamie always sounds like Jamie.
  */
 
 import type { VoiceProfile } from '@/types/intelligent-podcast'
@@ -12,10 +16,13 @@ const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts'
 const PCM_SAMPLE_RATE = 24000
 const PCM_BYTES_PER_SAMPLE = 2 // 16-bit
 
-/** Default voice per role — Gemini prebuilt voice names */
+/**
+ * CANONICAL voice assignments for the podcast.
+ * These MUST be used consistently across all segments to ensure voice continuity.
+ */
 export const ROLE_VOICE_MAP: Record<string, string> = {
-  host: 'Aoede',    // breezy, natural — the curious host
-  expert: 'Charon', // informative, clear — the knowledgeable expert
+  host: 'Aoede',    // Breezy, natural — the curious host Alex
+  expert: 'Charon', // Informative, clear — the knowledgeable expert Jamie
 }
 
 /** Display names used as speaker labels in multi-speaker scripts */
@@ -55,6 +62,8 @@ export interface MultiSpeakerChunkResult {
 /**
  * Synthesize one segment via Gemini 2.5 TTS (single speaker).
  * Returns a WAV data URL ready for HTML5 audio playback.
+ * 
+ * Uses the canonical voice for the role to ensure consistency.
  */
 export async function generateGeminiTTSAudio(
   text: string,
@@ -63,7 +72,9 @@ export async function generateGeminiTTSAudio(
 ): Promise<TTSResult> {
   if (!text?.trim()) throw new Error('Cannot generate audio for empty text')
   const trimmed = text.length > 5000 ? text.slice(0, 5000) : text
-  const voiceName = voiceProfile.voiceId || ROLE_VOICE_MAP[voiceProfile.role] || 'Aoede'
+  
+  // Use canonical voice to ensure consistency across the podcast
+  const voiceName = ROLE_VOICE_MAP[voiceProfile.role] || voiceProfile.voiceId || 'Aoede'
 
   const body = {
     contents: [{ parts: [{ text: trimmed }] }],
@@ -86,10 +97,12 @@ export async function generateGeminiTTSAudio(
 // ─── Multi-speaker ─────────────────────────────────────────────────────────
 
 /**
- * Synthesize a crossover chunk (2 distinct speakers) in a single Gemini TTS call.
+ * Synthesize a dialogue chunk (2 speakers) in a single Gemini TTS call.
  * The resulting PCM audio is proportionally split back into per-segment WAV files.
- *
- * Falls back to single-speaker per-segment if multi-speaker API fails.
+ * 
+ * VOICE CONSISTENCY: Always uses the canonical voices for Alex and Jamie,
+ * regardless of what's passed in the segments. This ensures the same voices
+ * are used throughout the entire podcast.
  */
 export async function generateGeminiMultiSpeakerChunk(
   segments: MultiSpeakerSegmentInput[],
@@ -99,23 +112,26 @@ export async function generateGeminiMultiSpeakerChunk(
     throw new Error('Multi-speaker chunk requires at least 2 segments')
   }
 
-  // Build dialogue script: "Alex: text\nJamie: text\n..."
+  // Build dialogue script using canonical display names
   const script = segments
-    .map(s => `${s.displayName}: ${s.text.trim().replace(/\s+/g, ' ')}`)
+    .map(s => {
+      const displayName = ROLE_DISPLAY_NAME[s.role] || s.displayName
+      return `${displayName}: ${s.text.trim().replace(/\s+/g, ' ')}`
+    })
     .join('\n')
 
-  // Build speaker voice config (deduplicated by displayName)
-  const speakerMap = new Map<string, string>()
-  for (const s of segments) {
-    if (!speakerMap.has(s.displayName)) {
-      speakerMap.set(s.displayName, s.voiceId)
-    }
-  }
-
-  const speakerVoiceConfigs = Array.from(speakerMap.entries()).map(([speaker, voiceName]) => ({
-    speaker,
-    voiceConfig: { prebuiltVoiceConfig: { voiceName } },
-  }))
+  // Build speaker voice config with CANONICAL voices only
+  // This ensures Alex and Jamie always sound the same
+  const speakerVoiceConfigs = [
+    {
+      speaker: ROLE_DISPLAY_NAME.host,
+      voiceConfig: { prebuiltVoiceConfig: { voiceName: ROLE_VOICE_MAP.host } },
+    },
+    {
+      speaker: ROLE_DISPLAY_NAME.expert,
+      voiceConfig: { prebuiltVoiceConfig: { voiceName: ROLE_VOICE_MAP.expert } },
+    },
+  ]
 
   const body = {
     contents: [{ parts: [{ text: script }] }],
@@ -142,7 +158,10 @@ export function canUseMultiSpeaker(segments: MultiSpeakerSegmentInput[]): boolea
   if (segments.length < 2) return false
   const roles = new Set(segments.map(s => s.role))
   if (roles.size > 2) return false
-  const totalChars = segments.reduce((sum, s) => sum + s.text.length + s.displayName.length + 2, 0)
+  const totalChars = segments.reduce((sum, s) => {
+    const displayName = ROLE_DISPLAY_NAME[s.role] || s.displayName
+    return sum + s.text.length + displayName.length + 2
+  }, 0)
   return totalChars <= MULTI_SPEAKER_CHAR_LIMIT
 }
 

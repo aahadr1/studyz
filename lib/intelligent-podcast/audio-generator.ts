@@ -3,7 +3,6 @@ import { makeTtsReadyText } from '../tts'
 import {
   generateGeminiTTSAudio,
   generateGeminiMultiSpeakerChunk,
-  canUseMultiSpeaker,
   ROLE_VOICE_MAP,
   ROLE_DISPLAY_NAME,
   type MultiSpeakerSegmentInput,
@@ -12,14 +11,27 @@ import {
 /** Max chars per multi-speaker chunk (matches google-tts-client MULTI_SPEAKER_CHAR_LIMIT) */
 const CHUNK_CHAR_LIMIT = 3000
 
-// ─── Public API ─────────────────────────────────────────────────────────────
+/**
+ * Voice configuration that stays consistent across the entire podcast.
+ * This ensures Alex and Jamie always sound the same, regardless of which chunk they're in.
+ */
+const PODCAST_VOICES = {
+  host: {
+    voiceId: ROLE_VOICE_MAP.host,
+    displayName: ROLE_DISPLAY_NAME.host,
+  },
+  expert: {
+    voiceId: ROLE_VOICE_MAP.expert,
+    displayName: ROLE_DISPLAY_NAME.expert,
+  },
+} as const
 
 /**
  * Generate audio for all podcast segments using Gemini 2.5 multi-speaker TTS.
- *
- * Strategy: group ALL consecutive segments into multi-speaker chunks (≤3000 chars),
- * synthesize each chunk in a single API call, then split the PCM back per-segment.
- * Falls back to single-speaker per-segment only if the multi-speaker call fails.
+ * 
+ * VOICE CONSISTENCY: The same voice configuration is used for all chunks.
+ * Alex (host) always uses the same voice, Jamie (expert) always uses the same voice.
+ * This ensures the podcast sounds like one continuous recording, not multiple stitched together.
  */
 export async function generateMultiVoiceAudio(
   segments: PodcastSegment[],
@@ -62,16 +74,16 @@ export async function generateMultiVoiceAudio(
       )
     }
 
-    const chunkInputs: MultiSpeakerSegmentInput[] = indices.map((origIdx, i) => {
+    // Build inputs with CONSISTENT voice configuration
+    const chunkInputs: MultiSpeakerSegmentInput[] = indices.map((origIdx) => {
       const seg = segments[origIdx]
-      const voiceId = ROLE_VOICE_MAP[seg.speaker] || 'Aoede'
-      const displayName = ROLE_DISPLAY_NAME[seg.speaker] || seg.speaker
+      const voiceConfig = PODCAST_VOICES[seg.speaker] || PODCAST_VOICES.host
       return {
         id: seg.id || String(origIdx),
         text: cleanedTexts[origIdx],
         role: seg.speaker,
-        voiceId,
-        displayName,
+        voiceId: voiceConfig.voiceId,
+        displayName: voiceConfig.displayName,
       }
     })
 
@@ -82,7 +94,6 @@ export async function generateMultiVoiceAudio(
       // Multi-speaker path
       try {
         const { results: chunkResults } = await generateGeminiMultiSpeakerChunk(validInputs, language)
-        // Map results back by segment id
         const resultById = new Map(chunkResults.map(r => [r.id, r]))
         for (const origIdx of indices) {
           const seg = segments[origIdx]
@@ -98,13 +109,13 @@ export async function generateMultiVoiceAudio(
         console.log(`[Audio] Multi-speaker chunk done: ${indices.length} segments`)
       } catch (err: any) {
         console.error(`[Audio] Multi-speaker chunk failed, falling back to single-speaker:`, err?.message ?? err)
-        await fallbackSingleSpeaker(indices, segments, cleanedTexts, voiceProfiles, language, results)
+        await fallbackSingleSpeaker(indices, segments, cleanedTexts, language, results)
         completedSegments += indices.length
       }
     } else if (validInputs.length === 1) {
-      // Only one valid segment in chunk — use single-speaker
+      // Only one valid segment in chunk — use single-speaker with consistent voice
       const origIdx = indices.find(i => cleanedTexts[i].trim().length > 0) ?? indices[0]
-      const voiceProfile = resolveVoiceProfile(segments[origIdx].speaker, voiceProfiles)
+      const voiceProfile = getConsistentVoiceProfile(segments[origIdx].speaker, voiceProfiles)
       results[origIdx] = await generateSingleSegment(cleanedTexts[origIdx], voiceProfile, language)
       // Mark empty segments
       for (const i of indices) {
@@ -140,15 +151,12 @@ export async function generateMultiVoiceAudio(
   return processed
 }
 
-// ─── Chunk builder ──────────────────────────────────────────────────────────
-
 interface Chunk {
   indices: number[]
 }
 
 /**
  * Group all segments into multi-speaker chunks that fit within the char limit.
- * Since we only have 2 speakers (host + expert), all segments are eligible.
  */
 function buildChunks(segments: PodcastSegment[], cleanedTexts: string[]): Chunk[] {
   const chunks: Chunk[] = []
@@ -158,8 +166,8 @@ function buildChunks(segments: PodcastSegment[], cleanedTexts: string[]): Chunk[
   for (let i = 0; i < segments.length; i++) {
     const text = cleanedTexts[i]
     const speaker = segments[i].speaker
-    const displayName = ROLE_DISPLAY_NAME[speaker] || speaker
-    const segChars = text.length + displayName.length + 2 // "Name: text"
+    const voiceConfig = PODCAST_VOICES[speaker] || PODCAST_VOICES.host
+    const segChars = text.length + voiceConfig.displayName.length + 2 // "Name: text"
 
     // Start new chunk if adding this segment would exceed the limit
     if (currentIndices.length > 0 && currentChars + segChars > CHUNK_CHAR_LIMIT) {
@@ -180,13 +188,13 @@ function buildChunks(segments: PodcastSegment[], cleanedTexts: string[]): Chunk[
   return chunks
 }
 
-// ─── Fallback single-speaker ────────────────────────────────────────────────
-
+/**
+ * Fallback to single-speaker synthesis with consistent voices
+ */
 async function fallbackSingleSpeaker(
   indices: number[],
   segments: PodcastSegment[],
   cleanedTexts: string[],
-  voiceProfiles: VoiceProfile[],
   language: string,
   results: Array<{ audioUrl: string; duration: number }>
 ): Promise<void> {
@@ -198,13 +206,39 @@ async function fallbackSingleSpeaker(
       results[origIdx] = { audioUrl: '', duration: 0 }
       continue
     }
-    const voiceProfile = resolveVoiceProfile(seg.speaker, voiceProfiles)
+    const voiceProfile = getConsistentVoiceProfile(seg.speaker, [])
     results[origIdx] = await generateSingleSegment(text, voiceProfile, language)
     if (i < indices.length - 1) await delay(200)
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+/**
+ * Get a voice profile that's consistent with the podcast's voice configuration.
+ * This ensures the same speaker always gets the same voice.
+ */
+function getConsistentVoiceProfile(speaker: string, voiceProfiles: VoiceProfile[]): VoiceProfile {
+  const voiceConfig = PODCAST_VOICES[speaker as keyof typeof PODCAST_VOICES] || PODCAST_VOICES.host
+  
+  // Try to find matching profile from provided profiles
+  const fromProfiles = voiceProfiles.find(v => v.role === speaker)
+  if (fromProfiles) {
+    // Override with consistent voiceId to ensure same voice across all segments
+    return {
+      ...fromProfiles,
+      voiceId: voiceConfig.voiceId,
+    }
+  }
+  
+  // Create a consistent profile
+  return {
+    id: `${speaker}-voice`,
+    role: speaker as 'host' | 'expert',
+    name: voiceConfig.displayName,
+    provider: 'gemini',
+    voiceId: voiceConfig.voiceId,
+    description: speaker === 'host' ? 'Curious, engaging host' : 'Knowledgeable, approachable expert',
+  }
+}
 
 async function generateSingleSegment(
   text: string,
@@ -223,15 +257,9 @@ async function generateSingleSegment(
   }
 }
 
-function resolveVoiceProfile(speaker: string, voiceProfiles: VoiceProfile[]): VoiceProfile {
-  return voiceProfiles.find(v => v.role === speaker) ?? voiceProfiles[0]
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
-
-// ─── Predicted Q&A ──────────────────────────────────────────────────────────
 
 /**
  * Pre-generate audio for predicted Q&A answers using host voice.
@@ -244,13 +272,15 @@ export async function generatePredictedQuestionsAudio(
 ): Promise<PredictedQuestion[]> {
   console.log(`[Audio] Generating audio for ${questions.length} predicted questions`)
 
+  // Use consistent host voice
+  const consistentHostVoice = getConsistentVoiceProfile('host', [hostVoice])
   const processed: PredictedQuestion[] = []
 
   for (let i = 0; i < questions.length; i++) {
     if (onProgress) onProgress(i + 1, questions.length)
 
     try {
-      const result = await generateGeminiTTSAudio(questions[i].answer, hostVoice, language)
+      const result = await generateGeminiTTSAudio(questions[i].answer, consistentHostVoice, language)
       processed.push({ ...questions[i], audioUrl: result.audioUrl })
     } catch (error) {
       console.error(`[Audio] Failed to generate audio for question ${i + 1}:`, error)
@@ -261,8 +291,6 @@ export async function generatePredictedQuestionsAudio(
   console.log('[Audio] Predicted questions audio generation complete')
   return processed
 }
-
-// ─── Stubs ───────────────────────────────────────────────────────────────────
 
 export async function mergeAudioSegments(
   segments: PodcastSegment[]

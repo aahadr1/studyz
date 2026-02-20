@@ -36,7 +36,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const [totalDuration, setTotalDuration] = useState(podcast.duration || 0)
   const [playbackRate, setPlaybackRate] = useState(1.0)
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0)
-  const [showChapters, setShowChapters] = useState(false)
+  const [showTopics, setShowTopics] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
 
   // Merged audio state
@@ -51,7 +51,9 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const progressRef = useRef<HTMLDivElement>(null)
 
   const currentSegment = podcast.segments[currentSegmentIndex]
-  const currentChapter = podcast.chapters.find(
+  
+  // Find current topic based on time (topics are fluid navigation aids, not rigid blocks)
+  const currentTopic = podcast.chapters.find(
     ch => currentTime >= ch.startTime && currentTime <= ch.endTime
   )
 
@@ -360,12 +362,14 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
             </div>
 
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setShowChapters(!showChapters)}
-                className={`btn-ghost text-xs px-3 py-1.5 ${showChapters ? 'bg-elevated text-text-primary' : ''}`}
-              >
-                Chapters
-              </button>
+              {podcast.chapters.length > 0 && (
+                <button
+                  onClick={() => setShowTopics(!showTopics)}
+                  className={`btn-ghost text-xs px-3 py-1.5 ${showTopics ? 'bg-elevated text-text-primary' : ''}`}
+                >
+                  Topics
+                </button>
+              )}
               <button
                 onClick={downloadWholePodcast}
                 disabled={!canDownload || isDownloading}
@@ -393,15 +397,15 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
               <div className="px-6 py-6 border-b border-border">
                 <h2 className="heading-2 mb-1">{podcast.title}</h2>
                 <p className="text-sm text-text-tertiary">{podcast.description}</p>
-                {currentChapter && (
+                {currentTopic && (
                   <div className="mt-4 flex items-center gap-2">
-                    <span className="label">Now playing</span>
-                    <span className="text-sm text-text-secondary">{currentChapter.title}</span>
+                    <span className="label">Currently discussing</span>
+                    <span className="text-sm text-text-secondary">{currentTopic.title}</span>
                   </div>
                 )}
               </div>
 
-              {/* Segments */}
+              {/* Segments - flowing conversation without rigid chapter dividers */}
               <div className="px-6 py-4">
                 {podcast.segments.map((segment, idx) => {
                   const isActive = idx === currentSegmentIndex
@@ -409,19 +413,19 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
                   const speakerColor = SPEAKER_TEXT_COLORS[segment.speaker] || 'text-text-secondary'
                   const segTime = segmentRanges[idx]
 
-                  // Check if this is a chapter boundary
-                  const chapterStart = podcast.chapters.find(ch => {
-                    if (!segTime) return false
+                  // Show topic markers as subtle indicators, not hard breaks
+                  const topicTransition = podcast.chapters.find(ch => {
+                    if (!segTime || idx === 0) return false
                     return Math.abs(ch.startTime - segTime.start) < 2
                   })
 
                   return (
                     <div key={segment.id}>
-                      {chapterStart && idx > 0 && (
-                        <div className="flex items-center gap-3 py-4">
-                          <div className="flex-1 border-t border-border" />
-                          <span className="label flex-shrink-0">{chapterStart.title}</span>
-                          <div className="flex-1 border-t border-border" />
+                      {topicTransition && (
+                        <div className="flex items-center gap-3 py-3 my-2">
+                          <div className="flex-1 border-t border-border/50" />
+                          <span className="text-xs text-text-muted flex-shrink-0">{topicTransition.title}</span>
+                          <div className="flex-1 border-t border-border/50" />
                         </div>
                       )}
                       <div
@@ -464,28 +468,36 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
               </div>
             </div>
 
-            {/* Chapters sidebar */}
-            {showChapters && (
+            {/* Topics sidebar - navigation aid, not structure */}
+            {showTopics && podcast.chapters.length > 0 && (
               <div className="w-72 border-l border-border overflow-y-auto flex-shrink-0">
                 <div className="p-4">
-                  <h3 className="label mb-4">Chapters</h3>
+                  <h3 className="label mb-4">Topics Discussed</h3>
+                  <p className="text-xs text-text-muted mb-4">
+                    Jump to different parts of the conversation
+                  </p>
                   <div className="space-y-1">
-                    {podcast.chapters.map((chapter) => {
-                      const isActive = currentChapter?.id === chapter.id
+                    {podcast.chapters.map((topic) => {
+                      const isActive = currentTopic?.id === topic.id
                       return (
                         <button
-                          key={chapter.id}
-                          onClick={() => seekToTime(chapter.startTime)}
+                          key={topic.id}
+                          onClick={() => seekToTime(topic.startTime)}
                           className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-150 ${
                             isActive
                               ? 'bg-elevated text-text-primary'
                               : 'text-text-secondary hover:bg-surface hover:text-text-primary'
                           }`}
                         >
-                          <div className="text-sm font-medium">{chapter.title}</div>
+                          <div className="text-sm font-medium">{topic.title}</div>
                           <div className="text-xs text-text-muted mt-0.5 mono">
-                            {formatTime(chapter.startTime)}
+                            {formatTime(topic.startTime)}
                           </div>
+                          {topic.summary && (
+                            <div className="text-xs text-text-tertiary mt-1 line-clamp-2">
+                              {topic.summary}
+                            </div>
+                          )}
                         </button>
                       )
                     })}

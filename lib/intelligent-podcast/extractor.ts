@@ -2,7 +2,9 @@ import { DocumentContent, KnowledgeGraph, ConceptNode } from '@/types/intelligen
 import { parseJsonObject, runGemini3Flash } from './gemini-client'
 
 /**
- * Extract and analyze content from documents to build a knowledge graph
+ * Analyze documents to understand their content and identify topics for the podcast.
+ * This is a streamlined analysis that focuses on understanding what the document covers
+ * and what complementary information would enrich the podcast.
  */
 export async function extractAndAnalyze(
   documents: DocumentContent[]
@@ -11,22 +13,16 @@ export async function extractAndAnalyze(
   enrichedDocuments: DocumentContent[]
   detectedLanguage: string
 }> {
-  // Step 1: Detect language from first document
+  // Step 1: Detect language
   const detectedLanguage = await detectLanguage(documents[0].content)
 
-  // Step 2: Extract key concepts from all documents
-  const concepts = await extractConcepts(documents, detectedLanguage)
-
-  // Step 3: Build relationships between concepts
-  const relationships = await buildConceptRelationships(concepts, detectedLanguage)
-
-  // Step 4: Generate embeddings for semantic search
-  const embeddings = await generateConceptEmbeddings(concepts)
+  // Step 2: Analyze content and identify topics with enrichment suggestions
+  const analysis = await analyzeContent(documents, detectedLanguage)
 
   const knowledgeGraph: KnowledgeGraph = {
-    concepts,
-    relationships,
-    embeddings,
+    concepts: analysis.topics,
+    relationships: analysis.connections,
+    embeddings: generateTopicEmbeddings(analysis.topics),
   }
 
   return {
@@ -58,61 +54,78 @@ No punctuation. No extra words.`
 }
 
 /**
- * Extract key concepts from documents using Gemini 3 Flash
+ * Analyze the document content to understand topics and suggest enrichments.
+ * This creates a foundation for the podcast without over-analyzing.
  */
-async function extractConcepts(
+async function analyzeContent(
   documents: DocumentContent[],
   language: string
-): Promise<ConceptNode[]> {
+): Promise<{
+  topics: ConceptNode[]
+  connections: Array<{ from: string; to: string; type: 'requires' | 'related' | 'opposite' | 'example' }>
+}> {
   const combinedContent = documents
-    // Prefer using the full transcription; keep a very high cap as a safety valve.
     .map((doc) => `Document: ${doc.title}\n\n${doc.content.slice(0, 200000)}`)
     .join('\n\n---\n\n')
 
   const systemInstruction =
     language === 'fr'
-      ? `Tu es un expert en analyse de contenu éducatif.
+      ? `Tu es un analyste de contenu préparant un podcast éducatif.
 
-Extrais les concepts clés du contenu fourni.
+Ton rôle est de comprendre le document et d'identifier les sujets principaux qui seront discutés dans le podcast. Pour chaque sujet, suggère des enrichissements qui rendraient le contenu plus vivant et compréhensible.
 
-CONTRAINTES:
-- Identifie entre 25 et 80 concepts (selon la richesse du contenu).
-- Chaque concept doit être UNIQUE, concret, et utile pour structurer un podcast long.
-- IMPORTANT: crée des IDs stables au format "concept-1", "concept-2", ...
+Analyse le contenu et retourne un JSON avec :
+- Les sujets principaux (topics) couverts par le document
+- Pour chaque sujet, des suggestions d'enrichissement (exemples concrets, liens avec la vie quotidienne, analogies possibles, anecdotes potentielles)
+- Les connexions naturelles entre les sujets
 
-Retourne UNIQUEMENT un objet JSON:
+Format JSON attendu :
 {
-  "concepts": [
+  "topics": [
     {
-      "id": "concept-1",
-      "name": "Nom du concept",
-      "description": "Description claire (1-2 phrases)",
+      "id": "topic-1",
+      "name": "Nom du sujet",
+      "description": "Ce que couvre ce sujet dans le document",
+      "keyPoints": ["Point clé 1", "Point clé 2"],
+      "enrichmentIdeas": ["Exemple concret possible", "Analogie avec la vie quotidienne", "Anecdote ou fait intéressant à ajouter"],
       "difficulty": "easy|medium|hard",
-      "relatedConcepts": ["concept-2", "concept-7"]
+      "relatedConcepts": []
     }
+  ],
+  "connections": [
+    {"from": "topic-1", "to": "topic-2", "type": "related", "explanation": "Comment ces sujets se connectent"}
   ]
-}`
-      : `You are an expert in educational content analysis.
+}
 
-Extract the key concepts from the provided content.
+Sois concis mais complet. Identifie tous les sujets importants sans en inventer.`
+      : `You are a content analyst preparing an educational podcast.
 
-CONSTRAINTS:
-- Identify 25 to 80 concepts (depending on content richness).
-- Each concept must be UNIQUE, concrete, and useful to structure a long-form podcast.
-- IMPORTANT: create stable IDs in the form "concept-1", "concept-2", ...
+Your role is to understand the document and identify the main topics that will be discussed in the podcast. For each topic, suggest enrichments that would make the content more engaging and understandable.
 
-Return ONLY a JSON object:
+Analyze the content and return a JSON with:
+- The main topics covered by the document
+- For each topic, enrichment suggestions (concrete examples, real-life connections, possible analogies, potential anecdotes)
+- Natural connections between topics
+
+Expected JSON format:
 {
-  "concepts": [
+  "topics": [
     {
-      "id": "concept-1",
-      "name": "Concept name",
-      "description": "Clear description (1-2 sentences)",
+      "id": "topic-1",
+      "name": "Topic name",
+      "description": "What this topic covers in the document",
+      "keyPoints": ["Key point 1", "Key point 2"],
+      "enrichmentIdeas": ["Possible concrete example", "Real-life analogy", "Interesting fact or anecdote to add"],
       "difficulty": "easy|medium|hard",
-      "relatedConcepts": ["concept-2", "concept-7"]
+      "relatedConcepts": []
     }
+  ],
+  "connections": [
+    {"from": "topic-1", "to": "topic-2", "type": "related", "explanation": "How these topics connect"}
   ]
-}`
+}
+
+Be concise but thorough. Identify all important topics without inventing any.`
 
   const raw = await runGemini3Flash({
     prompt: combinedContent,
@@ -120,94 +133,60 @@ Return ONLY a JSON object:
     thinkingLevel: 'high',
     temperature: 0.3,
     topP: 0.95,
-    maxOutputTokens: 12000,
+    maxOutputTokens: 16000,
   })
 
   try {
-    const parsed = parseJsonObject<{ concepts?: ConceptNode[] }>(raw)
-    return parsed.concepts || []
+    const parsed = parseJsonObject<{
+      topics?: Array<{
+        id?: string
+        name?: string
+        description?: string
+        keyPoints?: string[]
+        enrichmentIdeas?: string[]
+        difficulty?: string
+        relatedConcepts?: string[]
+      }>
+      connections?: Array<{
+        from: string
+        to: string
+        type?: string
+        explanation?: string
+      }>
+    }>(raw)
+
+    const topics: ConceptNode[] = (parsed.topics || []).map((t, idx) => ({
+      id: t.id || `topic-${idx + 1}`,
+      name: t.name || `Topic ${idx + 1}`,
+      description: t.description || '',
+      difficulty: (t.difficulty === 'easy' || t.difficulty === 'hard' ? t.difficulty : 'medium') as 'easy' | 'medium' | 'hard',
+      relatedConcepts: t.relatedConcepts || [],
+      // Store enrichment ideas in the description for the script generator to use
+      ...(t.keyPoints || t.enrichmentIdeas ? {
+        description: `${t.description || ''}\n\nKey points: ${(t.keyPoints || []).join('; ')}\n\nEnrichment ideas: ${(t.enrichmentIdeas || []).join('; ')}`
+      } : {})
+    }))
+
+    const connections = (parsed.connections || []).map(c => ({
+      from: c.from,
+      to: c.to,
+      type: (c.type === 'requires' || c.type === 'opposite' || c.type === 'example' ? c.type : 'related') as 'requires' | 'related' | 'opposite' | 'example'
+    }))
+
+    return { topics, connections }
   } catch (error) {
-    console.error('Failed to parse concepts:', error)
-    return []
-  }
-}
-
-/**
- * Build relationships between concepts
- */
-async function buildConceptRelationships(
-  concepts: ConceptNode[],
-  language: string
-): Promise<Array<{ from: string; to: string; type: 'requires' | 'related' | 'opposite' | 'example' }>> {
-  const conceptsJson = JSON.stringify(
-    concepts.map((c) => ({ id: c.id, name: c.name, description: c.description }))
-  )
-
-  const systemInstruction =
-    language === 'fr'
-      ? `Tu es un expert en création de graphes de connaissances.
-
-Analyse les concepts fournis et identifie les relations entre eux.
-
-Types de relations :
-- "requires" : Concept A nécessite de comprendre Concept B d'abord
-- "related" : Concepts liés mais indépendants
-- "opposite" : Concepts opposés ou contrastants
-- "example" : Concept A est un exemple de Concept B
-
-Retourne un objet json :
-{
-  "relationships": [
-    {"from": "concept-1", "to": "concept-2", "type": "requires"}
-  ]
-}
-
-Crée autant de relations pertinentes que possible pour construire un graphe riche.`
-      : `You are an expert in knowledge graph creation.
-
-Analyze the provided concepts and identify relationships between them.
-
-Relationship types:
-- "requires": Concept A requires understanding Concept B first
-- "related": Related but independent concepts
-- "opposite": Opposing or contrasting concepts
-- "example": Concept A is an example of Concept B
-
-Return a json object:
-{
-  "relationships": [
-    {"from": "concept-1", "to": "concept-2", "type": "requires"}
-  ]
-}
-
-Create as many relevant relationships as possible to build a rich graph.`
-
-  try {
-    const raw = await runGemini3Flash({
-      prompt: conceptsJson,
-      systemInstruction,
-      thinkingLevel: 'high',
-      temperature: 0.3,
-      topP: 0.95,
-      maxOutputTokens: 8000,
-    })
-    const parsed = parseJsonObject<{ relationships?: any[] }>(raw)
-    return parsed.relationships || []
-  } catch (error) {
-    console.error('Failed to parse relationships:', error)
-    return []
+    console.error('Failed to parse content analysis:', error)
+    return { topics: [], connections: [] }
   }
 }
 
 /**
  * Generate lightweight local embeddings for semantic search (no external API).
  */
-async function generateConceptEmbeddings(
-  concepts: ConceptNode[]
-): Promise<Record<string, number[]>> {
+function generateTopicEmbeddings(topics: ConceptNode[]): Record<string, number[]> {
   const embeddings: Record<string, number[]> = {}
-  for (const concept of concepts) {
-    embeddings[concept.id] = textToEmbedding(`${concept.name}: ${concept.description}`)
+  for (const topic of topics) {
+    embeddings[topic.id] = textToEmbedding(`${topic.name}: ${topic.description}`)
   }
   return embeddings
 }
@@ -222,7 +201,6 @@ function tokenize(text: string): string[] {
 }
 
 function hashToken(token: string): number {
-  // djb2
   let hash = 5381
   for (let i = 0; i < token.length; i++) {
     hash = (hash * 33) ^ token.charCodeAt(i)
@@ -237,7 +215,6 @@ function textToEmbedding(text: string, dims: number = 256): number[] {
     const idx = hashToken(tok) % dims
     vec[idx] += 1
   }
-  // L2 normalize
   let norm = 0
   for (let i = 0; i < vec.length; i++) norm += vec[i] * vec[i]
   norm = Math.sqrt(norm) || 1
@@ -255,7 +232,6 @@ export async function findSimilarConcepts(
 ): Promise<ConceptNode[]> {
   const queryEmbedding = textToEmbedding(query)
 
-  // Calculate cosine similarity with all concepts
   const similarities = knowledgeGraph.concepts.map((concept) => {
     const conceptEmbedding = knowledgeGraph.embeddings[concept.id]
     if (!conceptEmbedding) return { concept, similarity: 0 }
@@ -264,16 +240,12 @@ export async function findSimilarConcepts(
     return { concept, similarity }
   })
 
-  // Sort by similarity and return top K
   return similarities
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, topK)
     .map((s) => s.concept)
 }
 
-/**
- * Calculate cosine similarity between two vectors
- */
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0
 
