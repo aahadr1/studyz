@@ -395,10 +395,10 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
       setQAState('listening')
 
-      // Send greeting immediately - AI will speak the introduction without showing it in transcript
+      // Send greeting immediately - AI will speak and show the introduction
       setTimeout(() => {
         if (client) {
-          client.sendVoiceOnlyGreeting(introductionPrompt || 
+          client.sendTextMessage(introductionPrompt || 
             (podcast.language === 'fr' 
               ? "Oh, on a une question ! Vas-y, je t'écoute."
               : "Oh, we have a question! Go ahead, I'm listening."
