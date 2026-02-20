@@ -78,6 +78,7 @@ export default function MobilePodcastPage() {
   const greetingAudioRef = useRef<HTMLAudioElement | null>(null)
   const wsReadyRef = useRef(false)
   const greetingDoneRef = useRef(false)
+  const [micLevel, setMicLevel] = useState(0)
 
   useEffect(() => {
     fetchPodcast()
@@ -362,8 +363,11 @@ export default function MobilePodcastPage() {
         greetingDoneRef.current = true
         tryTransitionToListening()
       }
-      greeting.play().catch(() => {
-        // If greeting fails to play (e.g. files not generated yet), skip it
+      greeting.play().then(() => {
+        // Greeting is playing — show speaking state immediately
+        setQAState('speaking')
+      }).catch(() => {
+        // If greeting fails to play, skip it
         greetingDoneRef.current = true
         tryTransitionToListening()
       })
@@ -431,6 +435,7 @@ export default function MobilePodcastPage() {
           }
         },
         onAudioChunk: () => {},
+        onInputLevel: (level) => setMicLevel(level),
         onError: (err) => {
           console.error('[QA] Error:', err)
           if (err.message.includes('Permission denied') || err.message.includes('NotAllowedError')) {
@@ -784,33 +789,80 @@ export default function MobilePodcastPage() {
                 {/* Q&A status bar */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className={`relative ${qaState === 'speaking' ? 'opacity-50' : ''}`}>
-                      <div className="w-10 h-10 rounded-full bg-elevated border border-border flex items-center justify-center">
-                        <svg 
-                          width="16" height="16" 
-                          viewBox="0 0 24 24" 
-                          fill="none" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          className={qaState === 'listening' ? 'text-accent' : 'text-text-secondary'}
-                        >
-                          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                          <line x1="12" y1="19" x2="12" y2="23" />
-                          <line x1="8" y1="23" x2="16" y2="23" />
-                        </svg>
+                    {/* Mic / speaker indicator */}
+                    <div className="relative">
+                      <div className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all duration-200 ${
+                        qaState === 'listening'
+                          ? 'bg-accent/10 border-accent'
+                          : qaState === 'speaking'
+                            ? 'bg-elevated border-border'
+                            : 'bg-elevated border-border'
+                      }`}>
+                        {qaState === 'speaking' ? (
+                          // Sound wave icon when AI speaks
+                          <div className="flex items-center gap-[2px]">
+                            {[0.6, 1, 0.7, 0.9, 0.5].map((h, i) => (
+                              <div
+                                key={i}
+                                className="w-[3px] bg-text-secondary rounded-full animate-pulse"
+                                style={{
+                                  height: `${h * 14}px`,
+                                  animationDelay: `${i * 0.15}s`,
+                                  animationDuration: '0.8s',
+                                }}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <svg
+                            width="16" height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            className={qaState === 'listening' ? 'text-accent' : 'text-text-secondary'}
+                          >
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                            <line x1="12" y1="19" x2="12" y2="23" />
+                            <line x1="8" y1="23" x2="16" y2="23" />
+                          </svg>
+                        )}
                       </div>
+                      {/* Mic level ring when listening */}
                       {qaState === 'listening' && (
-                        <div className="absolute inset-0 rounded-full border-2 border-accent animate-ping opacity-30" />
+                        <div
+                          className="absolute inset-0 rounded-full border-2 border-accent transition-opacity duration-75"
+                          style={{ opacity: Math.max(0.15, micLevel), transform: `scale(${1 + micLevel * 0.3})` }}
+                        />
                       )}
                     </div>
-                    <span className="text-sm text-text-secondary">{getQAStateMessage()}</span>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-text-primary">
+                        {qaState === 'speaking' ? 'Alex' : getQAStateMessage()}
+                      </span>
+                      {qaState === 'listening' && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {/* Mic level bar */}
+                          <div className="w-16 h-1 bg-elevated rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-accent rounded-full transition-[width] duration-75"
+                              style={{ width: `${Math.max(5, micLevel * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-text-muted">mic</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <button
                     onClick={stopQA}
-                    className="btn-primary px-4 py-2 text-sm"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface border border-border text-text-primary text-sm font-medium hover:bg-elevated transition-colors active:scale-95"
                   >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
                     {podcast.language === 'fr' ? 'Reprendre' : 'Resume'}
                   </button>
                 </div>
@@ -819,20 +871,25 @@ export default function MobilePodcastPage() {
                 {qaState === 'error' && (
                   <div className="mb-3 p-3 bg-error-muted border border-error/20 rounded-lg">
                     <p className="text-sm text-error mb-2">
-                      {permissionDenied 
-                        ? (podcast.language === 'fr' ? 'Accès au micro refusé' : 'Microphone access denied')
+                      {permissionDenied
+                        ? (podcast.language === 'fr' ? 'Accès au micro refusé. Autorise le micro dans les paramètres de ton navigateur.' : 'Microphone access denied. Allow mic access in your browser settings.')
                         : qaError
                       }
                     </p>
-                    <button onClick={startQA} className="text-xs text-error hover:underline">
-                      {podcast.language === 'fr' ? 'Réessayer' : 'Try again'}
-                    </button>
+                    <div className="flex gap-3">
+                      <button onClick={startQA} className="text-xs text-accent hover:underline">
+                        {podcast.language === 'fr' ? 'Réessayer' : 'Try again'}
+                      </button>
+                      <button onClick={stopQA} className="text-xs text-text-muted hover:underline">
+                        {podcast.language === 'fr' ? 'Annuler' : 'Cancel'}
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 {/* Q&A transcript (compact, scrollable) */}
                 {qaState !== 'error' && (
-                  <div className="flex-1 overflow-y-auto space-y-2 max-h-60 mb-3">
+                  <div className="flex-1 overflow-y-auto space-y-3 max-h-60 mb-3">
                     {qaTranscript.length === 0 && qaState === 'connecting' && (
                       <div className="text-center py-6">
                         <div className="spinner spinner-sm mx-auto mb-2" />
@@ -842,16 +899,46 @@ export default function MobilePodcastPage() {
                       </div>
                     )}
 
+                    {/* Empty listening state */}
+                    {qaTranscript.length === 0 && qaState === 'listening' && (
+                      <div className="text-center py-4">
+                        <p className="text-sm text-text-secondary">
+                          {podcast.language === 'fr'
+                            ? 'Pose ta question...'
+                            : 'Ask your question...'}
+                        </p>
+                      </div>
+                    )}
+
                     {qaTranscript.map((entry) => (
-                      <div key={entry.id} className={`flex ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div key={entry.id} className={`flex flex-col ${entry.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        <span className={`text-[10px] font-medium mb-1 px-1 ${
+                          entry.role === 'user' ? 'text-text-muted' : 'text-mode-test'
+                        }`}>
+                          {entry.role === 'user'
+                            ? (podcast.language === 'fr' ? 'Toi' : 'You')
+                            : 'Alex'}
+                        </span>
                         <div
-                          className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
+                          className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
                             entry.role === 'user'
                               ? 'bg-accent text-white rounded-br-sm'
                               : 'bg-elevated border border-border rounded-bl-sm text-text-primary'
                           }`}
                         >
                           {entry.text}
+                          {/* Streaming indicator for pending AI response */}
+                          {entry.id === 'pending-assistant' && qaState === 'speaking' && (
+                            <span className="inline-flex ml-1 gap-[2px] align-middle">
+                              {[0, 1, 2].map(i => (
+                                <span
+                                  key={i}
+                                  className="w-1 h-1 bg-text-tertiary rounded-full animate-pulse"
+                                  style={{ animationDelay: `${i * 0.2}s` }}
+                                />
+                              ))}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -859,13 +946,12 @@ export default function MobilePodcastPage() {
                   </div>
                 )}
 
-                {/* Tip */}
-                {qaState !== 'error' && (
-                  <div className="text-xs text-text-muted text-center">
-                    {podcast.language === 'fr' 
-                      ? 'Parle naturellement, je t\'écoute...'
-                      : 'Speak naturally, I\'m listening...'
-                    }
+                {/* Bottom hint */}
+                {qaState === 'listening' && qaTranscript.length > 0 && (
+                  <div className="text-[11px] text-text-muted text-center">
+                    {podcast.language === 'fr'
+                      ? 'Pose une autre question ou reprends le podcast'
+                      : 'Ask another question or resume the podcast'}
                   </div>
                 )}
               </div>

@@ -25,6 +25,7 @@ export interface GeminiLiveConfig {
   onConnectionChange: (connected: boolean) => void
   onModelSpeaking: (speaking: boolean) => void
   onReady?: () => void
+  onInputLevel?: (level: number) => void // 0-1 normalized mic input level
 }
 
 export interface ConversationContext {
@@ -242,11 +243,26 @@ export class GeminiLiveClient {
     source.connect(this.scriptProcessor)
     this.scriptProcessor.connect(this.inputAudioContext.destination)
 
+    let levelFrameCount = 0
+
     this.scriptProcessor.onaudioprocess = (event) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
-      if (this.state !== 'ready' && this.state !== 'listening') return
 
       const inputData = event.inputBuffer.getChannelData(0)
+
+      // Report mic level at ~12fps (every other buffer at 2048/16kHz)
+      levelFrameCount++
+      if (this.config.onInputLevel && levelFrameCount % 2 === 0) {
+        let sum = 0
+        for (let i = 0; i < inputData.length; i++) {
+          sum += inputData[i] * inputData[i]
+        }
+        const rms = Math.sqrt(sum / inputData.length)
+        this.config.onInputLevel(Math.min(1, rms * 5)) // Amplify for visibility
+      }
+
+      if (this.state !== 'ready' && this.state !== 'listening') return
+
       const pcm16 = this.float32ToPCM16(inputData)
 
       const message = {
