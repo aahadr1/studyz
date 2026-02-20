@@ -348,24 +348,23 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
       {/* Main content */}
       {!isLoadingAudio && (
         <>
-          {/* Top bar */}
-          <div className="flex items-center justify-between px-6 h-14 border-b border-border flex-shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <a href="/intelligent-podcast" className="btn-ghost p-1.5 -ml-1.5">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-              </a>
-              <div className="min-w-0">
-                <h1 className="text-sm font-medium truncate">{podcast.title}</h1>
-              </div>
-            </div>
+          {/* Top navigation bar - Simplified */}
+          <div className="flex items-center justify-between px-4 h-14 border-b border-border flex-shrink-0 bg-background">
+            <a href="/intelligent-podcast" className="btn-ghost p-2 hover:bg-surface transition-colors">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </a>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {podcast.chapters.length > 0 && (
                 <button
                   onClick={() => setShowTopics(!showTopics)}
-                  className={`btn-ghost text-xs px-3 py-1.5 ${showTopics ? 'bg-elevated text-text-primary' : ''}`}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-150 ${
+                    showTopics 
+                      ? 'bg-text-primary text-background' 
+                      : 'bg-surface text-text-secondary hover:bg-elevated hover:text-text-primary'
+                  }`}
                 >
                   Topics
                 </button>
@@ -373,13 +372,13 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
               <button
                 onClick={downloadWholePodcast}
                 disabled={!canDownload || isDownloading}
-                className="btn-ghost p-1.5 disabled:opacity-30"
+                className="p-2 rounded-lg transition-all duration-150 bg-surface hover:bg-elevated hover:text-text-primary text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-surface"
                 title="Download podcast"
               >
                 {isDownloading ? (
                   <div className="spinner spinner-sm" />
                 ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
@@ -393,14 +392,18 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
           <div className="flex-1 flex overflow-hidden">
             {/* Transcript */}
             <div ref={transcriptRef} className="flex-1 overflow-y-auto">
-              {/* Podcast info header */}
-              <div className="px-6 py-6 border-b border-border">
-                <h2 className="heading-2 mb-1">{podcast.title}</h2>
-                <p className="text-sm text-text-tertiary">{podcast.description}</p>
+              {/* Podcast info header - Fixed height, no overlap */}
+              <div className="px-6 py-5 border-b border-border bg-elevated">
+                <h2 className="text-lg font-semibold mb-2 text-text-primary">{podcast.title}</h2>
+                <p className="text-sm text-text-secondary leading-relaxed">{podcast.description}</p>
                 {currentTopic && (
-                  <div className="mt-4 flex items-center gap-2">
-                    <span className="label">Currently discussing</span>
-                    <span className="text-sm text-text-secondary">{currentTopic.title}</span>
+                  <div className="mt-4 flex items-center gap-2 p-2 bg-surface border border-border rounded-lg">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-accent flex-shrink-0">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Now</span>
+                    <span className="text-sm text-text-primary">{currentTopic.title}</span>
                   </div>
                 )}
               </div>
@@ -470,31 +473,42 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
             {/* Topics sidebar - navigation aid, not structure */}
             {showTopics && podcast.chapters.length > 0 && (
-              <div className="w-72 border-l border-border overflow-y-auto flex-shrink-0">
-                <div className="p-4">
-                  <h3 className="label mb-4">Topics Discussed</h3>
-                  <p className="text-xs text-text-muted mb-4">
+              <div className="w-80 border-l border-border overflow-y-auto flex-shrink-0 bg-surface">
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider">Topics</h3>
+                    <button
+                      onClick={() => setShowTopics(false)}
+                      className="p-1 text-text-tertiary hover:text-text-primary transition-colors"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <p className="text-xs text-text-muted mb-5">
                     Jump to different parts of the conversation
                   </p>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {podcast.chapters.map((topic) => {
                       const isActive = currentTopic?.id === topic.id
                       return (
                         <button
                           key={topic.id}
                           onClick={() => seekToTime(topic.startTime)}
-                          className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-150 ${
+                          className={`w-full text-left px-4 py-3 rounded-lg transition-all duration-150 border ${
                             isActive
-                              ? 'bg-elevated text-text-primary'
-                              : 'text-text-secondary hover:bg-surface hover:text-text-primary'
+                              ? 'bg-elevated text-text-primary border-border-light shadow-sm'
+                              : 'text-text-secondary hover:bg-elevated hover:text-text-primary border-border hover:border-border-light'
                           }`}
                         >
-                          <div className="text-sm font-medium">{topic.title}</div>
-                          <div className="text-xs text-text-muted mt-0.5 mono">
-                            {formatTime(topic.startTime)}
+                          <div className="text-sm font-medium mb-1">{topic.title}</div>
+                          <div className="text-xs text-text-muted mono">
+                            {formatTime(topic.startTime)} • {formatTime(topic.endTime - topic.startTime)} duration
                           </div>
                           {topic.summary && (
-                            <div className="text-xs text-text-tertiary mt-1 line-clamp-2">
+                            <div className="text-xs text-text-tertiary mt-2 line-clamp-2 leading-relaxed">
                               {topic.summary}
                             </div>
                           )}
