@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { GeminiLiveClient, ConversationContext, buildPodcastQASystemInstruction } from '@/lib/intelligent-podcast/gemini-live-client'
 import { IntelligentPodcast, PodcastSegment } from '@/types/intelligent-podcast'
+import { getGreetings, fetchGreetingUrls } from '@/lib/intelligent-podcast/greetings'
 
 const SPEAKER_NAMES: Record<string, string> = {
   host: 'Alex',
@@ -73,6 +74,10 @@ export default function MobilePodcastPage() {
   const qaTimestampRef = useRef<number>(0)
   const qaSegmentIdRef = useRef<string>('')
   const pendingTranscriptRef = useRef<string>('')
+  const greetingCacheRef = useRef<HTMLAudioElement[]>([])
+  const greetingAudioRef = useRef<HTMLAudioElement | null>(null)
+  const wsReadyRef = useRef(false)
+  const greetingDoneRef = useRef(false)
 
   useEffect(() => {
     fetchPodcast()
@@ -91,6 +96,20 @@ export default function MobilePodcastPage() {
       setLoading(false)
     }
   }
+
+  // Preload greeting audio files for instant Q&A transition
+  useEffect(() => {
+    if (!podcast) return
+    fetchGreetingUrls().then(() => {
+      const srcs = getGreetings(podcast.language)
+      greetingCacheRef.current = srcs.map(src => {
+        const audio = new Audio()
+        audio.preload = 'auto'
+        audio.src = src
+        return audio
+      })
+    })
+  }, [podcast?.language])
 
   // Merge audio
   useEffect(() => {
@@ -301,6 +320,13 @@ export default function MobilePodcastPage() {
 
   const handleEnded = () => setIsPlaying(false)
 
+  // Transition to listening only when BOTH greeting audio finished AND WebSocket ready
+  const tryTransitionToListening = useCallback(() => {
+    if (wsReadyRef.current && greetingDoneRef.current) {
+      setQAState('listening')
+    }
+  }, [])
+
   // Q&A Functions
   const startQA = async () => {
     if (!podcast || qaState !== 'idle') return
@@ -323,21 +349,43 @@ export default function MobilePodcastPage() {
     setQAError(null)
     setPermissionDenied(false)
     pendingTranscriptRef.current = ''
+    wsReadyRef.current = false
+    greetingDoneRef.current = false
 
+    // 1. Play pre-recorded greeting INSTANTLY
+    const cached = greetingCacheRef.current
+    if (cached.length > 0) {
+      const greeting = cached[Math.floor(Math.random() * cached.length)]
+      greeting.currentTime = 0
+      greetingAudioRef.current = greeting
+      greeting.onended = () => {
+        greetingDoneRef.current = true
+        tryTransitionToListening()
+      }
+      greeting.play().catch(() => {
+        // If greeting fails to play (e.g. files not generated yet), skip it
+        greetingDoneRef.current = true
+        tryTransitionToListening()
+      })
+    } else {
+      // No greeting files available — skip greeting
+      greetingDoneRef.current = true
+    }
+
+    // 2. Start WebSocket connection IN PARALLEL
     try {
-      // Fetch context
       const response = await fetch(`/api/intelligent-podcast/${podcastId}/realtime`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          currentSegmentId: qaSegmentIdRef.current, 
-          currentTimestamp: qaTimestampRef.current 
+        body: JSON.stringify({
+          currentSegmentId: qaSegmentIdRef.current,
+          currentTimestamp: qaTimestampRef.current
         }),
       })
 
       if (!response.ok) throw new Error('Failed to fetch context')
 
-      const { context, systemInstruction, suggestedVoice, introductionPrompt } = await response.json()
+      const { context, systemInstruction, suggestedVoice } = await response.json()
 
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
       if (!apiKey) throw new Error('Gemini API key not configured')
@@ -363,7 +411,7 @@ export default function MobilePodcastPage() {
               setQATranscript(prev => {
                 const existing = prev.find(e => e.id === 'pending-assistant')
                 if (existing) {
-                  return prev.map(e => 
+                  return prev.map(e =>
                     e.id === 'pending-assistant' ? { ...e, text: pendingTranscriptRef.current } : e
                   )
                 }
@@ -392,7 +440,7 @@ export default function MobilePodcastPage() {
           setQAState('error')
         },
         onConnectionChange: (connected) => {
-          if (!connected && qaState !== 'idle') {
+          if (!connected) {
             setQAState('idle')
           }
         },
@@ -405,13 +453,9 @@ export default function MobilePodcastPage() {
           }
         },
         onReady: () => {
-          setQAState('listening')
-          // Send greeting via voice-only (no transcript entry) as soon as connection is ready
-          client.sendVoiceOnlyGreeting(
-            podcast.language === 'fr'
-              ? "Dis très brièvement en une seule courte phrase quelque chose comme 'Oh on dirait qu'on a une question, vas-y je t'écoute' de manière naturelle et chaleureuse, puis tais-toi et écoute."
-              : "Say very briefly in one short sentence something like 'Looks like we have a question, go ahead I'm listening' in a natural warm way, then be quiet and listen."
-          )
+          // WebSocket is ready — transition to listening if greeting is also done
+          wsReadyRef.current = true
+          tryTransitionToListening()
         },
       })
 
@@ -426,6 +470,11 @@ export default function MobilePodcastPage() {
 
     } catch (err: any) {
       console.error('[QA] Connection error:', err)
+      // Stop greeting if still playing
+      if (greetingAudioRef.current) {
+        greetingAudioRef.current.pause()
+        greetingAudioRef.current = null
+      }
       if (err.name === 'NotAllowedError' || err.message?.includes('Permission denied')) {
         setPermissionDenied(true)
       }
@@ -435,11 +484,17 @@ export default function MobilePodcastPage() {
   }
 
   const stopQA = async () => {
+    // Stop greeting if still playing
+    if (greetingAudioRef.current) {
+      greetingAudioRef.current.pause()
+      greetingAudioRef.current = null
+    }
+
     if (qaClientRef.current) {
       await qaClientRef.current.disconnect()
       qaClientRef.current = null
     }
-    
+
     setQAState('idle')
     setQATranscript([])
     setQAError(null)
@@ -447,13 +502,9 @@ export default function MobilePodcastPage() {
 
     // Reload audio to reset pipeline (anti-muffling)
     if (audioRef.current && mergedAudioUrl) {
-      const wasPlaying = false // Don't auto-resume, user must tap play
       const savedTime = audioRef.current.currentTime
       audioRef.current.src = mergedAudioUrl
       audioRef.current.currentTime = savedTime
-      if (wasPlaying) {
-        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
-      }
     }
   }
 

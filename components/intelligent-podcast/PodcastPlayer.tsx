@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { IntelligentPodcast, PodcastSegment } from '@/types/intelligent-podcast'
 import { GeminiLiveClient, ConversationContext, buildPodcastQASystemInstruction } from '@/lib/intelligent-podcast/gemini-live-client'
+import { getGreetings, fetchGreetingUrls } from '@/lib/intelligent-podcast/greetings'
 
 const SPEAKER_NAMES: Record<string, string> = {
   host: 'Alex',
@@ -67,12 +68,30 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const qaTimestampRef = useRef<number>(0)
   const qaSegmentIdRef = useRef<string>('')
   const pendingTranscriptRef = useRef<string>('')
+  const greetingCacheRef = useRef<HTMLAudioElement[]>([])
+  const greetingAudioRef = useRef<HTMLAudioElement | null>(null)
+  const wsReadyRef = useRef(false)
+  const greetingDoneRef = useRef(false)
 
   const currentSegment = podcast.segments[currentSegmentIndex]
   
   const currentTopic = podcast.chapters.find(
     ch => currentTime >= ch.startTime && currentTime <= ch.endTime
   )
+
+  // ─── Preload greeting audio ─────────────────────
+
+  useEffect(() => {
+    fetchGreetingUrls().then(() => {
+      const srcs = getGreetings(podcast.language)
+      greetingCacheRef.current = srcs.map(src => {
+        const audio = new Audio()
+        audio.preload = 'auto'
+        audio.src = src
+        return audio
+      })
+    })
+  }, [podcast.language])
 
   // ─── Merge all segment audio ────────────────────
 
@@ -286,6 +305,13 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
   // ─── Q&A Functions ─────────────────────────────────────────────────────
 
+  // Transition to listening only when BOTH greeting audio finished AND WebSocket ready
+  const tryTransitionToListening = useCallback(() => {
+    if (wsReadyRef.current && greetingDoneRef.current) {
+      setQAState('listening')
+    }
+  }, [])
+
   const startQA = async () => {
     if (!currentSegment || qaState !== 'idle') return
 
@@ -302,20 +328,41 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     setQAError(null)
     setPermissionDenied(false)
     pendingTranscriptRef.current = ''
+    wsReadyRef.current = false
+    greetingDoneRef.current = false
 
+    // 1. Play pre-recorded greeting INSTANTLY
+    const cached = greetingCacheRef.current
+    if (cached.length > 0) {
+      const greeting = cached[Math.floor(Math.random() * cached.length)]
+      greeting.currentTime = 0
+      greetingAudioRef.current = greeting
+      greeting.onended = () => {
+        greetingDoneRef.current = true
+        tryTransitionToListening()
+      }
+      greeting.play().catch(() => {
+        greetingDoneRef.current = true
+        tryTransitionToListening()
+      })
+    } else {
+      greetingDoneRef.current = true
+    }
+
+    // 2. Start WebSocket connection IN PARALLEL
     try {
       const response = await fetch(`/api/intelligent-podcast/${podcast.id}/realtime`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          currentSegmentId: qaSegmentIdRef.current, 
-          currentTimestamp: qaTimestampRef.current 
+        body: JSON.stringify({
+          currentSegmentId: qaSegmentIdRef.current,
+          currentTimestamp: qaTimestampRef.current
         }),
       })
 
       if (!response.ok) throw new Error('Failed to fetch context')
 
-      const { context, systemInstruction, suggestedVoice, introductionPrompt } = await response.json()
+      const { context, systemInstruction, suggestedVoice } = await response.json()
 
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
       if (!apiKey) throw new Error('Gemini API key not configured')
@@ -341,7 +388,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
               setQATranscript(prev => {
                 const existing = prev.find(e => e.id === 'pending-assistant')
                 if (existing) {
-                  return prev.map(e => 
+                  return prev.map(e =>
                     e.id === 'pending-assistant' ? { ...e, text: pendingTranscriptRef.current } : e
                   )
                 }
@@ -370,7 +417,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
           setQAState('error')
         },
         onConnectionChange: (connected) => {
-          if (!connected && qaState !== 'idle') {
+          if (!connected) {
             setQAState('idle')
           }
         },
@@ -383,12 +430,8 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
           }
         },
         onReady: () => {
-          setQAState('listening')
-          client.sendVoiceOnlyGreeting(
-            podcast.language === 'fr'
-              ? "Dis très brièvement en une seule courte phrase quelque chose comme 'Oh on dirait qu'on a une question, vas-y je t'écoute' de manière naturelle et chaleureuse, puis tais-toi et écoute."
-              : "Say very briefly in one short sentence something like 'Looks like we have a question, go ahead I'm listening' in a natural warm way, then be quiet and listen."
-          )
+          wsReadyRef.current = true
+          tryTransitionToListening()
         },
       })
 
@@ -403,6 +446,10 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
     } catch (err: any) {
       console.error('[QA] Connection error:', err)
+      if (greetingAudioRef.current) {
+        greetingAudioRef.current.pause()
+        greetingAudioRef.current = null
+      }
       if (err.name === 'NotAllowedError' || err.message?.includes('Permission denied')) {
         setPermissionDenied(true)
       }
@@ -412,11 +459,16 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   }
 
   const stopQA = async () => {
+    if (greetingAudioRef.current) {
+      greetingAudioRef.current.pause()
+      greetingAudioRef.current = null
+    }
+
     if (qaClientRef.current) {
       await qaClientRef.current.disconnect()
       qaClientRef.current = null
     }
-    
+
     setQAState('idle')
     setQATranscript([])
     setQAError(null)
