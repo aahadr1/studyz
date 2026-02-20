@@ -24,6 +24,7 @@ export interface GeminiLiveConfig {
   onError: (error: Error) => void
   onConnectionChange: (connected: boolean) => void
   onModelSpeaking: (speaking: boolean) => void
+  onReady?: () => void
 }
 
 export interface ConversationContext {
@@ -169,8 +170,8 @@ export class GeminiLiveClient {
       if (message.setupComplete) {
         console.log('[GeminiLive] Setup complete, starting audio capture')
         this.setState('ready')
-        this.config.onConnectionChange(true)
         this.startAudioCapture()
+        this.config.onReady?.()
         return
       }
 

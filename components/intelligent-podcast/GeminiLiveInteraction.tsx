@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { GeminiLiveClient, ConversationContext } from '@/lib/intelligent-podcast/gemini-live-client'
+import { GeminiLiveClient } from '@/lib/intelligent-podcast/gemini-live-client'
 
 interface GeminiLiveInteractionProps {
   podcastId: string
@@ -15,12 +15,12 @@ interface GeminiLiveInteractionProps {
 
 interface TranscriptEntry {
   id: string
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant'
   text: string
   isFinal: boolean
 }
 
-type ConnectionState = 'idle' | 'connecting' | 'connected' | 'listening' | 'speaking' | 'error'
+type ConnectionState = 'connecting' | 'listening' | 'speaking' | 'error'
 
 export function GeminiLiveInteraction({
   podcastId,
@@ -31,58 +31,58 @@ export function GeminiLiveInteraction({
   onClose,
   onResume,
 }: GeminiLiveInteractionProps) {
-  const [connectionState, setConnectionState] = useState<ConnectionState>('idle')
+  const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [showTransitionMessage, setShowTransitionMessage] = useState(false)
-  const [transitionPhase, setTransitionPhase] = useState<'intro' | 'conversation' | 'outro' | null>(null)
   const [permissionDenied, setPermissionDenied] = useState(false)
 
   const clientRef = useRef<GeminiLiveClient | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   const pendingTranscriptRef = useRef<string>('')
+  const isMountedRef = useRef(true)
+  const abortRef = useRef<AbortController | null>(null)
 
-  const scrollToBottom = useCallback(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [])
+  // Capture props once at mount — never re-read reactively
+  const capturedSegmentIdRef = useRef(currentSegmentId)
+  const capturedTimestampRef = useRef(currentTimestamp)
 
+  // Auto-scroll transcript
   useEffect(() => {
-    scrollToBottom()
-  }, [transcript, scrollToBottom])
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [transcript])
 
-  const initializeConnection = useCallback(async () => {
-    setConnectionState('connecting')
-    setError(null)
-
+  const startConnection = useCallback(async (signal: AbortSignal) => {
     try {
-      // Fetch context from API
       const response = await fetch(`/api/intelligent-podcast/${podcastId}/realtime`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentSegmentId, currentTimestamp }),
+        body: JSON.stringify({
+          currentSegmentId: capturedSegmentIdRef.current,
+          currentTimestamp: capturedTimestampRef.current,
+        }),
+        signal,
       })
+
+      if (!isMountedRef.current) return
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}))
-        console.error('[GeminiLive] Realtime context error:', response.status, errData)
-        throw new Error(errData?.details || errData?.error || `Failed to fetch podcast context (${response.status})`)
+        throw new Error(errData?.details || errData?.error || `Server error (${response.status})`)
       }
 
-      const { 
-        context, 
-        systemInstruction, 
+      const {
+        context,
+        systemInstruction,
         introductionPrompt,
         transitionBackPrompt,
-        suggestedVoice 
+        suggestedVoice,
       } = await response.json()
 
-      // Get API key from environment
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
-      if (!apiKey) {
-        throw new Error('Gemini API key not configured')
-      }
+      if (!isMountedRef.current) return
 
-      // Enhance system instruction with transition prompts
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
+      if (!apiKey) throw new Error('Gemini API key not configured')
+
       const enhancedSystemInstruction = `${systemInstruction}
 
 IMPORTANT CONVERSATION FLOW:
@@ -91,58 +91,36 @@ IMPORTANT CONVERSATION FLOW:
 - Keep the conversation natural and friendly
 - You are speaking directly to the listener, not reading a script`
 
-      // Create client
       const client = new GeminiLiveClient({
         apiKey,
         systemInstruction: enhancedSystemInstruction,
         voice: suggestedVoice,
         onTranscript: (text, role, isFinal) => {
+          if (!isMountedRef.current) return
           if (role === 'model') {
-            // Handle model transcript
             if (isFinal) {
               setTranscript(prev => {
-                // Remove any pending partial transcript
                 const filtered = prev.filter(e => e.id !== 'pending-assistant')
-                return [...filtered, {
-                  id: `assistant-${Date.now()}`,
-                  role: 'assistant',
-                  text,
-                  isFinal: true,
-                }]
+                return [...filtered, { id: `assistant-${Date.now()}`, role: 'assistant' as const, text, isFinal: true }]
               })
+              pendingTranscriptRef.current = ''
             } else {
-              // Update or create pending transcript
               pendingTranscriptRef.current += text
               setTranscript(prev => {
                 const existing = prev.find(e => e.id === 'pending-assistant')
                 if (existing) {
-                  return prev.map(e => 
-                    e.id === 'pending-assistant' 
-                      ? { ...e, text: pendingTranscriptRef.current }
-                      : e
-                  )
+                  return prev.map(e => e.id === 'pending-assistant' ? { ...e, text: pendingTranscriptRef.current } : e)
                 }
-                return [...prev, {
-                  id: 'pending-assistant',
-                  role: 'assistant',
-                  text: pendingTranscriptRef.current,
-                  isFinal: false,
-                }]
+                return [...prev, { id: 'pending-assistant', role: 'assistant' as const, text: pendingTranscriptRef.current, isFinal: false }]
               })
             }
           } else if (role === 'user' && isFinal) {
-            setTranscript(prev => [...prev, {
-              id: `user-${Date.now()}`,
-              role: 'user',
-              text,
-              isFinal: true,
-            }])
+            setTranscript(prev => [...prev, { id: `user-${Date.now()}`, role: 'user' as const, text, isFinal: true }])
           }
         },
-        onAudioChunk: () => {
-          // Audio is handled internally by the client
-        },
+        onAudioChunk: () => {},
         onError: (err) => {
+          if (!isMountedRef.current) return
           console.error('[GeminiLive] Error:', err)
           if (err.message.includes('Permission denied') || err.message.includes('NotAllowedError')) {
             setPermissionDenied(true)
@@ -151,45 +129,39 @@ IMPORTANT CONVERSATION FLOW:
           setConnectionState('error')
         },
         onConnectionChange: (connected) => {
-          if (connected) {
-            setConnectionState('connected')
-            setTransitionPhase('intro')
-            // Show intro transition briefly
-            setShowTransitionMessage(true)
-            setTimeout(() => {
-              setShowTransitionMessage(false)
-              setTransitionPhase('conversation')
-              setConnectionState('listening')
-              
-              // Send initial greeting prompt to trigger AI's introduction
-              clientRef.current?.sendTextMessage(language === 'fr' 
-                ? "Bonjour ! J'ai une question sur ce qu'on vient de dire."
-                : "Hey! I have a question about what we just discussed."
-              )
-            }, 1000)
+          if (!isMountedRef.current) return
+          if (!connected && clientRef.current) {
+            setConnectionState('error')
+            setError(language === 'fr' ? 'Connexion perdue' : 'Connection lost')
           }
         },
         onModelSpeaking: (speaking) => {
-          if (speaking) {
-            setConnectionState('speaking')
-            pendingTranscriptRef.current = '' // Reset pending transcript
-          } else {
-            setConnectionState('listening')
-          }
+          if (!isMountedRef.current) return
+          setConnectionState(speaking ? 'speaking' : 'listening')
+          if (speaking) pendingTranscriptRef.current = ''
+        },
+        onReady: () => {
+          if (!isMountedRef.current) return
+          console.log('[GeminiLive] Ready — sending greeting')
+          setConnectionState('listening')
+          clientRef.current?.sendTextMessage(
+            language === 'fr'
+              ? "Bonjour ! J'ai une question sur ce qu'on vient de dire."
+              : "Hey! I have a question about what we just discussed."
+          )
         },
       })
 
       clientRef.current = client
 
-      // Connect to Gemini Live
       await client.connect({
         podcastTitle: context.podcastTitle,
         recentTranscript: context.recentTranscript || '',
         currentTopic: context.currentTopic || '',
         language: context.language,
       })
-
     } catch (err: any) {
+      if (signal.aborted || !isMountedRef.current) return
       console.error('[GeminiLive] Connection error:', err)
       if (err.name === 'NotAllowedError' || err.message?.includes('Permission denied')) {
         setPermissionDenied(true)
@@ -197,45 +169,57 @@ IMPORTANT CONVERSATION FLOW:
       setError(err.message || 'Failed to connect')
       setConnectionState('error')
     }
-  }, [podcastId, currentSegmentId, currentTimestamp, language])
+  }, [podcastId, language])
 
+  // Mount-only effect
   useEffect(() => {
-    initializeConnection()
+    isMountedRef.current = true
+    const abortController = new AbortController()
+    abortRef.current = abortController
+
+    startConnection(abortController.signal)
 
     return () => {
+      isMountedRef.current = false
+      abortController.abort()
       if (clientRef.current) {
         clientRef.current.disconnect()
         clientRef.current = null
       }
     }
-  }, [initializeConnection])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleResume = () => {
-    setTransitionPhase('outro')
-    setShowTransitionMessage(true)
-    
-    // Brief outro transition
-    setTimeout(() => {
-      if (clientRef.current) {
-        clientRef.current.disconnect()
-        clientRef.current = null
-      }
-      onResume()
-    }, 500)
+    if (clientRef.current) {
+      clientRef.current.disconnect()
+      clientRef.current = null
+    }
+    onResume()
   }
 
   const handleRetry = () => {
     setError(null)
     setPermissionDenied(false)
     setTranscript([])
-    initializeConnection()
+    setConnectionState('connecting')
+    pendingTranscriptRef.current = ''
+
+    // Disconnect old client
+    if (clientRef.current) {
+      clientRef.current.disconnect()
+      clientRef.current = null
+    }
+    abortRef.current?.abort()
+
+    const abortController = new AbortController()
+    abortRef.current = abortController
+    startConnection(abortController.signal)
   }
 
   const getStateMessage = () => {
     switch (connectionState) {
       case 'connecting':
         return language === 'fr' ? 'Connexion en cours...' : 'Connecting...'
-      case 'connected':
       case 'listening':
         return language === 'fr' ? 'Je t\'écoute...' : 'I\'m listening...'
       case 'speaking':
@@ -247,44 +231,8 @@ IMPORTANT CONVERSATION FLOW:
     }
   }
 
-  const introMessages = {
-    fr: 'On fait une petite pause pour ta question...',
-    en: 'Taking a quick break for your question...',
-  }
-
-  const outroMessages = {
-    fr: 'On reprend le podcast...',
-    en: 'Getting back to the podcast...',
-  }
-
   return (
     <div className="fixed inset-0 bg-background/98 z-50 flex flex-col">
-      {/* Transition overlay */}
-      {showTransitionMessage && (
-        <div className="absolute inset-0 bg-background z-10 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-elevated border border-border flex items-center justify-center">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-accent">
-                {transitionPhase === 'outro' ? (
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                ) : (
-                  <>
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  </>
-                )}
-              </svg>
-            </div>
-            <p className="text-lg text-text-primary font-medium">
-              {transitionPhase === 'outro' 
-                ? (language === 'fr' ? outroMessages.fr : outroMessages.en)
-                : (language === 'fr' ? introMessages.fr : introMessages.en)
-              }
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex items-center justify-between px-6 h-16 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -301,8 +249,8 @@ IMPORTANT CONVERSATION FLOW:
             <p className="text-xs text-text-secondary">{podcastTitle}</p>
           </div>
         </div>
-        <button 
-          onClick={onClose} 
+        <button
+          onClick={onClose}
           className="btn-ghost p-2 hover:bg-surface transition-colors"
           title={language === 'fr' ? 'Fermer' : 'Close'}
         >
@@ -315,7 +263,7 @@ IMPORTANT CONVERSATION FLOW:
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden max-w-2xl mx-auto w-full">
-        {/* Connection state indicator */}
+        {/* Connecting state */}
         {connectionState === 'connecting' && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -342,7 +290,7 @@ IMPORTANT CONVERSATION FLOW:
                     {language === 'fr' ? 'Accès au micro refusé' : 'Microphone access denied'}
                   </h3>
                   <p className="text-sm text-text-secondary mb-4">
-                    {language === 'fr' 
+                    {language === 'fr'
                       ? 'Autorise l\'accès au microphone dans les paramètres de ton navigateur pour utiliser cette fonctionnalité.'
                       : 'Please allow microphone access in your browser settings to use this feature.'
                     }
@@ -376,7 +324,7 @@ IMPORTANT CONVERSATION FLOW:
         )}
 
         {/* Active conversation */}
-        {(connectionState === 'connected' || connectionState === 'listening' || connectionState === 'speaking') && (
+        {(connectionState === 'listening' || connectionState === 'speaking') && (
           <>
             {/* Transcript area */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -388,7 +336,7 @@ IMPORTANT CONVERSATION FLOW:
                     </svg>
                   </div>
                   <p className="text-text-secondary">
-                    {language === 'fr' 
+                    {language === 'fr'
                       ? 'Parle naturellement, je t\'écoute...'
                       : 'Speak naturally, I\'m listening...'
                     }
@@ -418,15 +366,14 @@ IMPORTANT CONVERSATION FLOW:
             {/* Status bar */}
             <div className="border-t border-border px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {/* Listening indicator */}
                 <div className={`relative ${connectionState === 'speaking' ? 'opacity-50' : ''}`}>
                   <div className="w-10 h-10 rounded-full bg-elevated border border-border flex items-center justify-center">
-                    <svg 
-                      width="18" height="18" 
-                      viewBox="0 0 24 24" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      strokeWidth="1.5" 
+                    <svg
+                      width="18" height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
                       className={connectionState === 'listening' ? 'text-accent' : 'text-text-secondary'}
                     >
                       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -444,7 +391,6 @@ IMPORTANT CONVERSATION FLOW:
                 </span>
               </div>
 
-              {/* Resume button */}
               <button
                 onClick={handleResume}
                 className="btn-primary px-5 py-2.5 flex items-center gap-2"
@@ -459,7 +405,7 @@ IMPORTANT CONVERSATION FLOW:
         )}
       </div>
 
-      {/* Tips (shown during active conversation) */}
+      {/* Tips */}
       {(connectionState === 'listening' || connectionState === 'speaking') && transcript.length > 0 && (
         <div className="border-t border-border px-6 py-3 bg-surface flex-shrink-0">
           <div className="max-w-2xl mx-auto flex items-center gap-4 text-xs text-text-muted">
@@ -469,7 +415,7 @@ IMPORTANT CONVERSATION FLOW:
               <path d="M12 8h.01"/>
             </svg>
             <span>
-              {language === 'fr' 
+              {language === 'fr'
                 ? 'Parle naturellement. Dis "on peut reprendre" ou clique sur le bouton quand tu as fini.'
                 : 'Speak naturally. Say "let\'s continue" or click the button when you\'re done.'
               }
