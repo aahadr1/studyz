@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiPlus, FiBook, FiTrash2, FiArrowLeft, FiArrowRight, FiLogOut, FiHome, FiCheckSquare, FiZap } from 'react-icons/fi'
+import { FiPlus, FiBook, FiTrash2, FiArrowLeft, FiArrowRight, FiLogOut, FiHome, FiCheckSquare, FiZap, FiMic } from 'react-icons/fi'
 import Link from 'next/link'
 import type { Lesson } from '@/types/db'
 import Logo from '@/components/Logo'
@@ -114,6 +114,10 @@ export default function LessonsPage() {
           <Link href="/mcq" className="sidebar-item">
             <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Quiz Sets</span>
+          </Link>
+          <Link href="/intelligent-podcast" className="sidebar-item">
+            <FiMic className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-sm">AI Podcasts</span>
           </Link>
         </nav>
 
