@@ -36,7 +36,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const [totalDuration, setTotalDuration] = useState(podcast.duration || 0)
   const [playbackRate, setPlaybackRate] = useState(1.0)
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0)
-  const [showTopics, setShowTopics] = useState(false)
+  const [showChapters, setShowChapters] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
 
   // Merged audio state
@@ -51,7 +51,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const progressRef = useRef<HTMLDivElement>(null)
 
   const currentSegment = podcast.segments[currentSegmentIndex]
-  const currentTopic = podcast.chapters.find(
+  const currentChapter = podcast.chapters.find(
     ch => currentTime >= ch.startTime && currentTime <= ch.endTime
   )
 
@@ -361,10 +361,10 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setShowTopics(!showTopics)}
-                className={`btn-ghost text-xs px-3 py-1.5 ${showTopics ? 'bg-elevated text-text-primary' : ''}`}
+                onClick={() => setShowChapters(!showChapters)}
+                className={`btn-ghost text-xs px-3 py-1.5 ${showChapters ? 'bg-elevated text-text-primary' : ''}`}
               >
-                Topics
+                Chapters
               </button>
               <button
                 onClick={downloadWholePodcast}
@@ -393,10 +393,10 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
               <div className="px-6 py-6 border-b border-border">
                 <h2 className="heading-2 mb-1">{podcast.title}</h2>
                 <p className="text-sm text-text-tertiary">{podcast.description}</p>
-                {currentTopic && (
+                {currentChapter && (
                   <div className="mt-4 flex items-center gap-2">
                     <span className="label">Now playing</span>
-                    <span className="text-sm text-text-secondary">{currentTopic.title}</span>
+                    <span className="text-sm text-text-secondary">{currentChapter.title}</span>
                   </div>
                 )}
               </div>
@@ -409,18 +409,18 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
                   const speakerColor = SPEAKER_TEXT_COLORS[segment.speaker] || 'text-text-secondary'
                   const segTime = segmentRanges[idx]
 
-                  // Check if this is a topic boundary
-                  const topicStart = podcast.chapters.find(ch => {
+                  // Check if this is a chapter boundary
+                  const chapterStart = podcast.chapters.find(ch => {
                     if (!segTime) return false
                     return Math.abs(ch.startTime - segTime.start) < 2
                   })
 
                   return (
                     <div key={segment.id}>
-                      {topicStart && idx > 0 && (
+                      {chapterStart && idx > 0 && (
                         <div className="flex items-center gap-3 py-4">
                           <div className="flex-1 border-t border-border" />
-                          <span className="label flex-shrink-0">{topicStart.title}</span>
+                          <span className="label flex-shrink-0">{chapterStart.title}</span>
                           <div className="flex-1 border-t border-border" />
                         </div>
                       )}
@@ -464,27 +464,27 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
               </div>
             </div>
 
-            {/* Topics sidebar */}
-            {showTopics && (
+            {/* Chapters sidebar */}
+            {showChapters && (
               <div className="w-72 border-l border-border overflow-y-auto flex-shrink-0">
                 <div className="p-4">
-                  <h3 className="label mb-4">Topics</h3>
+                  <h3 className="label mb-4">Chapters</h3>
                   <div className="space-y-1">
-                    {podcast.chapters.map((topic) => {
-                      const isActive = currentTopic?.id === topic.id
+                    {podcast.chapters.map((chapter) => {
+                      const isActive = currentChapter?.id === chapter.id
                       return (
                         <button
-                          key={topic.id}
-                          onClick={() => seekToTime(topic.startTime)}
+                          key={chapter.id}
+                          onClick={() => seekToTime(chapter.startTime)}
                           className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-150 ${
                             isActive
                               ? 'bg-elevated text-text-primary'
                               : 'text-text-secondary hover:bg-surface hover:text-text-primary'
                           }`}
                         >
-                          <div className="text-sm font-medium">{topic.title}</div>
+                          <div className="text-sm font-medium">{chapter.title}</div>
                           <div className="text-xs text-text-muted mt-0.5 mono">
-                            {formatTime(topic.startTime)}
+                            {formatTime(chapter.startTime)}
                           </div>
                         </button>
                       )
