@@ -1,18 +1,20 @@
 /**
- * One-time API route to generate pre-recorded greeting audio files.
+ * Self-generating greeting audio files for instant Q&A transitions.
+ *
+ * GET /api/intelligent-podcast/greetings
+ *   Returns public URLs for greeting WAV files.
+ *   On first request, auto-generates 5 FR + 5 EN files via Gemini TTS
+ *   and uploads them to Supabase Storage. Subsequent requests just return URLs.
  *
  * POST /api/intelligent-podcast/greetings
- *
- * Generates 5 FR + 5 EN greeting WAV files using Gemini TTS (Aoede voice),
- * uploads them to Supabase Storage, and returns their public URLs.
- *
- * These files are then served to clients for instant Q&A transitions.
- * Call this once after deployment — the files persist in Supabase Storage.
+ *   Force-regenerates all greeting files (useful to update voices/text).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+
+export const maxDuration = 120 // First request generates 10 TTS files
 
 const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts'
 const VOICE_NAME = 'Aoede'
@@ -167,11 +169,52 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET: Return greeting URLs (no auth required)
+// GET: Return greeting URLs — auto-generates on first request if files don't exist
 export async function GET() {
   try {
     const supabase = await createSupabaseClient()
 
+    // Check if greetings already exist by trying to download the first file
+    const { data: existingFile } = await supabase.storage
+      .from('podcast-documents')
+      .download('greetings/fr_1.wav')
+
+    if (!existingFile || existingFile.size === 0) {
+      // Files don't exist yet — generate them now
+      console.log('[Greetings] No greeting files found, generating...')
+
+      for (const [lang, texts] of Object.entries(GREETINGS)) {
+        for (let i = 0; i < texts.length; i++) {
+          const fileName = `greetings/${lang}_${i + 1}.wav`
+          console.log(`[Greetings] Generating ${fileName}...`)
+
+          const wavBuffer = await generateTTS(texts[i])
+
+          const { error: uploadError } = await supabase.storage
+            .from('podcast-documents')
+            .upload(fileName, wavBuffer, {
+              contentType: 'audio/wav',
+              upsert: true,
+            })
+
+          if (uploadError) {
+            console.error(`[Greetings] Upload failed for ${fileName}:`, uploadError)
+            throw new Error(`Upload failed: ${uploadError.message}`)
+          }
+
+          console.log(`[Greetings] ✓ ${fileName} (${(wavBuffer.length / 1024).toFixed(0)}KB)`)
+
+          // Rate limit delay
+          if (i < texts.length - 1 || lang === 'fr') {
+            await new Promise(r => setTimeout(r, 500))
+          }
+        }
+      }
+
+      console.log('[Greetings] All greeting files generated and uploaded!')
+    }
+
+    // Return public URLs
     const results: Record<string, string[]> = { fr: [], en: [] }
 
     for (const lang of ['fr', 'en']) {
@@ -186,6 +229,7 @@ export async function GET() {
 
     return NextResponse.json({ urls: results })
   } catch (err: any) {
+    console.error('[Greetings] Error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
