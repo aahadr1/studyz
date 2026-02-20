@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { IntelligentPodcast, PodcastSegment } from '@/types/intelligent-podcast'
+import { GeminiLiveInteraction } from './GeminiLiveInteraction'
 
 const SPEAKER_NAMES: Record<string, string> = {
   host: 'Alex',
@@ -38,6 +39,8 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0)
   const [showTopics, setShowTopics] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
+  const [showVoiceQA, setShowVoiceQA] = useState(false)
+  const [pausedForQA, setPausedForQA] = useState(false)
 
   // Merged audio state
   const [mergedAudioUrl, setMergedAudioUrl] = useState<string | null>(null)
@@ -250,6 +253,28 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     if (currentSegment) onInterrupt(currentSegment.id, currentTime)
   }
 
+  const handleAskQuestion = () => {
+    if (audioRef.current && isPlaying) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+      setPausedForQA(true)
+    }
+    setShowVoiceQA(true)
+  }
+
+  const handleVoiceQAClose = () => {
+    setShowVoiceQA(false)
+    setPausedForQA(false)
+  }
+
+  const handleVoiceQAResume = () => {
+    setShowVoiceQA(false)
+    setPausedForQA(false)
+    if (audioRef.current && mergedAudioUrl) {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
+    }
+  }
+
   const cyclePlaybackRate = () => {
     const rates = [1, 1.25, 1.5, 2, 0.75]
     const currentIdx = rates.indexOf(playbackRate)
@@ -321,6 +346,19 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
   return (
     <div className="flex flex-col h-full bg-background text-text-primary">
+      {/* Voice Q&A Modal */}
+      {showVoiceQA && currentSegment && (
+        <GeminiLiveInteraction
+          podcastId={podcast.id}
+          currentSegmentId={currentSegment.id}
+          currentTimestamp={currentTime}
+          podcastTitle={podcast.title}
+          language={podcast.language}
+          onClose={handleVoiceQAClose}
+          onResume={handleVoiceQAResume}
+        />
+      )}
+
       <audio
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
@@ -541,15 +579,33 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
             {/* Controls */}
             <div className="flex items-center justify-between px-6 py-3">
-              {/* Left: time */}
-              <div className="flex items-center gap-2 w-28">
-                <span className="text-xs text-text-muted mono">
-                  {formatTime(currentTime)}
-                </span>
-                <span className="text-xs text-text-muted">/</span>
-                <span className="text-xs text-text-muted mono">
-                  {formatTime(totalDuration)}
-                </span>
+              {/* Left: time + Ask Question button */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-text-muted mono">
+                    {formatTime(currentTime)}
+                  </span>
+                  <span className="text-xs text-text-muted">/</span>
+                  <span className="text-xs text-text-muted mono">
+                    {formatTime(totalDuration)}
+                  </span>
+                </div>
+                
+                {/* Always visible Ask Question button */}
+                <button
+                  onClick={handleAskQuestion}
+                  disabled={!mergedAudioUrl || isLoadingAudio}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 text-accent hover:bg-accent/20 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed border border-accent/20 hover:border-accent/30"
+                  title={podcast.language === 'fr' ? 'Poser une question' : 'Ask a question'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  </svg>
+                  <span className="text-xs font-medium">
+                    {podcast.language === 'fr' ? 'Question' : 'Ask'}
+                  </span>
+                </button>
               </div>
 
               {/* Center: playback controls */}
@@ -593,7 +649,7 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
               </div>
 
               {/* Right: speed + speaker */}
-              <div className="flex items-center gap-3 w-28 justify-end">
+              <div className="flex items-center gap-3 justify-end">
                 <button
                   onClick={cyclePlaybackRate}
                   className="btn-ghost text-xs mono px-2 py-1"
