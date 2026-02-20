@@ -11,8 +11,6 @@ import MobileLayout, {
 } from '@/components/mobile/MobileLayout'
 import { usePullToRefresh, useHapticFeedback } from '@/components/mobile/useMobileUtils'
 import { FiPlus, FiArrowRight } from 'react-icons/fi'
-import type { Lesson } from '@/types/db'
-
 interface McqSet {
   id: string
   name: string
@@ -20,11 +18,27 @@ interface McqSet {
   created_at: string
 }
 
+interface InteractiveLessonSummary {
+  id: string
+  name: string
+  status: string
+  created_at: string
+}
+
+interface PodcastSummary {
+  id: string
+  title: string
+  duration: number
+  status: string
+  created_at: string
+}
+
 export default function MobileHomePage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
-  const [recentLessons, setRecentLessons] = useState<Lesson[]>([])
   const [recentMcqs, setRecentMcqs] = useState<McqSet[]>([])
+  const [recentInteractive, setRecentInteractive] = useState<InteractiveLessonSummary[]>([])
+  const [recentPodcasts, setRecentPodcasts] = useState<PodcastSummary[]>([])
   const [loading, setLoading] = useState(true)
   const { triggerHaptic } = useHapticFeedback()
 
@@ -46,20 +60,30 @@ export default function MobileHomePage() {
 
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
-        const lessonsRes = await fetch('/api/lessons', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` },
-        })
-        if (lessonsRes.ok) {
-          const data = await lessonsRes.json()
-          setRecentLessons((data.lessons || []).slice(0, 5))
-        }
+        const [mcqRes, interactiveRes] = await Promise.all([
+          fetch('/api/mcq/list', { headers: { 'Authorization': `Bearer ${session.access_token}` }}),
+          fetch('/api/interactive-lessons', { headers: { 'Authorization': `Bearer ${session.access_token}` }}),
+        ])
 
-        const mcqRes = await fetch('/api/mcq/list', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` },
-        })
         if (mcqRes.ok) {
           const data = await mcqRes.json()
           setRecentMcqs((data.sets || []).slice(0, 5))
+        }
+
+        if (interactiveRes.ok) {
+          const data = await interactiveRes.json()
+          setRecentInteractive((data.lessons || []).slice(0, 5))
+        }
+
+        // Fetch podcasts
+        const { data: podcastsData } = await supabase
+          .from('intelligent_podcasts')
+          .select('id,title,duration,status,created_at')
+          .order('created_at', { ascending: false })
+          .limit(5)
+        
+        if (podcastsData) {
+          setRecentPodcasts(podcastsData)
         }
       }
     } catch (err) {
@@ -129,11 +153,11 @@ export default function MobileHomePage() {
         {/* Stats Row */}
         <div className="grid grid-cols-3 border-b border-[var(--color-border)]">
           <Link 
-            href="/m/lessons"
+            href="/m/interactive-lessons"
             className="p-5 border-r border-[var(--color-border)] text-center active:bg-[var(--color-surface)]"
             onClick={() => triggerHaptic('light')}
           >
-            <span className="block text-2xl font-semibold mono">{recentLessons.length}</span>
+            <span className="block text-2xl font-semibold mono">{recentInteractive.length}</span>
             <span className="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)]">Lessons</span>
           </Link>
           <Link 
@@ -144,25 +168,29 @@ export default function MobileHomePage() {
             <span className="block text-2xl font-semibold mono">{recentMcqs.length}</span>
             <span className="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)]">Quizzes</span>
           </Link>
-          <div className="p-5 text-center">
-            <span className="block text-2xl font-semibold mono">0</span>
-            <span className="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)]">Streak</span>
-          </div>
+          <Link 
+            href="/m/intelligent-podcast"
+            className="p-5 text-center active:bg-[var(--color-surface)]"
+            onClick={() => triggerHaptic('light')}
+          >
+            <span className="block text-2xl font-semibold mono">{recentPodcasts.length}</span>
+            <span className="text-[9px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)]">Podcasts</span>
+          </Link>
         </div>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-2">
           <Link 
-            href="/m/lessons/new" 
+            href="/m/interactive-lessons/new" 
             className="p-6 border-r border-b border-[var(--color-border)] active:bg-[var(--color-surface)]"
             onClick={() => triggerHaptic('light')}
           >
             <div className="w-8 h-8 border border-[var(--color-border)] flex items-center justify-center mb-4">
               <FiPlus className="w-4 h-4" strokeWidth={1} />
-              </div>
+            </div>
             <h3 className="font-medium text-sm mb-1">New Lesson</h3>
-            <p className="text-xs text-[var(--color-text-secondary)]">Upload PDF</p>
-            </Link>
+            <p className="text-xs text-[var(--color-text-secondary)]">Interactive + MCQs</p>
+          </Link>
           <Link 
             href="/m/mcq/new" 
             className="p-6 border-b border-[var(--color-border)] active:bg-[var(--color-surface)]"
@@ -170,37 +198,48 @@ export default function MobileHomePage() {
           >
             <div className="w-8 h-8 border border-[var(--color-border)] flex items-center justify-center mb-4">
               <FiPlus className="w-4 h-4" strokeWidth={1} />
-              </div>
+            </div>
             <h3 className="font-medium text-sm mb-1">New Quiz</h3>
             <p className="text-xs text-[var(--color-text-secondary)]">Extract MCQs</p>
-            </Link>
-          </div>
+          </Link>
+          <Link 
+            href="/m/intelligent-podcast/new" 
+            className="p-6 border-r active:bg-[var(--color-surface)]"
+            onClick={() => triggerHaptic('light')}
+          >
+            <div className="w-8 h-8 border border-[var(--color-border)] flex items-center justify-center mb-4">
+              <FiPlus className="w-4 h-4" strokeWidth={1} />
+            </div>
+            <h3 className="font-medium text-sm mb-1">New Podcast</h3>
+            <p className="text-xs text-[var(--color-text-secondary)]">AI Audio</p>
+          </Link>
+        </div>
 
-        {/* Recent Lessons */}
+        {/* Recent Interactive Lessons */}
         <section className="border-b border-[var(--color-border)]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
             <h2 className="text-[10px] uppercase tracking-[0.15em] text-[var(--color-text-secondary)] font-medium">Recent Lessons</h2>
             <Link 
-              href="/m/lessons" 
+              href="/m/interactive-lessons" 
               className="text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-tertiary)]"
             >
               All →
             </Link>
           </div>
           
-          {recentLessons.length > 0 ? (
+          {recentInteractive.length > 0 ? (
             <div>
-              {recentLessons.slice(0, 3).map((lesson) => (
+              {recentInteractive.slice(0, 3).map((lesson) => (
                 <Link
                   key={lesson.id}
-                  href={`/m/lessons/${lesson.id}`}
+                  href={`/m/interactive-lessons/${lesson.id}`}
                   className="flex items-center justify-between px-4 py-4 border-b border-[var(--color-border)] last:border-b-0 active:bg-[var(--color-surface)]"
                   onClick={() => triggerHaptic('light')}
                 >
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-sm truncate">{lesson.name}</h3>
                     <p className="text-xs text-[var(--color-text-secondary)] mono mt-0.5">
-                      {lesson.total_pages}p
+                      {lesson.status}
                     </p>
                   </div>
                   <FiArrowRight className="w-4 h-4 text-[var(--color-text-tertiary)] ml-4" strokeWidth={1} />
@@ -210,9 +249,9 @@ export default function MobileHomePage() {
           ) : (
             <div className="p-8 text-center">
               <p className="text-sm text-[var(--color-text-secondary)] mb-4">No lessons yet</p>
-              <Link href="/m/lessons/new" className="btn-mobile btn-primary-mobile inline-flex">
+              <Link href="/m/interactive-lessons/new" className="btn-mobile btn-primary-mobile inline-flex">
                 Create Lesson
-                </Link>
+              </Link>
             </div>
           )}
         </section>
@@ -260,7 +299,7 @@ export default function MobileHomePage() {
       </div>
 
       <FloatingActionButton
-        href="/m/lessons/new"
+        href="/m/interactive-lessons/new"
         icon={<FiPlus strokeWidth={1.5} />}
         label="Create"
       />

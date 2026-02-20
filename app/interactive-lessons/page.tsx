@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { FiPlus, FiZap, FiTrash2, FiArrowRight, FiLogOut, FiHome, FiBook, FiCheckSquare, FiMic } from 'react-icons/fi'
+import { FiPlus, FiZap, FiTrash2, FiArrowRight, FiLogOut, FiHome, FiCheckSquare, FiMic } from 'react-icons/fi'
 import Link from 'next/link'
 import type { InteractiveLesson } from '@/types/db'
 import Logo from '@/components/Logo'
@@ -121,13 +121,9 @@ export default function InteractiveLessonsPage() {
             <FiHome className="w-4 h-4" strokeWidth={1.5} />
             <span className="text-sm">Dashboard</span>
           </Link>
-          <Link href="/lessons" className="sidebar-item">
-            <FiBook className="w-4 h-4" strokeWidth={1.5} />
-            <span className="text-sm">Lessons</span>
-          </Link>
           <Link href="/interactive-lessons" className="sidebar-item sidebar-item-active">
             <FiZap className="w-4 h-4" strokeWidth={1.5} />
-            <span className="text-sm">Interactive</span>
+            <span className="text-sm">Lessons</span>
           </Link>
           <Link href="/mcq" className="sidebar-item">
             <FiCheckSquare className="w-4 h-4" strokeWidth={1.5} />
@@ -135,7 +131,7 @@ export default function InteractiveLessonsPage() {
           </Link>
           <Link href="/intelligent-podcast" className="sidebar-item">
             <FiMic className="w-4 h-4" strokeWidth={1.5} />
-            <span className="text-sm">AI Podcasts</span>
+            <span className="text-sm">Podcasts</span>
           </Link>
         </nav>
 
@@ -166,10 +162,10 @@ export default function InteractiveLessonsPage() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <header className="h-14 border-b border-border flex items-center justify-between px-8">
-          <h1 className="text-sm font-medium text-text-primary uppercase tracking-wider">Interactive Lessons</h1>
+          <h1 className="text-sm font-medium text-text-primary uppercase tracking-wider">Lessons</h1>
           <Link href="/interactive-lessons/new" className="btn-primary">
             <FiPlus className="w-4 h-4" strokeWidth={1.5} />
-            New Interactive
+            New Lesson
           </Link>
         </header>
 
@@ -183,18 +179,14 @@ export default function InteractiveLessonsPage() {
               <div className="w-12 h-12 border border-border flex items-center justify-center mx-auto mb-4 text-text-tertiary">
                 <FiZap className="w-5 h-5" strokeWidth={1.5} />
             </div>
-              <h3 className="font-medium text-text-primary mb-2">No interactive lessons yet</h3>
+              <h3 className="font-medium text-text-primary mb-2">No lessons yet</h3>
               <p className="text-sm text-text-secondary mb-6 max-w-xs mx-auto">
-              Create your first interactive lesson or convert an existing lesson.
+              Create your first interactive lesson to get started.
             </p>
             <div className="flex gap-3 justify-center">
               <Link href="/interactive-lessons/new" className="btn-primary inline-flex">
                   <FiPlus className="w-4 h-4" strokeWidth={1.5} />
-                Create New
-              </Link>
-              <Link href="/lessons" className="btn-secondary inline-flex">
-                  <FiBook className="w-4 h-4" strokeWidth={1.5} />
-                From Lesson
+                Create Lesson
               </Link>
             </div>
           </div>

@@ -11,7 +11,9 @@ import {
   FiChevronLeft,
   FiRefreshCw,
   FiWifi,
-  FiWifiOff
+  FiWifiOff,
+  FiZap,
+  FiMic
 } from 'react-icons/fi'
 import { ToastProvider } from './MobileToast'
 import { useNetworkStatus } from './useMobileUtils'
@@ -161,22 +163,22 @@ export function MobileTabBar() {
       isActive: pathname === '/m' || pathname === '/m/dashboard'
     },
     { 
-      href: '/m/lessons', 
+      href: '/m/interactive-lessons', 
       label: 'Lessons', 
-      icon: FiBook,
-      isActive: pathname?.startsWith('/m/lessons')
+      icon: FiZap,
+      isActive: pathname?.startsWith('/m/interactive-lessons')
+    },
+    { 
+      href: '/m/intelligent-podcast', 
+      label: 'Podcasts', 
+      icon: FiMic,
+      isActive: pathname?.startsWith('/m/intelligent-podcast')
     },
     { 
       href: '/m/mcq', 
       label: 'Quiz', 
       icon: FiCheckSquare,
       isActive: pathname?.startsWith('/m/mcq')
-    },
-    { 
-      href: '/m/profile', 
-      label: 'Profile', 
-      icon: FiUser,
-      isActive: pathname?.startsWith('/m/profile')
     },
   ]
 

@@ -8,18 +8,30 @@ import MobileLayout, {
   MobileHeader, 
   FloatingActionButton, 
   EmptyState, 
-  BottomSheet, 
-  PullToRefreshIndicator 
+  BottomSheet,
+  PullToRefreshIndicator
 } from '@/components/mobile/MobileLayout'
 import { usePullToRefresh, useHapticFeedback } from '@/components/mobile/useMobileUtils'
-import { FiPlus, FiTrash2, FiMoreVertical, FiArrowRight } from 'react-icons/fi'
-import type { Lesson } from '@/types/db'
+import { FiPlus, FiTrash2, FiMoreVertical, FiArrowRight, FiZap } from 'react-icons/fi'
+import type { InteractiveLesson } from '@/types/db'
 
-export default function MobileLessonsPage() {
+interface InteractiveLessonWithCounts extends InteractiveLesson {
+  lessonDocCount?: number
+  mcqDocCount?: number
+}
+
+const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
+  ready: { label: 'Ready', class: 'text-[var(--color-success)]' },
+  processing: { label: 'Processing', class: 'text-[var(--color-warning)]' },
+  error: { label: 'Error', class: 'text-[var(--color-error)]' },
+  draft: { label: 'Draft', class: 'text-[var(--color-text-tertiary)]' },
+}
+
+export default function MobileInteractiveLessonsPage() {
   const router = useRouter()
-  const [lessons, setLessons] = useState<Lesson[]>([])
+  const [lessons, setLessons] = useState<InteractiveLessonWithCounts[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null)
+  const [selectedLesson, setSelectedLesson] = useState<InteractiveLessonWithCounts | null>(null)
   const [showActionSheet, setShowActionSheet] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const { triggerHaptic } = useHapticFeedback()
@@ -34,7 +46,7 @@ export default function MobileLessonsPage() {
         return
       }
 
-      const response = await fetch('/api/lessons', {
+      const response = await fetch('/api/interactive-lessons', {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
       })
 
@@ -43,7 +55,7 @@ export default function MobileLessonsPage() {
         setLessons(data.lessons || [])
       }
     } catch (error) {
-      console.error('Error loading lessons:', error)
+      console.error('Error loading interactive lessons:', error)
     } finally {
       setLoading(false)
     }
@@ -75,7 +87,7 @@ export default function MobileLessonsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const response = await fetch(`/api/lessons/${selectedLesson.id}`, {
+      const response = await fetch(`/api/interactive-lessons/${selectedLesson.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${session.access_token}` },
       })
@@ -96,7 +108,7 @@ export default function MobileLessonsPage() {
   if (loading) {
     return (
       <MobileLayout>
-        <MobileHeader title="Lessons" />
+        <MobileHeader title="Interactive" />
         <div className="mobile-content flex items-center justify-center">
           <div className="spinner-mobile" />
         </div>
@@ -107,9 +119,9 @@ export default function MobileLessonsPage() {
   return (
     <MobileLayout>
       <MobileHeader 
-        title="Lessons" 
+        title="Interactive" 
         rightAction={
-          <Link href="/m/lessons/new" className="mobile-header-action">
+          <Link href="/m/interactive-lessons/new" className="mobile-header-action">
             <FiPlus className="w-5 h-5" strokeWidth={1.5} />
           </Link>
         }
@@ -120,11 +132,11 @@ export default function MobileLessonsPage() {
 
         {lessons.length === 0 ? (
           <EmptyState
-            icon={<span className="text-lg mono">0</span>}
-            title="No Lessons"
-            description="Upload a PDF to create your first lesson"
+            icon={<FiZap className="w-6 h-6" strokeWidth={1} />}
+            title="No Interactive Lessons"
+            description="Create lessons with MCQ checkpoints for better learning"
             action={
-              <Link href="/m/lessons/new" className="btn-mobile btn-primary-mobile">
+              <Link href="/m/interactive-lessons/new" className="btn-mobile btn-primary-mobile">
                 Create Lesson
               </Link>
             }
@@ -139,43 +151,52 @@ export default function MobileLessonsPage() {
             </div>
             
             {/* List */}
-            {lessons.map((lesson) => (
-              <div 
-                key={lesson.id} 
-                className="flex items-center border-b border-[var(--color-border)]"
-              >
-                <Link
-                  href={`/m/lessons/${lesson.id}`}
-                  className="flex-1 flex items-center justify-between px-4 py-4 active:bg-[var(--color-surface)]"
-                  onClick={() => triggerHaptic('light')}
+            {lessons.map((lesson) => {
+              const status = STATUS_CONFIG[lesson.status] || STATUS_CONFIG.draft
+
+              return (
+                <div 
+                  key={lesson.id} 
+                  className="flex items-center border-b border-[var(--color-border)]"
                 >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-sm truncate">{lesson.name}</h3>
-                    <p className="text-xs text-[var(--color-text-secondary)] mono mt-0.5">
-                      {lesson.total_pages} pages
-                    </p>
-                  </div>
-                  <FiArrowRight className="w-4 h-4 text-[var(--color-text-tertiary)] ml-4" strokeWidth={1} />
-                </Link>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    triggerHaptic('light')
-                    setSelectedLesson(lesson)
-                    setShowActionSheet(true)
-                  }}
-                  className="px-4 py-4 text-[var(--color-text-tertiary)] active:opacity-50"
-                >
-                  <FiMoreVertical className="w-4 h-4" strokeWidth={1.5} />
-                </button>
-              </div>
-            ))}
+                  <Link
+                    href={`/m/interactive-lessons/${lesson.id}`}
+                    className="flex-1 flex items-center justify-between px-4 py-4 active:bg-[var(--color-surface)]"
+                    onClick={() => triggerHaptic('light')}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="font-medium text-sm truncate">{lesson.name}</h3>
+                        <span className={`text-[8px] uppercase tracking-wider ${status.class}`}>
+                          {status.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--color-text-secondary)] mono">
+                        {lesson.lessonDocCount || 0} docs · {new Date(lesson.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <FiArrowRight className="w-4 h-4 text-[var(--color-text-tertiary)] ml-4" strokeWidth={1} />
+                  </Link>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      triggerHaptic('light')
+                      setSelectedLesson(lesson)
+                      setShowActionSheet(true)
+                    }}
+                    className="px-4 py-4 text-[var(--color-text-tertiary)] active:opacity-50"
+                  >
+                    <FiMoreVertical className="w-4 h-4" strokeWidth={1.5} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
 
       <FloatingActionButton
-        href="/m/lessons/new"
+        href="/m/interactive-lessons/new"
         icon={<FiPlus strokeWidth={1.5} />}
         label="New"
       />
@@ -190,7 +211,7 @@ export default function MobileLessonsPage() {
       >
         <div className="space-y-2">
           <Link
-            href={`/m/lessons/${selectedLesson?.id}`}
+            href={`/m/interactive-lessons/${selectedLesson?.id}`}
             className="flex items-center justify-between p-4 border border-[var(--color-border)] active:bg-[var(--color-surface)]"
             onClick={() => setShowActionSheet(false)}
           >
@@ -204,11 +225,11 @@ export default function MobileLessonsPage() {
             className="flex items-center justify-between p-4 border border-[var(--color-border)] active:bg-[var(--color-surface)] w-full"
           >
             <span className="font-medium text-sm">Delete</span>
-              {deleting ? (
+            {deleting ? (
               <div className="spinner-mobile w-4 h-4" />
-              ) : (
+            ) : (
               <FiTrash2 className="w-4 h-4" strokeWidth={1.5} />
-              )}
+            )}
           </button>
         </div>
       </BottomSheet>
