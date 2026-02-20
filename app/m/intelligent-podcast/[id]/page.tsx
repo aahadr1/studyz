@@ -407,11 +407,10 @@ export default function MobilePodcastPage() {
         onReady: () => {
           setQAState('listening')
           // Send greeting via voice-only (no transcript entry) as soon as connection is ready
-          client.sendVoiceOnlyGreeting(introductionPrompt ||
-            (podcast.language === 'fr'
-              ? "[L'auditeur vient d'appuyer sur le bouton. Salue-le brièvement et dis-lui que tu l'écoutes.]"
-              : "[The listener just pressed the button. Greet them briefly and tell them you're listening.]"
-            )
+          client.sendVoiceOnlyGreeting(
+            podcast.language === 'fr'
+              ? "Dis très brièvement en une seule courte phrase quelque chose comme 'Oh on dirait qu'on a une question, vas-y je t'écoute' de manière naturelle et chaleureuse, puis tais-toi et écoute."
+              : "Say very briefly in one short sentence something like 'Looks like we have a question, go ahead I'm listening' in a natural warm way, then be quiet and listen."
           )
         },
       })
