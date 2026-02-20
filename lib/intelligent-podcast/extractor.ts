@@ -17,8 +17,8 @@ export async function extractAndAnalyze(
   // Step 2: Extract key concepts from all documents
   const concepts = await extractConcepts(documents, detectedLanguage)
 
-  // Step 3: Build relationships between concepts
-  const relationships = await buildConceptRelationships(concepts, detectedLanguage)
+  // Step 3: Derive relationships locally from concept links (fewer LLM passes, faster pipeline).
+  const relationships = deriveRelationshipsFromConcepts(concepts)
 
   // Step 4: Generate embeddings for semantic search
   const embeddings = await generateConceptEmbeddings(concepts)
@@ -71,48 +71,16 @@ async function extractConcepts(
 
   const systemInstruction =
     language === 'fr'
-      ? `Tu es un expert en analyse de contenu éducatif.
+      ? `Tu analyses des contenus pédagogiques pour préparer un podcast de qualité.
 
-Extrais les concepts clés du contenu fourni.
+Repère les idées réellement structurantes du document et formule des concepts utiles pour l'explication orale. Chaque concept doit être concret, distinct, et réutilisable dans une discussion approfondie.
 
-CONTRAINTES:
-- Identifie entre 25 et 80 concepts (selon la richesse du contenu).
-- Chaque concept doit être UNIQUE, concret, et utile pour structurer un podcast long.
-- IMPORTANT: crée des IDs stables au format "concept-1", "concept-2", ...
+Retourne uniquement un JSON brut avec une clé "concepts". Chaque concept contient "id", "name", "description", "difficulty" et "relatedConcepts". Les IDs suivent le format "concept-1", "concept-2", etc.`
+      : `You analyze educational material for high-quality podcast creation.
 
-Retourne UNIQUEMENT un objet JSON:
-{
-  "concepts": [
-    {
-      "id": "concept-1",
-      "name": "Nom du concept",
-      "description": "Description claire (1-2 phrases)",
-      "difficulty": "easy|medium|hard",
-      "relatedConcepts": ["concept-2", "concept-7"]
-    }
-  ]
-}`
-      : `You are an expert in educational content analysis.
+Identify the genuinely central ideas in the source and express them as concepts that are useful in spoken teaching. Each concept should be concrete, distinct, and reusable in a deep conversation.
 
-Extract the key concepts from the provided content.
-
-CONSTRAINTS:
-- Identify 25 to 80 concepts (depending on content richness).
-- Each concept must be UNIQUE, concrete, and useful to structure a long-form podcast.
-- IMPORTANT: create stable IDs in the form "concept-1", "concept-2", ...
-
-Return ONLY a JSON object:
-{
-  "concepts": [
-    {
-      "id": "concept-1",
-      "name": "Concept name",
-      "description": "Clear description (1-2 sentences)",
-      "difficulty": "easy|medium|hard",
-      "relatedConcepts": ["concept-2", "concept-7"]
-    }
-  ]
-}`
+Return only raw JSON with a "concepts" array. Every concept includes "id", "name", "description", "difficulty", and "relatedConcepts". IDs should follow the "concept-1", "concept-2" format.`
 
   const raw = await runGemini3Flash({
     prompt: combinedContent,
@@ -125,7 +93,7 @@ Return ONLY a JSON object:
 
   try {
     const parsed = parseJsonObject<{ concepts?: ConceptNode[] }>(raw)
-    return parsed.concepts || []
+    return normalizeConcepts(parsed.concepts || [])
   } catch (error) {
     console.error('Failed to parse concepts:', error)
     return []
@@ -133,70 +101,59 @@ Return ONLY a JSON object:
 }
 
 /**
- * Build relationships between concepts
+ * Normalize model concepts into a stable shape for downstream generation.
  */
-async function buildConceptRelationships(
-  concepts: ConceptNode[],
-  language: string
-): Promise<Array<{ from: string; to: string; type: 'requires' | 'related' | 'opposite' | 'example' }>> {
-  const conceptsJson = JSON.stringify(
-    concepts.map((c) => ({ id: c.id, name: c.name, description: c.description }))
-  )
+function normalizeConcepts(rawConcepts: ConceptNode[]): ConceptNode[] {
+  const normalized: ConceptNode[] = []
+  const usedIds = new Set<string>()
 
-  const systemInstruction =
-    language === 'fr'
-      ? `Tu es un expert en création de graphes de connaissances.
+  for (let i = 0; i < rawConcepts.length; i++) {
+    const c = rawConcepts[i] || ({} as ConceptNode)
+    const fallbackId = `concept-${i + 1}`
+    const baseId = String(c.id || fallbackId).trim().toLowerCase().replace(/[^a-z0-9\-]+/g, '-')
+    const id = usedIds.has(baseId) ? `${baseId}-${i + 1}` : baseId
+    usedIds.add(id)
 
-Analyse les concepts fournis et identifie les relations entre eux.
+    const name = String(c.name || '').trim()
+    const description = String(c.description || '').trim()
+    if (!name || !description) continue
 
-Types de relations :
-- "requires" : Concept A nécessite de comprendre Concept B d'abord
-- "related" : Concepts liés mais indépendants
-- "opposite" : Concepts opposés ou contrastants
-- "example" : Concept A est un exemple de Concept B
-
-Retourne un objet json :
-{
-  "relationships": [
-    {"from": "concept-1", "to": "concept-2", "type": "requires"}
-  ]
-}
-
-Crée autant de relations pertinentes que possible pour construire un graphe riche.`
-      : `You are an expert in knowledge graph creation.
-
-Analyze the provided concepts and identify relationships between them.
-
-Relationship types:
-- "requires": Concept A requires understanding Concept B first
-- "related": Related but independent concepts
-- "opposite": Opposing or contrasting concepts
-- "example": Concept A is an example of Concept B
-
-Return a json object:
-{
-  "relationships": [
-    {"from": "concept-1", "to": "concept-2", "type": "requires"}
-  ]
-}
-
-Create as many relevant relationships as possible to build a rich graph.`
-
-  try {
-    const raw = await runGemini3Flash({
-      prompt: conceptsJson,
-      systemInstruction,
-      thinkingLevel: 'high',
-      temperature: 0.3,
-      topP: 0.95,
-      maxOutputTokens: 8000,
+    normalized.push({
+      id,
+      name,
+      description,
+      difficulty: c.difficulty === 'easy' || c.difficulty === 'hard' ? c.difficulty : 'medium',
+      relatedConcepts: Array.isArray(c.relatedConcepts)
+        ? c.relatedConcepts.map((r) => String(r || '').trim()).filter(Boolean)
+        : [],
     })
-    const parsed = parseJsonObject<{ relationships?: any[] }>(raw)
-    return parsed.relationships || []
-  } catch (error) {
-    console.error('Failed to parse relationships:', error)
-    return []
   }
+
+  return normalized.slice(0, 80)
+}
+
+/**
+ * Build a lightweight graph locally from concept links.
+ */
+function deriveRelationshipsFromConcepts(
+  concepts: ConceptNode[]
+): Array<{ from: string; to: string; type: 'requires' | 'related' | 'opposite' | 'example' }> {
+  const knownIds = new Set(concepts.map((c) => c.id))
+  const edges = new Map<string, { from: string; to: string; type: 'requires' | 'related' | 'opposite' | 'example' }>()
+
+  for (const concept of concepts) {
+    for (const rawRelated of concept.relatedConcepts || []) {
+      const target = String(rawRelated || '').trim()
+      if (!target || !knownIds.has(target) || target === concept.id) continue
+
+      const key = `${concept.id}::${target}::related`
+      if (!edges.has(key)) {
+        edges.set(key, { from: concept.id, to: target, type: 'related' })
+      }
+    }
+  }
+
+  return Array.from(edges.values())
 }
 
 /**
