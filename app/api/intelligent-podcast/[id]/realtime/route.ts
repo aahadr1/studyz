@@ -67,13 +67,14 @@ export async function POST(
     const podcastData = podcast as unknown as IntelligentPodcast
 
     // Find current segment index
-    const currentIndex = podcastData.segments.findIndex((s) => s.id === currentSegmentId)
+    const segments = podcastData.segments || []
+    const currentIndex = segments.findIndex((s) => s.id === currentSegmentId)
     if (currentIndex === -1) {
       return NextResponse.json({ error: 'Segment not found' }, { status: 404 })
     }
 
     // Get ALL segments up to current point (full context of what's been said)
-    const segmentsUpToCurrent = podcastData.segments.slice(0, currentIndex + 1)
+    const segmentsUpToCurrent = segments.slice(0, currentIndex + 1)
     
     // Build full transcript of what's been said so far
     const fullTranscript = segmentsUpToCurrent
@@ -93,16 +94,16 @@ export async function POST(
       .join('\n\n')
 
     // Find current topic/chapter
-    const currentTopic = podcastData.chapters.find(
+    const currentTopic = (podcastData.chapters || []).find(
       ch => currentTimestamp >= ch.startTime && currentTimestamp <= ch.endTime
     )
 
     // Get relevant concepts from recent segments
     const recentConceptIds = new Set<string>()
     recentSegments.forEach(seg => {
-      seg.concepts.forEach(c => recentConceptIds.add(c))
+      (seg.concepts || []).forEach(c => recentConceptIds.add(c))
     })
-    const relevantConcepts = podcastData.knowledgeGraph.concepts
+    const relevantConcepts = (podcastData.knowledgeGraph?.concepts || [])
       .filter(c => recentConceptIds.has(c.id))
       .map(c => c.name)
 
