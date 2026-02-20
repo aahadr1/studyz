@@ -46,6 +46,8 @@ export class GeminiLiveClient {
   private scriptProcessor: ScriptProcessorNode | null = null
   private outputQueue: ArrayBuffer[] = []
   private isPlayingAudio = false
+  private nextPlayTime = 0 // For gapless scheduling
+  private activeSourceNodes: AudioBufferSourceNode[] = [] // Track active sources for cleanup
 
   constructor(config: GeminiLiveConfig) {
     this.config = config
@@ -64,7 +66,8 @@ export class GeminiLiveClient {
     this.setState('connecting')
 
     try {
-      // Initialize audio context for playback
+      // Initialize audio context for playback at default sample rate
+      // Use default rate and resample in pcmToAudioBuffer for better compatibility
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
         sampleRate: OUTPUT_SAMPLE_RATE,
       })
@@ -186,8 +189,7 @@ export class GeminiLiveClient {
             if (part.inlineData?.mimeType?.startsWith('audio/')) {
               this.setState('model_speaking')
               const audioData = this.base64ToArrayBuffer(part.inlineData.data)
-              this.outputQueue.push(audioData)
-              this.playNextAudioChunk()
+              this.scheduleAudioChunk(audioData)
               this.config.onAudioChunk(audioData)
             }
 
@@ -201,15 +203,14 @@ export class GeminiLiveClient {
         // Check if turn is complete
         if (content.turnComplete) {
           console.log('[GeminiLive] Model turn complete')
-          if (this.outputQueue.length === 0 && !this.isPlayingAudio) {
-            this.setState('listening')
-          }
+          // State transition to listening happens after all scheduled audio finishes
+          this.scheduleStateTransitionAfterAudio()
         }
 
         // Handle interruption (barge-in)
         if (content.interrupted) {
           console.log('[GeminiLive] Model was interrupted')
-          this.outputQueue = []
+          this.stopAllAudio()
           this.setState('listening')
         }
       }
@@ -234,8 +235,8 @@ export class GeminiLiveClient {
 
     const source = this.inputAudioContext.createMediaStreamSource(this.mediaStream)
 
-    // Use ScriptProcessor for audio capture (more compatible than AudioWorklet)
-    const bufferSize = 4096
+    // Use ScriptProcessor for audio capture
+    const bufferSize = 2048 // Smaller buffer = lower latency (~128ms at 16kHz)
     this.scriptProcessor = this.inputAudioContext.createScriptProcessor(bufferSize, 1, 1)
 
     source.connect(this.scriptProcessor)
@@ -248,7 +249,6 @@ export class GeminiLiveClient {
       const inputData = event.inputBuffer.getChannelData(0)
       const pcm16 = this.float32ToPCM16(inputData)
 
-      // Send audio using the current API format
       const message = {
         realtimeInput: {
           audio: {
@@ -265,34 +265,77 @@ export class GeminiLiveClient {
     console.log('[GeminiLive] Audio capture started')
   }
 
-  private async playNextAudioChunk(): Promise<void> {
-    if (this.isPlayingAudio || this.outputQueue.length === 0 || !this.audioContext) return
-
-    this.isPlayingAudio = true
-    const pcmData = this.outputQueue.shift()!
+  /**
+   * Gapless audio scheduling: schedule chunks at precise times
+   * instead of waiting for onended callbacks (which cause gaps)
+   */
+  private scheduleAudioChunk(pcmData: ArrayBuffer): void {
+    if (!this.audioContext) return
 
     try {
       const audioBuffer = this.pcmToAudioBuffer(pcmData)
+      const sourceNode = this.audioContext.createBufferSource()
+      sourceNode.buffer = audioBuffer
+      sourceNode.connect(this.audioContext.destination)
 
-      const source = this.audioContext.createBufferSource()
-      source.buffer = audioBuffer
-      source.connect(this.audioContext.destination)
+      // Schedule at the next available time slot (gapless)
+      const now = this.audioContext.currentTime
+      const startTime = Math.max(now, this.nextPlayTime)
 
-      source.onended = () => {
-        this.isPlayingAudio = false
-        if (this.outputQueue.length > 0) {
-          this.playNextAudioChunk()
-        } else if (this.state === 'model_speaking') {
-          this.setState('listening')
-        }
+      sourceNode.start(startTime)
+      this.nextPlayTime = startTime + audioBuffer.duration
+
+      // Track for cleanup
+      this.activeSourceNodes.push(sourceNode)
+      sourceNode.onended = () => {
+        const idx = this.activeSourceNodes.indexOf(sourceNode)
+        if (idx !== -1) this.activeSourceNodes.splice(idx, 1)
       }
 
-      source.start(0)
+      this.isPlayingAudio = true
     } catch (error) {
-      console.error('[GeminiLive] Error playing audio:', error)
-      this.isPlayingAudio = false
-      this.playNextAudioChunk()
+      console.error('[GeminiLive] Error scheduling audio:', error)
     }
+  }
+
+  /**
+   * After model turn is complete, transition to listening
+   * once all scheduled audio has finished playing
+   */
+  private scheduleStateTransitionAfterAudio(): void {
+    if (!this.audioContext) return
+
+    const now = this.audioContext.currentTime
+    if (this.nextPlayTime <= now) {
+      // All audio already finished
+      this.isPlayingAudio = false
+      if (this.state === 'model_speaking') {
+        this.setState('listening')
+      }
+      return
+    }
+
+    // Wait until scheduled audio finishes
+    const remainingMs = (this.nextPlayTime - now) * 1000
+    setTimeout(() => {
+      this.isPlayingAudio = false
+      if (this.state === 'model_speaking') {
+        this.setState('listening')
+      }
+    }, remainingMs + 50) // Small buffer to ensure audio finishes
+  }
+
+  /**
+   * Stop all currently playing/scheduled audio (for barge-in)
+   */
+  private stopAllAudio(): void {
+    for (const source of this.activeSourceNodes) {
+      try { source.stop() } catch {}
+    }
+    this.activeSourceNodes = []
+    this.outputQueue = []
+    this.isPlayingAudio = false
+    this.nextPlayTime = 0
   }
 
   private pcmToAudioBuffer(pcmData: ArrayBuffer): AudioBuffer {
@@ -329,37 +372,64 @@ export class GeminiLiveClient {
     this.config.onTranscript(text, 'user', true)
   }
 
-  disconnect(): void {
+  /**
+   * Full cleanup — stops mic, closes WebSocket, releases all audio resources.
+   * Returns a Promise that resolves after audio contexts are fully closed,
+   * giving the browser time to release hardware audio resources.
+   */
+  async disconnect(): Promise<void> {
     console.log('[GeminiLive] Disconnecting...')
 
+    // 1. Stop audio capture first (releases microphone hardware)
     if (this.scriptProcessor) {
       this.scriptProcessor.disconnect()
       this.scriptProcessor = null
     }
 
+    // 2. Stop all microphone tracks immediately
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop())
       this.mediaStream = null
     }
 
+    // 3. Close WebSocket
     if (this.ws) {
+      this.ws.onclose = null // Prevent state change callback
+      this.ws.onerror = null
+      this.ws.onmessage = null
       this.ws.close()
       this.ws = null
     }
 
-    if (this.inputAudioContext) {
-      this.inputAudioContext.close()
+    // 4. Stop any playing audio
+    this.stopAllAudio()
+
+    // 5. Close audio contexts and wait for them to fully release
+    const closePromises: Promise<void>[] = []
+
+    if (this.inputAudioContext && this.inputAudioContext.state !== 'closed') {
+      closePromises.push(this.inputAudioContext.close())
       this.inputAudioContext = null
     }
 
-    if (this.audioContext) {
-      this.audioContext.close()
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      closePromises.push(this.audioContext.close())
       this.audioContext = null
+    }
+
+    // Wait for contexts to close — this ensures hardware audio is fully released
+    if (closePromises.length > 0) {
+      await Promise.all(closePromises).catch(() => {})
     }
 
     this.outputQueue = []
     this.isPlayingAudio = false
+    this.nextPlayTime = 0
     this.setState('disconnected')
+
+    // Extra settling time for browser audio pipeline to fully reset
+    await new Promise(resolve => setTimeout(resolve, 100))
+    console.log('[GeminiLive] Fully disconnected, audio pipeline released')
   }
 
   // Audio conversion utilities

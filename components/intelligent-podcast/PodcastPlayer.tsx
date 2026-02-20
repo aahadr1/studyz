@@ -271,6 +271,13 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
     setShowVoiceQA(false)
     setPausedForQA(false)
     if (audioRef.current && mergedAudioUrl) {
+      // Reload the audio source to reset browser audio pipeline
+      // (microphone echo cancellation can taint the output otherwise)
+      const savedTime = audioRef.current.currentTime
+      const savedRate = audioRef.current.playbackRate
+      audioRef.current.src = mergedAudioUrl
+      audioRef.current.currentTime = savedTime
+      audioRef.current.playbackRate = savedRate
       audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
     }
   }

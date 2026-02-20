@@ -270,6 +270,12 @@ export default function MobilePodcastPage() {
     setShowVoiceQA(false)
     setPausedForQA(false)
     if (audioRef.current && mergedAudioUrl) {
+      // Reload audio source to reset browser audio pipeline after mic usage
+      const savedTime = audioRef.current.currentTime
+      const savedRate = audioRef.current.playbackRate
+      audioRef.current.src = mergedAudioUrl
+      audioRef.current.currentTime = savedTime
+      audioRef.current.playbackRate = savedRate
       audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
     }
   }

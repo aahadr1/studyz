@@ -189,9 +189,11 @@ IMPORTANT CONVERSATION FLOW:
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleResume = () => {
+  const handleResume = async () => {
+    // Fully disconnect and wait for audio pipeline to release
+    // before resuming podcast playback — prevents muffled audio
     if (clientRef.current) {
-      clientRef.current.disconnect()
+      await clientRef.current.disconnect()
       clientRef.current = null
     }
     onResume()
