@@ -359,6 +359,21 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
         />
       )}
 
+      {/* Floating Ask button — always visible */}
+      <button
+        onClick={handleAskQuestion}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 pl-4 pr-5 py-3 rounded-full bg-accent text-white shadow-lg hover:bg-accent/90 active:scale-95 transition-all duration-150"
+        title={podcast.language === 'fr' ? 'Poser une question' : 'Ask a question'}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        </svg>
+        <span className="text-sm font-medium">
+          {podcast.language === 'fr' ? 'Question' : 'Ask'}
+        </span>
+      </button>
+
       <audio
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
@@ -579,33 +594,15 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
 
             {/* Controls */}
             <div className="flex items-center justify-between px-6 py-3">
-              {/* Left: time + Ask Question button */}
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted mono">
-                    {formatTime(currentTime)}
-                  </span>
-                  <span className="text-xs text-text-muted">/</span>
-                  <span className="text-xs text-text-muted mono">
-                    {formatTime(totalDuration)}
-                  </span>
-                </div>
-                
-                {/* Always visible Ask Question button */}
-                <button
-                  onClick={handleAskQuestion}
-                  disabled={!mergedAudioUrl || isLoadingAudio}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 text-accent hover:bg-accent/20 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed border border-accent/20 hover:border-accent/30"
-                  title={podcast.language === 'fr' ? 'Poser une question' : 'Ask a question'}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  </svg>
-                  <span className="text-xs font-medium">
-                    {podcast.language === 'fr' ? 'Question' : 'Ask'}
-                  </span>
-                </button>
+              {/* Left: time */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-text-muted mono">
+                  {formatTime(currentTime)}
+                </span>
+                <span className="text-xs text-text-muted">/</span>
+                <span className="text-xs text-text-muted mono">
+                  {formatTime(totalDuration)}
+                </span>
               </div>
 
               {/* Center: playback controls */}
