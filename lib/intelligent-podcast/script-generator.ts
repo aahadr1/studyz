@@ -103,9 +103,10 @@ async function generatePodcastScript(
   const hostDescription = config.voiceProfiles.find(v => v.role === 'host')?.description || 'A curious and engaging host'
   const expertDescription = config.voiceProfiles.find(v => v.role === 'expert')?.description || 'A knowledgeable and approachable expert'
 
+  // Select prompt based on language - French gets French prompt, everything else gets English prompt with language instruction
   const systemInstruction = config.language === 'fr'
     ? createFrenchPrompt(config, targetWords, targetSeconds, hostDescription, expertDescription)
-    : createEnglishPrompt(config, targetWords, targetSeconds, hostDescription, expertDescription)
+    : createEnglishPrompt(config, targetWords, targetSeconds, hostDescription, expertDescription, config.language)
 
   const prompt = `SOURCE CONTENT:
 ${documentsSummary}
@@ -196,23 +197,47 @@ ${config.userPrompt ? `USER'S SPECIFIC REQUEST:\n${config.userPrompt}\n\n` : ''}
   }
 }
 
+function getLanguageName(code: string): string {
+  const names: Record<string, string> = {
+    en: 'English',
+    fr: 'French',
+    es: 'Spanish',
+    de: 'German',
+    it: 'Italian',
+    pt: 'Portuguese',
+    nl: 'Dutch',
+    pl: 'Polish',
+    ru: 'Russian',
+    ja: 'Japanese',
+    ko: 'Korean',
+    zh: 'Chinese',
+  }
+  return names[code] || 'English'
+}
+
 function createEnglishPrompt(
   config: { targetDuration: number; style: string; userPrompt?: string },
   targetWords: number,
   targetSeconds: number,
   hostDescription: string,
-  expertDescription: string
+  expertDescription: string,
+  language: string = 'en'
 ): string {
+  const languageName = getLanguageName(language)
+  const languageInstruction = language !== 'en' 
+    ? `\n\nLANGUAGE REQUIREMENT: The entire podcast MUST be in ${languageName}. All dialogue, the title, and the description must be written in ${languageName}. This is mandatory.\n`
+    : ''
+
   return `You are writing a podcast script. This podcast features two people having a genuine conversation:
 
 Alex (the host): ${hostDescription}
 Jamie (the expert): ${expertDescription}
+${languageInstruction}
+DURATION REQUIREMENT: The podcast MUST be approximately ${config.targetDuration} minutes long. This means you need to generate approximately ${targetWords} words of dialogue (at ~150 words per minute speaking rate). This is a strict requirement - do not generate significantly less content. If you're covering the material too quickly, add more examples, more back-and-forth discussion, more exploration of the ideas.
 
 THE PODCAST YOU'RE CREATING
 
 Think of your favorite educational podcasts - the ones where you forget you're learning because the conversation is so engaging. That's what you're creating. Two people genuinely excited about a topic, bouncing ideas off each other, sometimes going on tangents, sometimes disagreeing, always making it interesting.
-
-The podcast should be approximately ${config.targetDuration} minutes long (about ${targetWords} words total, ${targetSeconds} seconds).
 
 WHAT MAKES A GREAT PODCAST
 
@@ -268,6 +293,8 @@ Each segment is one person's turn speaking. A turn can be a single reaction ("Hu
 
 Mark isQuestionBreakpoint as true on segments where a listener might naturally want to pause and ask their own question.
 
+REMEMBER: Generate approximately ${targetWords} words total to fill ${config.targetDuration} minutes.${language !== 'en' ? ` Write everything in ${languageName}.` : ''}
+
 Now create the podcast script.`
 }
 
@@ -278,16 +305,18 @@ function createFrenchPrompt(
   hostDescription: string,
   expertDescription: string
 ): string {
-  return `Tu écris un script de podcast. Ce podcast met en scène deux personnes ayant une vraie conversation :
+  return `Tu écris un script de podcast EN FRANÇAIS. Ce podcast met en scène deux personnes ayant une vraie conversation :
 
 Alex (l'animateur) : ${hostDescription}
 Jamie (l'expert) : ${expertDescription}
 
+EXIGENCE DE LANGUE : Tout le podcast DOIT être en français. Tous les dialogues, le titre et la description doivent être rédigés en français. C'est obligatoire.
+
+EXIGENCE DE DURÉE : Le podcast DOIT durer environ ${config.targetDuration} minutes. Cela signifie que tu dois générer environ ${targetWords} mots de dialogue (à environ 150 mots par minute de parole). C'est une exigence stricte - ne génère pas significativement moins de contenu. Si tu couvres la matière trop rapidement, ajoute plus d'exemples, plus de discussions, plus d'exploration des idées.
+
 LE PODCAST QUE TU CRÉES
 
 Pense à tes podcasts éducatifs préférés - ceux où tu oublies que tu apprends parce que la conversation est si captivante. C'est ça que tu crées. Deux personnes véritablement passionnées par un sujet, échangeant des idées, parfois partant sur des tangentes, parfois en désaccord, toujours intéressant.
-
-Le podcast doit durer environ ${config.targetDuration} minutes (environ ${targetWords} mots au total, ${targetSeconds} secondes).
 
 CE QUI FAIT UN EXCELLENT PODCAST
 
@@ -342,6 +371,8 @@ Retourne un objet JSON avec cette structure :
 Chaque segment est le tour de parole d'une personne. Un tour peut être une simple réaction ("Ah, intéressant !") ou une explication plus longue avec plusieurs phrases. Laisse la conversation respirer - certains tours sont des réactions courtes, d'autres sont des explorations plus longues d'une idée.
 
 Marque isQuestionBreakpoint comme true sur les segments où un auditeur pourrait naturellement vouloir faire pause et poser sa propre question.
+
+RAPPEL : Génère environ ${targetWords} mots au total pour remplir ${config.targetDuration} minutes. Écris tout en français.
 
 Maintenant crée le script du podcast.`
 }
