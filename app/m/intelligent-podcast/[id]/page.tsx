@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { GeminiLiveInteraction } from '@/components/intelligent-podcast/GeminiLiveInteraction'
+import { GeminiLiveClient, ConversationContext, buildPodcastQASystemInstruction } from '@/lib/intelligent-podcast/gemini-live-client'
 import { IntelligentPodcast, PodcastSegment } from '@/types/intelligent-podcast'
 
 const SPEAKER_NAMES: Record<string, string> = {
@@ -27,6 +27,14 @@ interface SegmentTimeRange {
   end: number
 }
 
+interface QATranscriptEntry {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+}
+
+type QAState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
+
 export default function MobilePodcastPage() {
   const params = useParams()
   const router = useRouter()
@@ -35,8 +43,6 @@ export default function MobilePodcastPage() {
   const [podcast, setPodcast] = useState<IntelligentPodcast | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showVoiceQA, setShowVoiceQA] = useState(false)
-  const [pausedForQA, setPausedForQA] = useState(false)
 
   // Player state
   const [isPlaying, setIsPlaying] = useState(false)
@@ -52,10 +58,21 @@ export default function MobilePodcastPage() {
   const [isLoadingAudio, setIsLoadingAudio] = useState(true)
   const [loadProgress, setLoadProgress] = useState(0)
 
+  // Q&A state - inline, no overlay
+  const [qaState, setQAState] = useState<QAState>('idle')
+  const [qaTranscript, setQATranscript] = useState<QATranscriptEntry[]>([])
+  const [qaError, setQAError] = useState<string | null>(null)
+  const [permissionDenied, setPermissionDenied] = useState(false)
+
   const audioRef = useRef<HTMLAudioElement>(null)
   const transcriptRef = useRef<HTMLDivElement>(null)
   const segmentRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const progressRef = useRef<HTMLDivElement>(null)
+  const qaTranscriptEndRef = useRef<HTMLDivElement>(null)
+  const qaClientRef = useRef<GeminiLiveClient | null>(null)
+  const qaTimestampRef = useRef<number>(0)
+  const qaSegmentIdRef = useRef<string>('')
+  const pendingTranscriptRef = useRef<string>('')
 
   useEffect(() => {
     fetchPodcast()
@@ -202,6 +219,7 @@ export default function MobilePodcastPage() {
     }
   }, [mergedAudioUrl])
 
+  // Segment tracking
   const findSegmentAtTime = useCallback((time: number): number => {
     if (segmentRanges.length === 0) return 0
     for (let i = segmentRanges.length - 1; i >= 0; i--) {
@@ -215,6 +233,7 @@ export default function MobilePodcastPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [])
 
+  // Player controls
   const togglePlayPause = () => {
     if (!audioRef.current || !mergedAudioUrl) return
     if (isPlaying) {
@@ -223,6 +242,14 @@ export default function MobilePodcastPage() {
     } else {
       audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
     }
+  }
+
+  const nextSegment = () => {
+    if (currentSegmentIndex < segmentRanges.length - 1) seekToSegment(currentSegmentIndex + 1)
+  }
+
+  const previousSegment = () => {
+    if (currentSegmentIndex > 0) seekToSegment(currentSegmentIndex - 1)
   }
 
   const seekToSegment = (index: number) => {
@@ -252,34 +279,15 @@ export default function MobilePodcastPage() {
     seekToTime(pct * totalDuration)
   }
 
-  const handleAskQuestion = () => {
-    if (audioRef.current && isPlaying) {
-      audioRef.current.pause()
-      setIsPlaying(false)
-      setPausedForQA(true)
-    }
-    setShowVoiceQA(true)
+  const cyclePlaybackRate = () => {
+    const rates = [1, 1.25, 1.5, 2, 0.75]
+    const currentIdx = rates.indexOf(playbackRate)
+    const nextRate = rates[(currentIdx + 1) % rates.length]
+    setPlaybackRate(nextRate)
+    if (audioRef.current) audioRef.current.playbackRate = nextRate
   }
 
-  const handleVoiceQAClose = () => {
-    setShowVoiceQA(false)
-    setPausedForQA(false)
-  }
-
-  const handleVoiceQAResume = () => {
-    setShowVoiceQA(false)
-    setPausedForQA(false)
-    if (audioRef.current && mergedAudioUrl) {
-      // Reload audio source to reset browser audio pipeline after mic usage
-      const savedTime = audioRef.current.currentTime
-      const savedRate = audioRef.current.playbackRate
-      audioRef.current.src = mergedAudioUrl
-      audioRef.current.currentTime = savedTime
-      audioRef.current.playbackRate = savedRate
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
-    }
-  }
-
+  // Audio events
   const handleTimeUpdate = () => {
     if (!audioRef.current) return
     const t = audioRef.current.currentTime
@@ -293,111 +301,219 @@ export default function MobilePodcastPage() {
 
   const handleEnded = () => setIsPlaying(false)
 
+  // Q&A Functions
+  const startQA = async () => {
+    if (!podcast || qaState !== 'idle') return
+
+    const currentSegment = podcast.segments[currentSegmentIndex]
+    if (!currentSegment) return
+
+    // Capture current state
+    qaTimestampRef.current = currentTime
+    qaSegmentIdRef.current = currentSegment.id
+
+    // Pause podcast
+    if (audioRef.current && isPlaying) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+    }
+
+    setQAState('connecting')
+    setQATranscript([])
+    setQAError(null)
+    setPermissionDenied(false)
+    pendingTranscriptRef.current = ''
+
+    try {
+      // Fetch context
+      const response = await fetch(`/api/intelligent-podcast/${podcastId}/realtime`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          currentSegmentId: qaSegmentIdRef.current, 
+          currentTimestamp: qaTimestampRef.current 
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to fetch context')
+
+      const { context, systemInstruction, suggestedVoice } = await response.json()
+
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
+      if (!apiKey) throw new Error('Gemini API key not configured')
+
+      const client = new GeminiLiveClient({
+        apiKey,
+        systemInstruction,
+        voice: suggestedVoice,
+        onTranscript: (text, role, isFinal) => {
+          if (role === 'model') {
+            if (isFinal) {
+              setQATranscript(prev => {
+                const filtered = prev.filter(e => e.id !== 'pending-assistant')
+                return [...filtered, {
+                  id: `assistant-${Date.now()}`,
+                  role: 'assistant',
+                  text,
+                }]
+              })
+              pendingTranscriptRef.current = ''
+            } else {
+              pendingTranscriptRef.current += text
+              setQATranscript(prev => {
+                const existing = prev.find(e => e.id === 'pending-assistant')
+                if (existing) {
+                  return prev.map(e => 
+                    e.id === 'pending-assistant' ? { ...e, text: pendingTranscriptRef.current } : e
+                  )
+                }
+                return [...prev, {
+                  id: 'pending-assistant',
+                  role: 'assistant',
+                  text: pendingTranscriptRef.current,
+                }]
+              })
+            }
+          } else if (role === 'user' && isFinal) {
+            setQATranscript(prev => [...prev, {
+              id: `user-${Date.now()}`,
+              role: 'user',
+              text,
+            }])
+          }
+        },
+        onAudioChunk: () => {},
+        onError: (err) => {
+          console.error('[QA] Error:', err)
+          if (err.message.includes('Permission denied') || err.message.includes('NotAllowedError')) {
+            setPermissionDenied(true)
+          }
+          setQAError(err.message)
+          setQAState('error')
+        },
+        onConnectionChange: (connected) => {
+          if (!connected && qaState !== 'idle') {
+            setQAState('idle')
+          }
+        },
+        onModelSpeaking: (speaking) => {
+          if (speaking) {
+            setQAState('speaking')
+            pendingTranscriptRef.current = ''
+          } else if (qaState !== 'idle') {
+            setQAState('listening')
+          }
+        },
+      })
+
+      qaClientRef.current = client
+
+      await client.connect({
+        podcastTitle: context.podcastTitle,
+        recentTranscript: context.recentTranscript || '',
+        currentTopic: context.currentTopic || '',
+        language: context.language,
+      })
+
+      setQAState('listening')
+
+      // Trigger greeting silently
+      setTimeout(() => {
+        client.sendSilentTrigger('[The listener just pressed the button. Greet them briefly.]')
+      }, 100)
+
+    } catch (err: any) {
+      console.error('[QA] Connection error:', err)
+      if (err.name === 'NotAllowedError' || err.message?.includes('Permission denied')) {
+        setPermissionDenied(true)
+      }
+      setQAError(err.message || 'Failed to connect')
+      setQAState('error')
+    }
+  }
+
+  const stopQA = async () => {
+    if (qaClientRef.current) {
+      await qaClientRef.current.disconnect()
+      qaClientRef.current = null
+    }
+    
+    setQAState('idle')
+    setQATranscript([])
+    setQAError(null)
+    setPermissionDenied(false)
+
+    // Reload audio to reset pipeline (anti-muffling)
+    if (audioRef.current && mergedAudioUrl) {
+      const wasPlaying = false // Don't auto-resume, user must tap play
+      const savedTime = audioRef.current.currentTime
+      audioRef.current.src = mergedAudioUrl
+      audioRef.current.currentTime = savedTime
+      if (wasPlaying) {
+        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
+      }
+    }
+  }
+
+  // Auto-scroll Q&A transcript
+  useEffect(() => {
+    if (qaState !== 'idle' && qaTranscriptEndRef.current) {
+      qaTranscriptEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [qaTranscript, qaState])
+
+  // Helpers
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  const canDownload =
-    podcast?.status === 'ready' &&
-    Array.isArray(podcast?.segments) &&
-    podcast.segments.length > 0 &&
-    podcast.segments.every((s: any) => typeof s?.audioUrl === 'string' && s.audioUrl.length > 0)
-
-  const downloadWholePodcast = async () => {
-    try {
-      setIsDownloading(true)
-      const res = await fetch(`/api/intelligent-podcast/${podcastId}/download`, {
-        method: 'GET',
-        credentials: 'include',
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err?.error || 'Download failed')
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${podcast?.title || 'podcast'}.wav`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-    } catch (e: any) {
-      console.error(e)
-      alert(e?.message || 'Failed to download podcast')
-    } finally {
-      setIsDownloading(false)
-    }
-  }
-
-  const progressPct = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0
   const currentSegment = podcast?.segments[currentSegmentIndex]
   const currentTopic = podcast?.chapters.find(
     ch => currentTime >= ch.startTime && currentTime <= ch.endTime
   )
 
+  const progressPct = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0
+
+  const getQAStateMessage = () => {
+    switch (qaState) {
+      case 'connecting':
+        return podcast?.language === 'fr' ? 'Connexion...' : 'Connecting...'
+      case 'listening':
+        return podcast?.language === 'fr' ? 'Je t\'écoute...' : 'I\'m listening...'
+      case 'speaking':
+        return podcast?.language === 'fr' ? 'En train de répondre...' : 'Speaking...'
+      case 'error':
+        return podcast?.language === 'fr' ? 'Erreur' : 'Error'
+      default:
+        return ''
+    }
+  }
+
   if (loading) {
     return (
-      <div className="h-screen bg-[var(--color-bg)] flex items-center justify-center">
-        <div className="spinner-mobile" />
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="spinner spinner-lg" />
       </div>
     )
   }
 
   if (error || !podcast) {
     return (
-      <div className="h-screen bg-[var(--color-bg)] flex flex-col">
-        <div className="h-[52px] flex items-center px-4 border-b border-[var(--color-border)]">
-          <Link href="/m/intelligent-podcast" className="p-2 -ml-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
+      <div className="flex items-center justify-center min-h-screen bg-background p-6">
+        <div className="text-center">
+          <p className="text-text-primary mb-4">{error || 'Podcast not found'}</p>
+          <Link href="/m" className="btn-primary px-6 py-3">
+            Go back
           </Link>
-        </div>
-        <div className="flex-1 flex items-center justify-center px-6">
-          <div className="text-center">
-            <p className="text-sm font-medium mb-2">Something went wrong</p>
-            <p className="text-xs text-[var(--color-text-secondary)]">{error || 'Podcast not found'}</p>
-          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
-      {/* Voice Q&A Modal */}
-      {showVoiceQA && currentSegment && (
-        <GeminiLiveInteraction
-          podcastId={podcastId}
-          currentSegmentId={currentSegment.id}
-          currentTimestamp={currentTime}
-          podcastTitle={podcast.title}
-          language={podcast.language}
-          onClose={handleVoiceQAClose}
-          onResume={handleVoiceQAResume}
-        />
-      )}
-
-      {/* Floating Ask button */}
-      {!showVoiceQA && (
-        <button
-          onClick={handleAskQuestion}
-          className="fixed bottom-24 right-4 z-40 flex items-center gap-2 pl-3.5 pr-4 py-3 rounded-full bg-[var(--color-text)] text-[var(--color-bg)] shadow-lg active:opacity-80 transition-all"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-          </svg>
-          <span className="text-xs font-medium">
-            {podcast.language === 'fr' ? 'Question' : 'Ask'}
-          </span>
-        </button>
-      )}
-
+    <div className="flex flex-col h-screen bg-background text-text-primary overflow-hidden">
       <audio
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
@@ -405,95 +521,65 @@ export default function MobilePodcastPage() {
         preload="auto"
       />
 
-      {/* Fixed Header - No overlap */}
-      <div className="flex-shrink-0 bg-[var(--color-bg)] border-b border-[var(--color-border)] safe-top">
-        <div className="h-[52px] flex items-center justify-between px-3 gap-2">
-          <Link href="/m/intelligent-podcast" className="p-2 -ml-2 flex-shrink-0 active:opacity-50">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </Link>
-
-          <h1 className="flex-1 text-sm font-medium truncate text-center px-2 min-w-0">
-            {podcast.title}
-          </h1>
-
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {podcast.chapters && podcast.chapters.length > 0 && (
-              <button
-                onClick={() => setShowTopics(!showTopics)}
-                className={`px-3 py-2 text-xs font-medium transition-all ${
-                  showTopics 
-                    ? 'bg-[var(--color-text)] text-[var(--color-bg)]' 
-                    : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] active:bg-[var(--color-surface-hover)]'
-                }`}
-              >
-                Topics
-              </button>
-            )}
-            <button
-              onClick={downloadWholePodcast}
-              disabled={!canDownload || isDownloading}
-              className="p-2 bg-[var(--color-surface)] text-[var(--color-text-secondary)] active:bg-[var(--color-surface-hover)] disabled:opacity-30 disabled:active:bg-[var(--color-surface)]"
-            >
-              {isDownloading ? (
-                <div className="spinner-mobile w-4 h-4" />
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {isLoadingAudio ? (
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center max-w-xs">
-            <div className="spinner-mobile mx-auto mb-4" />
-            <p className="text-sm text-[var(--color-text-secondary)] mb-3">Preparing audio...</p>
-            <div className="w-full bg-[var(--color-surface)] h-1 overflow-hidden">
+      {/* Loading overlay */}
+      {isLoadingAudio && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="spinner spinner-lg mx-auto mb-4" />
+            <p className="text-text-secondary text-sm mb-3">Preparing audio...</p>
+            <div className="w-48 mx-auto bg-elevated rounded-full h-1 overflow-hidden">
               <div
-                className="bg-[var(--color-text)] h-full transition-all duration-300"
+                className="bg-text-tertiary h-full transition-[width] duration-300 rounded-full"
                 style={{ width: `${loadProgress}%` }}
               />
             </div>
-            <p className="text-xs text-[var(--color-text-tertiary)] mt-2 mono">{loadProgress}%</p>
+            <p className="text-xs text-text-muted mt-2 mono">{loadProgress}%</p>
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* Main content */}
+      {!isLoadingAudio && (
         <>
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto" ref={transcriptRef}>
-            {/* Info */}
-            <div className="p-4 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
-              <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
-                {podcast.description}
-              </p>
+          {/* Top bar */}
+          <div className="flex items-center justify-between px-4 h-14 border-b border-border flex-shrink-0">
+            <Link href="/m" className="btn-ghost p-2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </Link>
+            <h1 className="text-sm font-medium text-text-primary truncate mx-3 flex-1">
+              {podcast.title}
+            </h1>
+          </div>
+
+          {/* Scrollable content */}
+          <div ref={transcriptRef} className="flex-1 overflow-y-auto pb-32">
+            {/* Podcast header */}
+            <div className="px-4 py-4 border-b border-border bg-elevated">
+              <h2 className="text-base font-semibold mb-2 text-text-primary">{podcast.title}</h2>
+              <p className="text-sm text-text-secondary leading-relaxed">{podcast.description}</p>
               {currentTopic && (
-                <div className="mt-3 flex items-center gap-2 p-2 bg-[var(--color-bg)] border border-[var(--color-border)]">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+                <div className="mt-3 flex items-center gap-2 p-2 bg-surface border border-border rounded-lg">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-accent flex-shrink-0">
                     <circle cx="12" cy="12" r="10"/>
                     <polyline points="12 6 12 12 16 14"/>
                   </svg>
-                  <span className="text-[10px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider">Now</span>
-                  <span className="text-xs text-[var(--color-text)]">{currentTopic.title}</span>
+                  <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Now</span>
+                  <span className="text-sm text-text-primary">{currentTopic.title}</span>
                 </div>
               )}
             </div>
 
-            {/* Transcript */}
-            <div className="p-4">
+            {/* Segments */}
+            <div className="px-4 py-3">
               {podcast.segments.map((segment, idx) => {
                 const isActive = idx === currentSegmentIndex
                 const speakerName = SPEAKER_NAMES[segment.speaker] || segment.speaker
-                const speakerColor = SPEAKER_TEXT_COLORS[segment.speaker] || 'text-[var(--color-text-secondary)]'
+                const speakerColor = SPEAKER_TEXT_COLORS[segment.speaker] || 'text-text-secondary'
                 const segTime = segmentRanges[idx]
 
-                const topicTransition = podcast.chapters?.find(ch => {
+                const topicTransition = podcast.chapters.find(ch => {
                   if (!segTime || idx === 0) return false
                   return Math.abs(ch.startTime - segTime.start) < 2
                 })
@@ -501,40 +587,27 @@ export default function MobilePodcastPage() {
                 return (
                   <div key={segment.id}>
                     {topicTransition && (
-                      <div className="flex items-center gap-2 py-3 my-2">
-                        <div className="flex-1 border-t border-[var(--color-border)]" />
-                        <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase tracking-wider">{topicTransition.title}</span>
-                        <div className="flex-1 border-t border-[var(--color-border)]" />
+                      <div className="flex items-center gap-3 py-2 my-2">
+                        <div className="flex-1 border-t border-border/50" />
+                        <span className="text-xs text-text-muted flex-shrink-0">{topicTransition.title}</span>
+                        <div className="flex-1 border-t border-border/50" />
                       </div>
                     )}
                     <div
                       ref={(el) => { if (el) segmentRefs.current.set(idx, el) }}
                       onClick={() => seekToSegment(idx)}
-                      className={`flex gap-2 py-2 px-2 -mx-2 active:bg-[var(--color-surface)] ${
-                        isActive ? 'bg-[var(--color-surface)]' : ''
+                      className={`flex gap-2 py-2 px-2 -mx-2 rounded-lg transition-all ${
+                        isActive ? 'bg-elevated' : 'active:bg-surface'
                       }`}
                     >
-                      <span className="text-[10px] text-[var(--color-text-tertiary)] mono w-10 flex-shrink-0 pt-0.5 text-right">
+                      <span className="text-xs text-text-muted mono w-10 flex-shrink-0 pt-0.5 text-right">
                         {segTime ? formatTime(segTime.start) : formatTime(segment.timestamp)}
                       </span>
-
                       <div className="flex-1 min-w-0">
-                        <span className={`text-[10px] font-medium ${speakerColor}`}>
-                          {speakerName}
-                        </span>
-                        <p className={`text-sm leading-relaxed mt-0.5 ${
-                          isActive ? 'text-[var(--color-text)]' : 'text-[var(--color-text-secondary)]'
-                        }`}>
+                        <span className={`text-xs font-medium ${speakerColor}`}>{speakerName}</span>
+                        <p className={`text-sm leading-relaxed mt-0.5 ${isActive ? 'text-text-primary' : 'text-text-secondary'}`}>
                           {segment.text}
                         </p>
-                        {segment.isQuestionBreakpoint && isActive && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleAskQuestion() }}
-                            className="mt-1.5 text-xs text-[var(--color-mode-challenge)] active:opacity-70"
-                          >
-                            Ask a question
-                          </button>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -543,112 +616,200 @@ export default function MobilePodcastPage() {
             </div>
           </div>
 
-          {/* Topics Panel */}
-          {showTopics && podcast.chapters && podcast.chapters.length > 0 && (
-            <div className="fixed inset-0 z-50 bg-[var(--color-bg)]" style={{ top: 'calc(52px + var(--safe-area-top))' }}>
-              <div className="h-full overflow-y-auto p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider">Topics</h3>
-                  <button
-                    onClick={() => setShowTopics(false)}
-                    className="p-2 active:opacity-50"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
+          {/* Bottom player bar / Q&A panel */}
+          <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background flex-shrink-0 z-50">
+            {qaState === 'idle' ? (
+              // Normal player controls
+              <>
+                {/* Progress bar */}
+                <div
+                  ref={progressRef}
+                  onClick={handleProgressClick}
+                  className="h-1 bg-elevated cursor-pointer relative"
+                >
+                  <div
+                    className="h-full bg-text-primary transition-[width] duration-100"
+                    style={{ width: `${progressPct}%` }}
+                  />
                 </div>
-                <p className="text-xs text-[var(--color-text-tertiary)] mb-4">
-                  Jump to different parts of the conversation
-                </p>
-                <div className="space-y-2">
-                  {podcast.chapters.map((topic) => {
-                    const isActive = currentTopic?.id === topic.id
-                    return (
+
+                {/* Controls */}
+                <div className="px-4 py-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted mono">{formatTime(currentTime)}</span>
+                      <span className="text-xs text-text-muted">/</span>
+                      <span className="text-xs text-text-muted mono">{formatTime(totalDuration)}</span>
+                    </div>
+                    <button
+                      onClick={cyclePlaybackRate}
+                      className="btn-ghost text-xs mono px-2 py-1"
+                    >
+                      {playbackRate}x
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    {/* Ask Question button */}
+                    <button
+                      onClick={startQA}
+                      disabled={!mergedAudioUrl || isLoadingAudio}
+                      className="flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 text-accent border border-accent/20 disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      </svg>
+                      <span className="text-xs font-medium">
+                        {podcast.language === 'fr' ? 'Poser une question' : 'Ask a question'}
+                      </span>
+                    </button>
+
+                    {/* Playback controls */}
+                    <div className="flex items-center gap-3 flex-shrink-0">
                       <button
-                        key={topic.id}
-                        onClick={() => {
-                          seekToTime(topic.startTime)
-                          setShowTopics(false)
-                        }}
-                        className={`w-full text-left p-3 border border-[var(--color-border)] active:bg-[var(--color-surface)] ${
-                          isActive ? 'bg-[var(--color-surface)]' : ''
-                        }`}
+                        onClick={previousSegment}
+                        disabled={currentSegmentIndex === 0}
+                        className="btn-ghost p-2 disabled:opacity-30"
                       >
-                        <div className="text-sm font-medium mb-1">{topic.title}</div>
-                        <div className="text-xs text-[var(--color-text-tertiary)] mono">
-                          {formatTime(topic.startTime)}
-                        </div>
-                        {topic.summary && (
-                          <div className="text-xs text-[var(--color-text-secondary)] mt-2 line-clamp-2">
-                            {topic.summary}
-                          </div>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/>
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={togglePlayPause}
+                        disabled={!mergedAudioUrl}
+                        className="w-12 h-12 rounded-full bg-text-primary text-background flex items-center justify-center disabled:opacity-30 active:scale-95 transition-transform"
+                      >
+                        {isPlaying ? (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="4" width="4" height="16" rx="1"/>
+                            <rect x="14" y="4" width="4" height="16" rx="1"/>
+                          </svg>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="ml-0.5">
+                            <path d="M8 5v14l11-7z"/>
+                          </svg>
                         )}
                       </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* Player Controls */}
-          <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-bg)] safe-bottom">
-            {/* Progress */}
-            <div
-              ref={progressRef}
-              onClick={handleProgressClick}
-              className="h-1 bg-[var(--color-surface)] relative"
-            >
-              <div
-                className="h-full bg-[var(--color-text)] transition-[width] duration-100"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
+                      <button
+                        onClick={nextSegment}
+                        disabled={currentSegmentIndex === podcast.segments.length - 1}
+                        className="btn-ghost p-2 disabled:opacity-30"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
 
-            {/* Controls */}
-            <div className="px-4 py-3">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-[var(--color-text-tertiary)] mono">
-                  {formatTime(currentTime)}
-                </span>
-                <span className="text-xs text-[var(--color-text-tertiary)] mono">
-                  {formatTime(totalDuration)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-center">
-                <button
-                  onClick={togglePlayPause}
-                  disabled={!mergedAudioUrl}
-                  className="w-14 h-14 bg-[var(--color-text)] text-[var(--color-bg)] flex items-center justify-center active:opacity-70 disabled:opacity-30"
-                >
-                  {isPlaying ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <rect x="6" y="4" width="4" height="16" rx="1"/>
-                      <rect x="14" y="4" width="4" height="16" rx="1"/>
-                    </svg>
-                  ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="ml-1">
-                      <path d="M8 5v14l11-7z"/>
-                    </svg>
+                  {currentSegment && (
+                    <div className="mt-2 text-center">
+                      <span className="text-xs text-text-muted">
+                        {SPEAKER_NAMES[currentSegment.speaker] || currentSegment.speaker}
+                      </span>
+                    </div>
                   )}
-                </button>
-              </div>
-
-              {currentSegment && (
-                <div className="text-center mt-2">
-                  <span className="text-xs text-[var(--color-text-tertiary)]">
-                    {SPEAKER_NAMES[currentSegment.speaker] || currentSegment.speaker}
-                  </span>
                 </div>
-              )}
-            </div>
+              </>
+            ) : (
+              // Q&A panel
+              <div className="px-4 py-3 max-h-[50vh] flex flex-col">
+                {/* Q&A status bar */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`relative ${qaState === 'speaking' ? 'opacity-50' : ''}`}>
+                      <div className="w-10 h-10 rounded-full bg-elevated border border-border flex items-center justify-center">
+                        <svg 
+                          width="16" height="16" 
+                          viewBox="0 0 24 24" 
+                          fill="none" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          className={qaState === 'listening' ? 'text-accent' : 'text-text-secondary'}
+                        >
+                          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                          <line x1="12" y1="19" x2="12" y2="23" />
+                          <line x1="8" y1="23" x2="16" y2="23" />
+                        </svg>
+                      </div>
+                      {qaState === 'listening' && (
+                        <div className="absolute inset-0 rounded-full border-2 border-accent animate-ping opacity-30" />
+                      )}
+                    </div>
+                    <span className="text-sm text-text-secondary">{getQAStateMessage()}</span>
+                  </div>
+
+                  <button
+                    onClick={stopQA}
+                    className="btn-primary px-4 py-2 text-sm"
+                  >
+                    {podcast.language === 'fr' ? 'Reprendre' : 'Resume'}
+                  </button>
+                </div>
+
+                {/* Error state */}
+                {qaState === 'error' && (
+                  <div className="mb-3 p-3 bg-error-muted border border-error/20 rounded-lg">
+                    <p className="text-sm text-error mb-2">
+                      {permissionDenied 
+                        ? (podcast.language === 'fr' ? 'Accès au micro refusé' : 'Microphone access denied')
+                        : qaError
+                      }
+                    </p>
+                    <button onClick={startQA} className="text-xs text-error hover:underline">
+                      {podcast.language === 'fr' ? 'Réessayer' : 'Try again'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Q&A transcript (compact, scrollable) */}
+                {qaState !== 'error' && (
+                  <div className="flex-1 overflow-y-auto space-y-2 max-h-60 mb-3">
+                    {qaTranscript.length === 0 && qaState === 'connecting' && (
+                      <div className="text-center py-6">
+                        <div className="spinner spinner-sm mx-auto mb-2" />
+                        <p className="text-xs text-text-muted">
+                          {podcast.language === 'fr' ? 'Connexion...' : 'Connecting...'}
+                        </p>
+                      </div>
+                    )}
+
+                    {qaTranscript.map((entry) => (
+                      <div key={entry.id} className={`flex ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                          className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
+                            entry.role === 'user'
+                              ? 'bg-accent text-white rounded-br-sm'
+                              : 'bg-elevated border border-border rounded-bl-sm text-text-primary'
+                          }`}
+                        >
+                          {entry.text}
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={qaTranscriptEndRef} />
+                  </div>
+                )}
+
+                {/* Tip */}
+                {qaState !== 'error' && (
+                  <div className="text-xs text-text-muted text-center">
+                    {podcast.language === 'fr' 
+                      ? 'Parle naturellement, je t\'écoute...'
+                      : 'Speak naturally, I\'m listening...'
+                    }
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}
-
     </div>
   )
 }
