@@ -28,7 +28,7 @@ export default function LoginPage() {
 
       window.location.href = '/dashboard'
     } catch (err: any) {
-      setError(err.message || 'Login failed')
+      setError('Invalid email or password.')
       setLoading(false)
     }
   }
@@ -43,7 +43,7 @@ export default function LoginPage() {
             Welcome back
           </h1>
           <p className="text-text-secondary text-lg">
-            Continue your learning journey with AI assistance.
+            Continue your learning journey.
           </p>
         </div>
         <p className="text-xs text-text-tertiary mono">© 2025</p>

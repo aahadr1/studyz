@@ -35,7 +35,7 @@ export default function MessageList({
             <FiCpu className="w-8 h-8 text-mode-study" />
           </div>
           <h3 className="text-lg font-medium text-text-primary mb-2">
-            AI Study Assistant
+            Study Assistant
           </h3>
           <p className="text-sm text-text-secondary max-w-xs mb-6">
             I can see this page and help you understand the content. Ask me anything!

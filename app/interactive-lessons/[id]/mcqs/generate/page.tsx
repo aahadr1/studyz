@@ -356,7 +356,7 @@ export default function GenerateMCQsPage() {
             {activeTab === 'generate' && (
               <div>
                 <p className="text-sm text-text-secondary mb-4">
-                  AI will analyze each page of your lesson and create MCQs. 
+                  Each page will be analyzed and MCQs created. 
                   Each question will be answerable only from the content on that specific page.
                 </p>
 
@@ -382,7 +382,7 @@ export default function GenerateMCQsPage() {
                         🔬 Mode exhaustif (jusqu'à 30 MCQs/page)
                       </span>
                       <p className="text-xs text-text-tertiary mt-1">
-                        L'IA analysera chaque détail de la page pour créer un maximum de questions. 
+                        Chaque détail de la page sera couvert pour créer un maximum de questions. 
                         Parfait pour une révision complète de chaque concept, formule, définition et exemple.
                       </p>
                     </div>
@@ -481,7 +481,7 @@ export default function GenerateMCQsPage() {
             {activeTab === 'upload-doc' && (
               <div>
                 <p className="text-sm text-text-secondary mb-4">
-                  Upload a PDF containing multiple choice questions. AI will extract and parse all MCQs found in the document.
+                  Upload a PDF containing multiple choice questions. All MCQs found in the document will be extracted and parsed.
                 </p>
 
                 {!uploadFile ? (
@@ -584,7 +584,7 @@ export default function GenerateMCQsPage() {
             {activeTab === 'paste-text' && (
               <div>
                 <p className="text-sm text-text-secondary mb-4">
-                  Paste MCQs as text. AI will parse and structure the questions automatically.
+                  Paste MCQs as text. Questions will be parsed and structured automatically.
                 </p>
 
                 <textarea

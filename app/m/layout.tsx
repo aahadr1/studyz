@@ -3,7 +3,7 @@ import '../globals-mobile.css'
 
 export const metadata: Metadata = {
   title: 'Studyz - Learn Smarter',
-  description: 'AI-powered study companion for students',
+  description: 'Smart study companion for students',
   manifest: '/manifest.json',
   icons: {
     icon: '/favicon.png',

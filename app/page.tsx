@@ -9,7 +9,7 @@ export default function Home() {
 
   const features = [
     { num: '01', title: 'Upload', desc: 'PDFs, documents, study materials' },
-    { num: '02', title: 'Learn', desc: 'AI-powered interactive lessons' },
+    { num: '02', title: 'Learn', desc: 'Interactive lessons' },
     { num: '03', title: 'Quiz', desc: 'Extract and practice MCQs' },
     { num: '04', title: 'Master', desc: 'Track progress, improve retention' },
   ]
@@ -43,13 +43,13 @@ export default function Home() {
       <section className="max-w-6xl mx-auto px-6 pt-32 pb-24">
         <div className="max-w-3xl">
           <div className="inline-block px-4 py-2 bg-mode-study/10 border border-mode-study/30 rounded-full mb-6">
-            <p className="text-xs text-mode-study uppercase tracking-wider font-medium">AI-Powered Learning</p>
+            <p className="text-xs text-mode-study uppercase tracking-wider font-medium">Smart Learning</p>
           </div>
           <h1 className="text-6xl font-bold tracking-tight text-text-primary mb-6 leading-tight">
             Study smarter,<br />not harder
           </h1>
           <p className="text-xl text-text-secondary mb-10 leading-relaxed">
-            Upload your materials, learn with AI assistance, and master any subject through intelligent practice.
+            Upload your materials, learn interactively, and master any subject through structured practice.
           </p>
           <div className="flex items-center gap-4">
             <button
@@ -98,7 +98,7 @@ export default function Home() {
             Ready to transform your learning?
           </h2>
               <p className="text-lg text-text-secondary">
-                Join students studying smarter with AI.
+                Join students studying smarter.
           </p>
             </div>
           <button

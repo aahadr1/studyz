@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
       console.error('[Podcast] GEMINI_API_KEY is not set')
       return NextResponse.json(
-        { error: 'Server configuration error', details: 'GEMINI_API_KEY is not configured' },
+        { error: 'This feature is temporarily unavailable. Please try again later.' },
         { status: 500 }
       )
     }
@@ -84,11 +84,7 @@ export async function POST(request: NextRequest) {
     )
     if (missingPageImages.length > 0) {
       return NextResponse.json(
-        {
-          error: 'Invalid documents payload',
-          details:
-            'This endpoint expects page_images for each document. Please re-upload your PDFs so the client can convert them to images.',
-        },
+        { error: 'Please re-upload your documents and try again.' },
         { status: 400 }
       )
     }
@@ -119,12 +115,7 @@ export async function POST(request: NextRequest) {
 
     if (insertError || !podcast) {
       console.error('[Podcast] Failed to create podcast record:', insertError)
-      console.error('[Podcast] Insert error details:', JSON.stringify(insertError, null, 2))
-      return NextResponse.json({ 
-        error: 'Failed to create podcast', 
-        details: insertError?.message || insertError?.hint || 'Database insert failed',
-        code: insertError?.code
-      }, { status: 500 })
+      return NextResponse.json({ error: 'Could not create podcast. Please try again.' }, { status: 500 })
     }
 
     console.log(`[Podcast] Created podcast ${podcast.id} with pending status`)
@@ -158,14 +149,7 @@ export async function POST(request: NextRequest) {
         docsError.code === '42703' || /column\s+"page_images"\s+does not exist/i.test(docsError.message || '')
 
       return NextResponse.json(
-        {
-          error: 'Database is missing required tables',
-          details: looksLikeMissingMigration
-            ? 'Missing table intelligent_podcast_documents. Apply migration 020_intelligent_podcast_documents_and_transcriptions.sql as the postgres/supabase_admin role.'
-            : looksLikeMissingColumn
-              ? 'Missing column intelligent_podcast_documents.page_images. Apply migration 021_intelligent_podcast_document_page_images.sql.'
-            : docsError.message,
-        },
+        { error: 'Something went wrong. Please try again later.' },
         { status: 500 }
       )
     }
@@ -186,6 +170,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('[Podcast] Setup error:', error)
-    return NextResponse.json({ error: 'Failed to start podcast generation', details: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Could not start podcast. Please try again later.' }, { status: 500 })
   }
 }

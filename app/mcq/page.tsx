@@ -119,7 +119,7 @@ export default function MCQSetsPage() {
           </Link>
           <Link href="/intelligent-podcast" className="sidebar-item">
             <FiMic className="w-4 h-4" strokeWidth={1.5} />
-            <span className="text-sm">AI Podcasts</span>
+            <span className="text-sm">Podcasts</span>
           </Link>
         </nav>
 

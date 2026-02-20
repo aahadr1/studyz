@@ -321,12 +321,12 @@ export default function MobileMCQViewerPage() {
         setChatMessages(prev => [...prev, assistantMessage])
       } else {
         setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
-        setChatError(data?.error || data?.details || 'AI assistant failed to respond')
+        setChatError(data?.error || data?.details || 'Something went wrong. Please try again.')
       }
     } catch (error) {
       console.error('Chat error:', error)
       setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
-      setChatError((error as any)?.message || 'AI assistant failed to respond')
+      setChatError('Something went wrong. Please try again.')
     } finally {
       setChatSending(false)
     }
@@ -1560,7 +1560,7 @@ export default function MobileMCQViewerPage() {
             {/* Chat Header */}
             <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)] flex-shrink-0">
               <div>
-                <h2 className="font-medium text-sm">AI Assistant</h2>
+                <h2 className="font-medium text-sm">Study Assistant</h2>
                 <p className="text-[10px] text-[var(--color-text-secondary)] mono">
                   Question {currentIndex + 1} of {activeQuestions.length}
                 </p>

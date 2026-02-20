@@ -189,7 +189,7 @@ export default function MobileNewMCQPage() {
       { id: 'convert', label: inputMode === 'pdf' ? 'Converting PDF' : 'Processing text', status: 'pending' },
       { id: 'extract', label: 'Extracting questions', status: 'pending' },
     ]
-    if (autoCorrect) steps.push({ id: 'correct', label: 'AI verification', status: 'pending' })
+    if (autoCorrect) steps.push({ id: 'correct', label: 'Verification', status: 'pending' })
     if (generateLessonCards) steps.push({ id: 'lessons', label: 'Generating lessons', status: 'pending' })
     steps.push({ id: 'finalize', label: 'Finalizing', status: 'pending' })
     setProcessingSteps(steps)
@@ -618,9 +618,9 @@ export default function MobileNewMCQPage() {
             </div>
           </div>
 
-          {/* AI Options */}
+          {/* Options */}
           <div className="space-y-3">
-            <label className="input-label-mobile">AI Features</label>
+            <label className="input-label-mobile">Options</label>
             
             <label className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] cursor-pointer">
               <input
@@ -635,7 +635,7 @@ export default function MobileNewMCQPage() {
                   <span className="font-medium text-sm text-[var(--color-text-primary)]">Auto-Correct</span>
                 </div>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                  AI verifies and fixes answers
+                  Verify and fix answers
                 </p>
               </div>
             </label>

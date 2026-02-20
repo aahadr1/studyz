@@ -56,7 +56,7 @@ export default function AssistantHeader({
             <FiMessageSquare className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-text-primary">AI Assistant</h3>
+            <h3 className="text-sm font-medium text-text-primary">Study Assistant</h3>
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-success animate-pulse" />
               <span className="text-xs text-text-tertiary mono">

@@ -400,7 +400,7 @@ export default function NewMCQPage() {
 
       // Auto-correct if enabled
       if (autoCorrect && allQuestions.length > 0) {
-        setProcessingStep('AI is verifying and correcting questions...')
+        setProcessingStep('Verifying and correcting questions...')
         setCurrentPage(0)
         
         try {
@@ -451,7 +451,7 @@ export default function NewMCQPage() {
       // Generate section-based lesson if enabled
       let lesson: Lesson | null = null
       if (generateLesson && allQuestions.length > 0) {
-        setProcessingStep('Generating lesson content with AI...')
+        setProcessingStep('Generating lesson content...')
         setCurrentPage(0)
         
         try {
@@ -621,7 +621,7 @@ export default function NewMCQPage() {
                 Create MCQ Set
               </h2>
               <p className="text-text-secondary">
-                Upload a PDF or paste text containing multiple choice questions. Our AI will extract, verify, and format them into an interactive quiz.
+                Upload a PDF or paste text containing multiple choice questions. They will be extracted, verified, and formatted into an interactive quiz.
               </p>
             </div>
 
@@ -856,7 +856,7 @@ You can paste as much text as you want - there's no character limit!`}
                 <textarea
                   value={extractionInstructions}
                   onChange={(e) => setExtractionInstructions(e.target.value)}
-                  placeholder='Custom instructions for the extractor (e.g. "This exam has 250 questions. Each has exactly 10 options (A-J). Each question has 5 correct answers. Do not drop any options.")'
+                  placeholder='Custom instructions (e.g. "This exam has 250 questions. Each has exactly 10 options (A-J). Each question has 5 correct answers. Do not drop any options.")'
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent resize-y min-h-[80px] text-sm"
                   disabled={isProcessing}
                 />
@@ -865,7 +865,7 @@ You can paste as much text as you want - there's no character limit!`}
               {/* AI Enhancement Options */}
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-text-primary mb-2">
-                  AI Enhancements
+                  Enhancements
                 </label>
 
                 {/* Auto-Correct Toggle */}
@@ -887,7 +887,7 @@ You can paste as much text as you want - there's no character limit!`}
                         <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full">Recommended</span>
                       </div>
                       <p className="text-sm text-text-secondary">
-                        AI will verify each question, fix errors, and ensure correct answers are accurate.
+                        Each question will be verified, errors fixed, and correct answers checked.
                       </p>
                     </div>
                   </label>
@@ -936,7 +936,7 @@ You can paste as much text as you want - there's no character limit!`}
                         <span className="font-medium text-text-primary">Generate Full Lesson</span>
                       </div>
                       <p className="text-sm text-text-secondary">
-                        AI will create a comprehensive structured lesson based on all MCQs, organized into topic sections.
+                        A structured lesson will be generated from all MCQs, organized into topic sections.
                       </p>
                     </div>
                   </label>

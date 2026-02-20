@@ -42,7 +42,7 @@ export default function RegisterPage() {
 
       window.location.href = '/dashboard'
     } catch (err: any) {
-      setError(err.message || 'Registration failed')
+      setError('Registration failed. Please try again.')
       setLoading(false)
     }
   }
@@ -57,7 +57,7 @@ export default function RegisterPage() {
             Start learning<br />smarter today
           </h1>
           <p className="text-text-secondary text-lg">
-            Create your account and unlock AI-powered study tools.
+            Create your account and unlock smart study tools.
           </p>
         </div>
         <p className="text-xs text-text-tertiary mono">© 2025</p>

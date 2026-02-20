@@ -56,7 +56,7 @@ export default function ChatAssistant(props: ChatAssistantProps) {
     const welcomeMessage: Message = {
       id: 'welcome',
       role: 'assistant',
-      content: `👋 Hi! I'm your AI study assistant.\n\nI can help you understand page ${pageNumber} of your document. Try asking me to:\n\n• Explain concepts or terminology\n• Summarize key points\n• Clarify confusing sections\n• Break down formulas or diagrams`,
+      content: `👋 Hi! I'm your study assistant.\n\nI can help you understand page ${pageNumber} of your document. Try asking me to:\n\n• Explain concepts or terminology\n• Summarize key points\n• Clarify confusing sections\n• Break down formulas or diagrams`,
       timestamp: new Date(),
     }
     setMessages([welcomeMessage])
@@ -67,7 +67,7 @@ export default function ChatAssistant(props: ChatAssistantProps) {
     if (messages.length > 0 && messages[0].id === 'welcome') {
       setMessages(prev => [{
         ...prev[0],
-        content: `👋 Hi! I'm your AI study assistant.\n\nI can help you understand page ${pageNumber} of your document. Try asking me to:\n\n• Explain concepts or terminology\n• Summarize key points\n• Clarify confusing sections\n• Break down formulas or diagrams`,
+        content: `👋 Hi! I'm your study assistant.\n\nI can help you understand page ${pageNumber} of your document. Try asking me to:\n\n• Explain concepts or terminology\n• Summarize key points\n• Clarify confusing sections\n• Break down formulas or diagrams`,
       }, ...prev.slice(1)])
     }
   }, [pageNumber])
@@ -102,7 +102,7 @@ export default function ChatAssistant(props: ChatAssistantProps) {
     const welcomeMessage: Message = {
       id: 'welcome-' + Date.now(),
       role: 'assistant',
-      content: `👋 Chat cleared! I'm ready to help you with page ${pageNumber}.\n\nWhat would you like to know?`,
+      content: `👋 Chat cleared. I'm ready to help with page ${pageNumber}.\n\nWhat would you like to know?`,
       timestamp: new Date(),
     }
     setMessages([welcomeMessage])
@@ -222,7 +222,7 @@ export default function ChatAssistant(props: ChatAssistantProps) {
               <FiMessageSquare className="w-4.5 h-4.5 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">AI Assistant</h3>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">Study Assistant</h3>
               <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Viewing page {pageNumber}</span>
@@ -407,7 +407,7 @@ export default function ChatAssistant(props: ChatAssistantProps) {
           <p className="text-[10px] text-slate-400 dark:text-slate-500">
             <span className="inline-flex items-center gap-1">
               <FiEye className="w-3 h-3" />
-              AI can see page {pageNumber}
+              Viewing page {pageNumber}
             </span>
           </p>
           <p className="text-[10px] text-slate-400 dark:text-slate-500">

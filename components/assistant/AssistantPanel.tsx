@@ -344,7 +344,7 @@ export default function AssistantPanel({
         id: `error-${Date.now()}`,
         lesson_id: lessonId,
         role: 'assistant',
-        content: `Désolé, une erreur s'est produite: ${error.message}`,
+        content: 'Désolé, une erreur s\'est produite. Réessayez.',
         page_context: currentPage,
         created_at: new Date().toISOString(),
         isError: true,

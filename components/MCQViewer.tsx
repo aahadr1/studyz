@@ -460,12 +460,12 @@ export default function MCQViewer({
         setChatMessages(prev => [...prev, assistantMessage])
       } else {
         setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
-        setChatError(data?.error || data?.details || 'AI assistant failed to respond')
+        setChatError(data?.error || data?.details || 'Something went wrong. Please try again.')
       }
     } catch (error) {
       console.error('Chat error:', error)
       setChatMessages(prev => prev.filter(m => m.id !== tempMessage.id))
-      setChatError((error as any)?.message || 'AI assistant failed to respond')
+      setChatError('Something went wrong. Please try again.')
     } finally {
       setChatSending(false)
     }
@@ -805,7 +805,7 @@ export default function MCQViewer({
                       }`}
                     >
                       <FiMessageCircle className="w-3 h-3 inline mr-1" />
-                      AI Chat
+                      Chat
                       {chatMessages.length > 0 && !showChatSidebar && (
                         <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full" />
                       )}
@@ -1106,7 +1106,7 @@ export default function MCQViewer({
         </div>
       )}
 
-      {/* AI Chat Sidebar */}
+      {/* Chat Sidebar */}
       {showChatSidebar && mcqSetId && !isComplete && (
         <div className="w-96 flex-shrink-0">
           <div className="sticky top-4">
@@ -1115,7 +1115,7 @@ export default function MCQViewer({
               <div className="p-4 border-b border-border flex items-center justify-between">
                 <h3 className="text-xs font-medium uppercase tracking-wider flex items-center gap-2">
                   <FiMessageCircle className="w-4 h-4 text-indigo-500" />
-                  AI Assistant
+                  Study Assistant
                 </h3>
                 <div className="flex items-center gap-2">
                   {chatMessages.length > 0 && (

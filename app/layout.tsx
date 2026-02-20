@@ -3,7 +3,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Studyz - Smart Study Assistant',
-  description: 'Study smarter with AI-powered document analysis and conversational assistance',
+  description: 'Study smarter with document analysis and conversational assistance',
   icons: {
     icon: '/favicon.png',
     apple: '/favicon.png',
