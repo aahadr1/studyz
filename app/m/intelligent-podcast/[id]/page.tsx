@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { RealtimeInteraction } from '@/components/intelligent-podcast/RealtimeInteraction'
+import { GeminiLiveInteraction } from '@/components/intelligent-podcast/GeminiLiveInteraction'
 import { IntelligentPodcast, PodcastSegment } from '@/types/intelligent-podcast'
 
 const SPEAKER_NAMES: Record<string, string> = {
@@ -35,11 +35,8 @@ export default function MobilePodcastPage() {
   const [podcast, setPodcast] = useState<IntelligentPodcast | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showInteraction, setShowInteraction] = useState(false)
-  const [interruptContext, setInterruptContext] = useState<{
-    segmentId: string
-    timestamp: number
-  } | null>(null)
+  const [showVoiceQA, setShowVoiceQA] = useState(false)
+  const [pausedForQA, setPausedForQA] = useState(false)
 
   // Player state
   const [isPlaying, setIsPlaying] = useState(false)
@@ -255,13 +252,25 @@ export default function MobilePodcastPage() {
     seekToTime(pct * totalDuration)
   }
 
-  const handleInterrupt = () => {
-    if (audioRef.current) audioRef.current.pause()
-    setIsPlaying(false)
-    const currentSegment = podcast?.segments[currentSegmentIndex]
-    if (currentSegment) {
-      setInterruptContext({ segmentId: currentSegment.id, timestamp: currentTime })
-      setShowInteraction(true)
+  const handleAskQuestion = () => {
+    if (audioRef.current && isPlaying) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+      setPausedForQA(true)
+    }
+    setShowVoiceQA(true)
+  }
+
+  const handleVoiceQAClose = () => {
+    setShowVoiceQA(false)
+    setPausedForQA(false)
+  }
+
+  const handleVoiceQAResume = () => {
+    setShowVoiceQA(false)
+    setPausedForQA(false)
+    if (audioRef.current && mergedAudioUrl) {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
     }
   }
 
@@ -354,6 +363,35 @@ export default function MobilePodcastPage() {
 
   return (
     <div className="h-screen flex flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
+      {/* Voice Q&A Modal */}
+      {showVoiceQA && currentSegment && (
+        <GeminiLiveInteraction
+          podcastId={podcastId}
+          currentSegmentId={currentSegment.id}
+          currentTimestamp={currentTime}
+          podcastTitle={podcast.title}
+          language={podcast.language}
+          onClose={handleVoiceQAClose}
+          onResume={handleVoiceQAResume}
+        />
+      )}
+
+      {/* Floating Ask button */}
+      {!showVoiceQA && (
+        <button
+          onClick={handleAskQuestion}
+          className="fixed bottom-24 right-4 z-40 flex items-center gap-2 pl-3.5 pr-4 py-3 rounded-full bg-[var(--color-text)] text-[var(--color-bg)] shadow-lg active:opacity-80 transition-all"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+          </svg>
+          <span className="text-xs font-medium">
+            {podcast.language === 'fr' ? 'Question' : 'Ask'}
+          </span>
+        </button>
+      )}
+
       <audio
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
@@ -485,7 +523,7 @@ export default function MobilePodcastPage() {
                         </p>
                         {segment.isQuestionBreakpoint && isActive && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleInterrupt() }}
+                            onClick={(e) => { e.stopPropagation(); handleAskQuestion() }}
                             className="mt-1.5 text-xs text-[var(--color-mode-challenge)] active:opacity-70"
                           >
                             Ask a question
@@ -605,15 +643,6 @@ export default function MobilePodcastPage() {
         </>
       )}
 
-      {showInteraction && interruptContext && (
-        <RealtimeInteraction
-          podcastId={podcastId}
-          currentSegmentId={interruptContext.segmentId}
-          currentTimestamp={interruptContext.timestamp}
-          onClose={() => setShowInteraction(false)}
-          onResume={() => setShowInteraction(false)}
-        />
-      )}
     </div>
   )
 }
