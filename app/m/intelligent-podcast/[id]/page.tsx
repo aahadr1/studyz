@@ -337,7 +337,7 @@ export default function MobilePodcastPage() {
 
       if (!response.ok) throw new Error('Failed to fetch context')
 
-      const { context, systemInstruction, suggestedVoice } = await response.json()
+      const { context, systemInstruction, suggestedVoice, introductionPrompt } = await response.json()
 
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
       if (!apiKey) throw new Error('Gemini API key not configured')
@@ -417,9 +417,16 @@ export default function MobilePodcastPage() {
 
       setQAState('listening')
 
-      // Trigger greeting silently
+      // Send greeting immediately - AI will speak the introduction without showing it in transcript
       setTimeout(() => {
-        client.sendSilentTrigger('[The listener just pressed the button. Greet them briefly.]')
+        if (client) {
+          client.sendVoiceOnlyGreeting(introductionPrompt || 
+            (podcast.language === 'fr' 
+              ? "Oh, on a une question ! Vas-y, je t'écoute."
+              : "Oh, we have a question! Go ahead, I'm listening."
+            )
+          )
+        }
       }, 100)
 
     } catch (err: any) {

@@ -373,14 +373,19 @@ export class GeminiLiveClient {
   }
 
   /**
-   * Send a trigger message without emitting it to the transcript.
-   * Used for the initial greeting trigger — the user doesn't need to see it.
+   * Send a trigger message that will make the AI speak immediately.
+   * The AI's voice response will be heard, but neither the trigger nor the response
+   * will appear in the UI transcript.
    */
-  sendSilentTrigger(text: string): void {
+  sendVoiceOnlyGreeting(text: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('[GeminiLive] Not connected')
       return
     }
+
+    // Temporarily disable transcript callback for this exchange
+    const originalCallback = this.config.onTranscript
+    this.config.onTranscript = () => {} // Suppress transcript for greeting
 
     const message = {
       clientContent: {
@@ -393,7 +398,19 @@ export class GeminiLiveClient {
     }
 
     this.ws.send(JSON.stringify(message))
-    // Intentionally no onTranscript callback — this message is invisible to the UI
+
+    // Restore callback after AI finishes speaking (after a short delay)
+    setTimeout(() => {
+      this.config.onTranscript = originalCallback
+    }, 3000) // 3s should be enough for a brief greeting
+  }
+
+  /**
+   * Legacy method - kept for compatibility
+   * @deprecated Use sendVoiceOnlyGreeting for greetings
+   */
+  sendSilentTrigger(text: string): void {
+    this.sendVoiceOnlyGreeting(text)
   }
 
   /**
