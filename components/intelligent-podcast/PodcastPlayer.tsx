@@ -378,9 +378,18 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
           if (speaking) {
             setQAState('speaking')
             pendingTranscriptRef.current = ''
-          } else if (qaState !== 'idle') {
+          } else {
             setQAState('listening')
           }
+        },
+        onReady: () => {
+          setQAState('listening')
+          client.sendVoiceOnlyGreeting(introductionPrompt ||
+            (podcast.language === 'fr'
+              ? "[L'auditeur vient d'appuyer sur le bouton. Salue-le brièvement et dis-lui que tu l'écoutes.]"
+              : "[The listener just pressed the button. Greet them briefly and tell them you're listening.]"
+            )
+          )
         },
       })
 
@@ -392,20 +401,6 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
         currentTopic: context.currentTopic || '',
         language: context.language,
       })
-
-      setQAState('listening')
-
-      // Send greeting immediately - AI will speak and show the introduction
-      setTimeout(() => {
-        if (client) {
-          client.sendTextMessage(introductionPrompt || 
-            (podcast.language === 'fr' 
-              ? "Oh, on a une question ! Vas-y, je t'écoute."
-              : "Oh, we have a question! Go ahead, I'm listening."
-            )
-          )
-        }
-      }, 100)
 
     } catch (err: any) {
       console.error('[QA] Connection error:', err)
@@ -434,6 +429,16 @@ export function PodcastPlayer({ podcast, onInterrupt }: PodcastPlayerProps) {
       audioRef.current.currentTime = savedTime
     }
   }
+
+  // Cleanup Q&A client on unmount
+  useEffect(() => {
+    return () => {
+      if (qaClientRef.current) {
+        qaClientRef.current.disconnect()
+        qaClientRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (qaState !== 'idle' && qaTranscriptEndRef.current) {

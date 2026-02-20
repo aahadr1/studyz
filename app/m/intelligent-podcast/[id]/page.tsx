@@ -400,9 +400,19 @@ export default function MobilePodcastPage() {
           if (speaking) {
             setQAState('speaking')
             pendingTranscriptRef.current = ''
-          } else if (qaState !== 'idle') {
+          } else {
             setQAState('listening')
           }
+        },
+        onReady: () => {
+          setQAState('listening')
+          // Send greeting via voice-only (no transcript entry) as soon as connection is ready
+          client.sendVoiceOnlyGreeting(introductionPrompt ||
+            (podcast.language === 'fr'
+              ? "[L'auditeur vient d'appuyer sur le bouton. Salue-le brièvement et dis-lui que tu l'écoutes.]"
+              : "[The listener just pressed the button. Greet them briefly and tell them you're listening.]"
+            )
+          )
         },
       })
 
@@ -414,20 +424,6 @@ export default function MobilePodcastPage() {
         currentTopic: context.currentTopic || '',
         language: context.language,
       })
-
-      setQAState('listening')
-
-      // Send greeting immediately - AI will speak and show the introduction
-      setTimeout(() => {
-        if (client) {
-          client.sendTextMessage(introductionPrompt || 
-            (podcast.language === 'fr' 
-              ? "Oh, on a une question ! Vas-y, je t'écoute."
-              : "Oh, we have a question! Go ahead, I'm listening."
-            )
-          )
-        }
-      }, 100)
 
     } catch (err: any) {
       console.error('[QA] Connection error:', err)
@@ -461,6 +457,16 @@ export default function MobilePodcastPage() {
       }
     }
   }
+
+  // Cleanup Q&A client on unmount
+  useEffect(() => {
+    return () => {
+      if (qaClientRef.current) {
+        qaClientRef.current.disconnect()
+        qaClientRef.current = null
+      }
+    }
+  }, [])
 
   // Auto-scroll Q&A transcript
   useEffect(() => {
