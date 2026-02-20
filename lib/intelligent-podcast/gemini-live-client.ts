@@ -373,6 +373,30 @@ export class GeminiLiveClient {
   }
 
   /**
+   * Send a trigger message without emitting it to the transcript.
+   * Used for the initial greeting trigger — the user doesn't need to see it.
+   */
+  sendSilentTrigger(text: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error('[GeminiLive] Not connected')
+      return
+    }
+
+    const message = {
+      clientContent: {
+        turns: [{
+          role: 'user',
+          parts: [{ text }],
+        }],
+        turnComplete: true,
+      },
+    }
+
+    this.ws.send(JSON.stringify(message))
+    // Intentionally no onTranscript callback — this message is invisible to the UI
+  }
+
+  /**
    * Full cleanup — stops mic, closes WebSocket, releases all audio resources.
    * Returns a Promise that resolves after audio contexts are fully closed,
    * giving the browser time to release hardware audio resources.
