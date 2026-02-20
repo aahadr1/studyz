@@ -223,51 +223,6 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* AI Podcast Feature Highlight */}
-          <div className="bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-blue-500/30 rounded-xl p-8 mb-10">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-600/20 border border-blue-500/40 rounded-full mb-4">
-                  <span className="text-xs font-medium text-blue-300 uppercase tracking-wider">✨ New Feature</span>
-                </div>
-                <h3 className="text-2xl font-semibold text-text-primary mb-3">
-                  🎙️ Intelligent Interactive Podcasts
-                </h3>
-                <p className="text-text-secondary mb-6 max-w-2xl">
-                  Transform your documents into engaging multi-voice podcasts with real-time Q&A powered by AI. 
-                  Ask questions during playback and get instant voice responses with <span className="text-blue-400 font-medium">&lt;1s latency</span>.
-                </p>
-                <div className="flex flex-wrap gap-2 mb-6">
-                  <span className="px-3 py-1 bg-surface border border-border rounded-full text-xs text-text-secondary">
-                    3 AI Voices
-                  </span>
-                  <span className="px-3 py-1 bg-surface border border-border rounded-full text-xs text-text-secondary">
-                    Real-time Q&A
-                  </span>
-                  <span className="px-3 py-1 bg-surface border border-border rounded-full text-xs text-text-secondary">
-                    Knowledge Graph
-                  </span>
-                  <span className="px-3 py-1 bg-surface border border-border rounded-full text-xs text-text-secondary">
-                    Chapter Navigation
-                  </span>
-                </div>
-                <div className="flex gap-3">
-                  <Link href="/intelligent-podcast/new" className="btn-primary inline-flex">
-                    <FiPlus className="w-4 h-4" strokeWidth={1.5} />
-                    Create Podcast
-                  </Link>
-                  <Link href="/intelligent-podcast" className="btn-secondary inline-flex">
-                    <FiMic className="w-4 h-4" strokeWidth={1.5} />
-                    View All
-                  </Link>
-                </div>
-              </div>
-              <div className="hidden lg:block text-8xl opacity-20">
-                🎧
-              </div>
-            </div>
-          </div>
-
           {/* Recent Lessons */}
           <section className="mb-10">
               <div className="flex items-center justify-between mb-4">
