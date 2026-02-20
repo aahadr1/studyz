@@ -1,16 +1,16 @@
 /**
  * Gemini Live API Client for real-time voice conversations
- * 
+ *
  * Uses WebSocket connection to Google's Gemini Live API for low-latency
  * bidirectional voice-to-voice communication during podcast interruptions.
- * 
+ *
  * Audio specs:
  * - Input: 16-bit PCM, 16kHz, mono, little-endian
  * - Output: 16-bit PCM, 24kHz, mono, little-endian
  */
 
 const GEMINI_LIVE_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent'
-const GEMINI_LIVE_MODEL = 'models/gemini-2.0-flash-live-001'
+const GEMINI_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025'
 
 const INPUT_SAMPLE_RATE = 16000
 const OUTPUT_SAMPLE_RATE = 24000
@@ -40,8 +40,8 @@ export class GeminiLiveClient {
   private state: GeminiLiveState = 'disconnected'
   private config: GeminiLiveConfig
   private audioContext: AudioContext | null = null
+  private inputAudioContext: AudioContext | null = null
   private mediaStream: MediaStream | null = null
-  private audioWorklet: AudioWorkletNode | null = null
   private scriptProcessor: ScriptProcessorNode | null = null
   private outputQueue: ArrayBuffer[] = []
   private isPlayingAudio = false
@@ -100,7 +100,9 @@ export class GeminiLiveClient {
 
       this.ws.onclose = (event) => {
         console.log('[GeminiLive] WebSocket closed:', event.code, event.reason)
-        this.setState('disconnected')
+        if (this.state !== 'error') {
+          this.setState('disconnected')
+        }
         this.config.onConnectionChange(false)
       }
     } catch (error) {
@@ -114,7 +116,7 @@ export class GeminiLiveClient {
   private setState(state: GeminiLiveState): void {
     this.state = state
     this.config.onConnectionChange(state === 'ready' || state === 'listening' || state === 'model_speaking')
-    
+
     if (state === 'model_speaking') {
       this.config.onModelSpeaking(true)
     } else if (state === 'listening' || state === 'ready') {
@@ -122,7 +124,7 @@ export class GeminiLiveClient {
     }
   }
 
-  private sendSetupMessage(context: ConversationContext): void {
+  private sendSetupMessage(_context: ConversationContext): void {
     if (!this.ws) return
 
     const setupMessage = {
@@ -149,13 +151,13 @@ export class GeminiLiveClient {
     }
 
     this.ws.send(JSON.stringify(setupMessage))
-    console.log('[GeminiLive] Setup message sent')
+    console.log('[GeminiLive] Setup message sent with model:', GEMINI_LIVE_MODEL)
   }
 
   private async handleServerMessage(data: string | Blob): Promise<void> {
     try {
       let message: any
-      
+
       if (data instanceof Blob) {
         const text = await data.text()
         message = JSON.parse(text)
@@ -187,7 +189,7 @@ export class GeminiLiveClient {
               this.playNextAudioChunk()
               this.config.onAudioChunk(audioData)
             }
-            
+
             // Handle text transcript
             if (part.text) {
               this.config.onTranscript(part.text, 'model', false)
@@ -198,7 +200,6 @@ export class GeminiLiveClient {
         // Check if turn is complete
         if (content.turnComplete) {
           console.log('[GeminiLive] Model turn complete')
-          // Wait for audio to finish playing before transitioning state
           if (this.outputQueue.length === 0 && !this.isPlayingAudio) {
             this.setState('listening')
           }
@@ -212,7 +213,7 @@ export class GeminiLiveClient {
         }
       }
 
-      // Handle tool calls if needed (for future expansion)
+      // Handle tool calls if needed
       if (message.toolCall) {
         console.log('[GeminiLive] Tool call received:', message.toolCall)
       }
@@ -226,18 +227,18 @@ export class GeminiLiveClient {
     if (!this.audioContext || !this.mediaStream || !this.ws) return
 
     // Create input audio context at 16kHz for capture
-    const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+    this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
       sampleRate: INPUT_SAMPLE_RATE,
     })
 
-    const source = inputAudioContext.createMediaStreamSource(this.mediaStream)
-    
+    const source = this.inputAudioContext.createMediaStreamSource(this.mediaStream)
+
     // Use ScriptProcessor for audio capture (more compatible than AudioWorklet)
     const bufferSize = 4096
-    this.scriptProcessor = inputAudioContext.createScriptProcessor(bufferSize, 1, 1)
+    this.scriptProcessor = this.inputAudioContext.createScriptProcessor(bufferSize, 1, 1)
 
     source.connect(this.scriptProcessor)
-    this.scriptProcessor.connect(inputAudioContext.destination)
+    this.scriptProcessor.connect(this.inputAudioContext.destination)
 
     this.scriptProcessor.onaudioprocess = (event) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
@@ -245,14 +246,14 @@ export class GeminiLiveClient {
 
       const inputData = event.inputBuffer.getChannelData(0)
       const pcm16 = this.float32ToPCM16(inputData)
-      
-      // Send audio as realtime input
+
+      // Send audio using the current API format
       const message = {
         realtimeInput: {
-          mediaChunks: [{
-            mimeType: 'audio/pcm',
+          audio: {
+            mimeType: 'audio/pcm;rate=16000',
             data: this.arrayBufferToBase64(pcm16),
-          }],
+          },
         },
       }
 
@@ -270,13 +271,12 @@ export class GeminiLiveClient {
     const pcmData = this.outputQueue.shift()!
 
     try {
-      // Convert PCM to AudioBuffer
       const audioBuffer = this.pcmToAudioBuffer(pcmData)
-      
+
       const source = this.audioContext.createBufferSource()
       source.buffer = audioBuffer
       source.connect(this.audioContext.destination)
-      
+
       source.onended = () => {
         this.isPlayingAudio = false
         if (this.outputQueue.length > 0) {
@@ -297,14 +297,14 @@ export class GeminiLiveClient {
   private pcmToAudioBuffer(pcmData: ArrayBuffer): AudioBuffer {
     const pcm16 = new Int16Array(pcmData)
     const float32 = new Float32Array(pcm16.length)
-    
+
     for (let i = 0; i < pcm16.length; i++) {
       float32[i] = pcm16[i] / 32768
     }
 
     const audioBuffer = this.audioContext!.createBuffer(1, float32.length, OUTPUT_SAMPLE_RATE)
     audioBuffer.getChannelData(0).set(float32)
-    
+
     return audioBuffer
   }
 
@@ -344,6 +344,11 @@ export class GeminiLiveClient {
     if (this.ws) {
       this.ws.close()
       this.ws = null
+    }
+
+    if (this.inputAudioContext) {
+      this.inputAudioContext.close()
+      this.inputAudioContext = null
     }
 
     if (this.audioContext) {

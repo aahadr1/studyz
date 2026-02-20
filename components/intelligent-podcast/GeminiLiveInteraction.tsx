@@ -63,7 +63,9 @@ export function GeminiLiveInteraction({
       })
 
       if (!response.ok) {
-        throw new Error('Failed to fetch podcast context')
+        const errData = await response.json().catch(() => ({}))
+        console.error('[GeminiLive] Realtime context error:', response.status, errData)
+        throw new Error(errData?.details || errData?.error || `Failed to fetch podcast context (${response.status})`)
       }
 
       const { 
