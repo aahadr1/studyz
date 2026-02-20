@@ -39,23 +39,45 @@ export async function generateMultiVoiceAudio(
   language: string,
   onProgress?: (current: number, total: number, step: string) => Promise<void> | void
 ): Promise<PodcastSegment[]> {
-  console.log(`[Audio] generateMultiVoiceAudio: ${segments.length} segments, multi-speaker mode`)
+  console.log(`[Audio] generateMultiVoiceAudio START:`, {
+    segmentCount: segments.length,
+    voiceProfileCount: voiceProfiles.length,
+    language,
+    voiceProfiles: voiceProfiles.map(v => ({ role: v.role, voiceId: v.voiceId })),
+  })
 
   if (segments.length === 0) {
-    console.warn('[Audio] No segments provided')
+    console.warn('[Audio] No segments provided, returning empty array')
     return []
   }
 
   // Pre-clean text for all segments (TTS-ready: no markdown, no emojis)
+  console.log('[Audio] Pre-cleaning text for all segments...')
   const cleanedTexts = await Promise.all(
-    segments.map(s =>
-      makeTtsReadyText(s.text, null, language as any).catch(() => s.text)
+    segments.map((s, idx) =>
+      makeTtsReadyText(s.text, null, language as any)
+        .then(cleaned => {
+          console.log(`[Audio] Segment ${idx} cleaned: ${s.text.length} -> ${cleaned.length} chars`)
+          return cleaned
+        })
+        .catch(err => {
+          console.warn(`[Audio] Segment ${idx} text cleaning failed, using original:`, err.message)
+          return s.text
+        })
     )
   )
 
+  console.log('[Audio] Text cleaning complete, checking for empty texts:', {
+    totalSegments: segments.length,
+    emptyTexts: cleanedTexts.filter(t => !t.trim()).length,
+    nonEmptyTexts: cleanedTexts.filter(t => t.trim()).length,
+  })
+
   // Group segments into multi-speaker chunks
   const chunks = buildChunks(segments, cleanedTexts)
-  console.log(`[Audio] Grouped ${segments.length} segments into ${chunks.length} multi-speaker chunks`)
+  console.log(`[Audio] Grouped ${segments.length} segments into ${chunks.length} multi-speaker chunks`, {
+    chunkSizes: chunks.map(c => c.indices.length),
+  })
 
   // Result array aligned with original segments
   const results: Array<{ audioUrl: string; duration: number }> = new Array(segments.length)
@@ -92,8 +114,11 @@ export async function generateMultiVoiceAudio(
 
     if (validInputs.length >= 2) {
       // Multi-speaker path
+      console.log(`[Audio] Processing multi-speaker chunk: ${validInputs.length} valid inputs from ${indices.length} total segments`)
       try {
         const { results: chunkResults } = await generateGeminiMultiSpeakerChunk(validInputs, language)
+        console.log(`[Audio] Multi-speaker API returned ${chunkResults.length} results`)
+        
         const resultById = new Map(chunkResults.map(r => [r.id, r]))
         for (const origIdx of indices) {
           const seg = segments[origIdx]
@@ -101,22 +126,31 @@ export async function generateMultiVoiceAudio(
           const result = resultById.get(id)
           if (result) {
             results[origIdx] = { audioUrl: result.audioUrl, duration: result.duration }
+            console.log(`[Audio] Segment ${origIdx} (${id}): audioUrl=${result.audioUrl ? 'present' : 'MISSING'}, duration=${result.duration}`)
           } else {
             results[origIdx] = { audioUrl: '', duration: 0 }
+            console.warn(`[Audio] Segment ${origIdx} (${id}): NO RESULT from multi-speaker API`)
           }
           completedSegments++
         }
-        console.log(`[Audio] Multi-speaker chunk done: ${indices.length} segments`)
+        console.log(`[Audio] Multi-speaker chunk done: ${indices.length} segments processed`)
       } catch (err: any) {
-        console.error(`[Audio] Multi-speaker chunk failed, falling back to single-speaker:`, err?.message ?? err)
+        console.error(`[Audio] Multi-speaker chunk FAILED, falling back to single-speaker:`, {
+          error: err?.message ?? err,
+          stack: err?.stack,
+          validInputsCount: validInputs.length,
+          indicesCount: indices.length,
+        })
         await fallbackSingleSpeaker(indices, segments, cleanedTexts, language, results)
         completedSegments += indices.length
       }
     } else if (validInputs.length === 1) {
       // Only one valid segment in chunk — use single-speaker with consistent voice
+      console.log(`[Audio] Processing single-speaker chunk: 1 valid input from ${indices.length} total segments`)
       const origIdx = indices.find(i => cleanedTexts[i].trim().length > 0) ?? indices[0]
       const voiceProfile = getConsistentVoiceProfile(segments[origIdx].speaker, voiceProfiles)
       results[origIdx] = await generateSingleSegment(cleanedTexts[origIdx], voiceProfile, language)
+      console.log(`[Audio] Single-speaker result: audioUrl=${results[origIdx].audioUrl ? 'present' : 'MISSING'}, duration=${results[origIdx].duration}`)
       // Mark empty segments
       for (const i of indices) {
         if (i !== origIdx) results[i] = { audioUrl: '', duration: 0 }
@@ -124,6 +158,7 @@ export async function generateMultiVoiceAudio(
       completedSegments += indices.length
     } else {
       // All segments in chunk are empty
+      console.warn(`[Audio] All segments in chunk are empty (${indices.length} segments), skipping generation`)
       for (const i of indices) {
         results[i] = { audioUrl: '', duration: 0 }
       }
@@ -146,7 +181,21 @@ export async function generateMultiVoiceAudio(
   }))
 
   const successCount = processed.filter(s => s.audioUrl && s.audioUrl.length > 0).length
-  console.log(`[Audio] Generation complete: ${successCount}/${segments.length} segments successful`)
+  const failedCount = processed.length - successCount
+  
+  console.log(`[Audio] generateMultiVoiceAudio COMPLETE:`, {
+    totalSegments: segments.length,
+    successCount,
+    failedCount,
+    successRate: `${Math.round((successCount / segments.length) * 100)}%`,
+  })
+
+  if (failedCount > 0) {
+    console.warn(`[Audio] Failed segments details:`, processed
+      .map((s, idx) => ({ idx, id: s.id, hasAudio: !!s.audioUrl }))
+      .filter(s => !s.hasAudio)
+    )
+  }
 
   return processed
 }
@@ -198,18 +247,36 @@ async function fallbackSingleSpeaker(
   language: string,
   results: Array<{ audioUrl: string; duration: number }>
 ): Promise<void> {
+  console.log(`[Audio] fallbackSingleSpeaker: processing ${indices.length} segments individually`)
+  
   for (let i = 0; i < indices.length; i++) {
     const origIdx = indices[i]
     const seg = segments[origIdx]
     const text = cleanedTexts[origIdx]
+    
+    console.log(`[Audio] Fallback segment ${i + 1}/${indices.length} (origIdx=${origIdx}):`, {
+      hasText: !!text.trim(),
+      textLength: text.length,
+      speaker: seg.speaker,
+    })
+    
     if (!text.trim()) {
+      console.log(`[Audio] Fallback segment ${origIdx}: empty text, skipping`)
       results[origIdx] = { audioUrl: '', duration: 0 }
       continue
     }
+    
     const voiceProfile = getConsistentVoiceProfile(seg.speaker, [])
     results[origIdx] = await generateSingleSegment(text, voiceProfile, language)
+    console.log(`[Audio] Fallback segment ${origIdx} result:`, {
+      hasAudioUrl: !!results[origIdx].audioUrl,
+      duration: results[origIdx].duration,
+    })
+    
     if (i < indices.length - 1) await delay(200)
   }
+  
+  console.log(`[Audio] fallbackSingleSpeaker complete: ${indices.length} segments processed`)
 }
 
 /**
@@ -245,14 +312,31 @@ async function generateSingleSegment(
   voiceProfile: VoiceProfile,
   language: string,
 ): Promise<{ audioUrl: string; duration: number }> {
+  console.log('[Audio] generateSingleSegment called', {
+    textLength: text?.length ?? 0,
+    hasText: !!text?.trim(),
+    voiceRole: voiceProfile.role,
+  })
+
   if (!text || text.trim().length === 0) {
+    console.warn('[Audio] generateSingleSegment: empty text, returning empty result')
     return { audioUrl: '', duration: 0 }
   }
   try {
     const result = await generateGeminiTTSAudio(text, voiceProfile, language)
+    console.log('[Audio] generateSingleSegment success:', {
+      hasAudioUrl: !!result.audioUrl,
+      audioUrlLength: result.audioUrl?.length ?? 0,
+      duration: result.duration,
+    })
     return { audioUrl: result.audioUrl, duration: result.duration }
   } catch (err: any) {
-    console.error(`[Audio] Single-speaker fallback failed:`, err?.message ?? err)
+    console.error(`[Audio] Single-speaker generation failed:`, {
+      error: err?.message ?? err,
+      stack: err?.stack,
+      textLength: text.length,
+      voiceRole: voiceProfile.role,
+    })
     return { audioUrl: '', duration: 0 }
   }
 }

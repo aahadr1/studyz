@@ -606,8 +606,20 @@ OUTPUT:
 
     let batchWithAudio: PodcastSegment[]
     try {
-      console.log(`[Podcast ${podcastId}] Starting audio generation: validBatch=${validBatch.length}, provider=gemini, language=${finalLanguage}`)
-      console.log(`[Podcast ${podcastId}] First 3 segment IDs in batch:`, validBatch.slice(0, 3).map(s => s.id))
+      console.log(`[Podcast ${podcastId}] Starting audio generation:`, {
+        validBatchSize: validBatch.length,
+        provider: 'gemini',
+        language: finalLanguage,
+        hasGeminiKey: !!process.env.GEMINI_API_KEY,
+        geminiKeyPrefix: process.env.GEMINI_API_KEY ? `${process.env.GEMINI_API_KEY.substring(0, 8)}...` : 'none',
+      })
+      console.log(`[Podcast ${podcastId}] First 3 segment details:`, validBatch.slice(0, 3).map(s => ({
+        id: s.id,
+        speaker: s.speaker,
+        textLength: s.text?.length ?? 0,
+        textPreview: s.text?.substring(0, 50),
+      })))
+      
       batchWithAudio = await generateMultiVoiceAudio(
         validBatch,
         voiceProfiles,
@@ -621,18 +633,53 @@ OUTPUT:
           await updateProgress(progressPct, detailedMessage, true, user.id)
         }
       )
+      
       console.log(`[Podcast ${podcastId}] Audio generation completed for batch`)
+      console.log(`[Podcast ${podcastId}] Batch results summary:`, {
+        totalSegments: batchWithAudio.length,
+        segmentsWithAudio: batchWithAudio.filter(s => s.audioUrl && s.audioUrl.length > 0).length,
+        segmentsWithoutAudio: batchWithAudio.filter(s => !s.audioUrl || s.audioUrl.length === 0).length,
+      })
+
+      // Log details for segments without audio
+      const segmentsWithoutAudio = batchWithAudio.filter(s => !s.audioUrl || s.audioUrl.length === 0)
+      if (segmentsWithoutAudio.length > 0) {
+        console.warn(`[Podcast ${podcastId}] Segments WITHOUT audio URLs:`, segmentsWithoutAudio.map(s => ({
+          id: s.id,
+          speaker: s.speaker,
+          textLength: s.text?.length ?? 0,
+          textPreview: s.text?.substring(0, 50),
+          hasAudioUrl: !!s.audioUrl,
+          audioUrlLength: s.audioUrl?.length ?? 0,
+        })))
+      }
 
       // Detect silent total failure (e.g., provider credentials/quota issues) so we don't loop forever.
       const withAudioCount = batchWithAudio.filter(s => s.audioUrl && s.audioUrl.length > 0).length
       if (withAudioCount === 0) {
+        console.error(`[Podcast ${podcastId}] CRITICAL: No audio URLs generated for ANY segment in batch!`, {
+          batchSize: batchWithAudio.length,
+          provider: 'gemini',
+          hasGeminiKey: !!process.env.GEMINI_API_KEY,
+          allSegmentsDetails: batchWithAudio.map(s => ({
+            id: s.id,
+            speaker: s.speaker,
+            textLength: s.text?.length ?? 0,
+            hasAudioUrl: !!s.audioUrl,
+          })),
+        })
         throw new Error(
           `Audio provider returned no audio URLs for batch (provider=gemini). ` +
           `Check GEMINI_API_KEY/quota; generation aborted to avoid loop.`
         )
       }
     } catch (audioError: any) {
-      console.error(`[Podcast ${podcastId}] Audio generation failed:`, audioError)
+      console.error(`[Podcast ${podcastId}] Audio generation FAILED:`, {
+        errorMessage: audioError.message,
+        errorName: audioError.name,
+        errorStack: audioError.stack,
+        batchSize: validBatch?.length ?? 0,
+      })
       throw new Error(`Audio generation failed: ${audioError.message}`)
     }
 

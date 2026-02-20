@@ -36,7 +36,15 @@ const MULTI_SPEAKER_CHAR_LIMIT = 3000
 
 function getGeminiKey(): string {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
-  if (!key) throw new Error('GEMINI_API_KEY (AI Studio) is not set')
+  console.log('[GeminiTTS] getGeminiKey check:', {
+    hasGeminiApiKey: !!process.env.GEMINI_API_KEY,
+    hasGoogleApiKey: !!process.env.GOOGLE_API_KEY,
+    usingKey: key ? `${key.substring(0, 8)}...` : 'none',
+  })
+  if (!key) {
+    console.error('[GeminiTTS] CRITICAL: No API key found! Check environment variables.')
+    throw new Error('GEMINI_API_KEY (AI Studio) is not set')
+  }
   return key
 }
 
@@ -70,11 +78,24 @@ export async function generateGeminiTTSAudio(
   voiceProfile: VoiceProfile,
   _language: string
 ): Promise<TTSResult> {
-  if (!text?.trim()) throw new Error('Cannot generate audio for empty text')
+  console.log('[GeminiTTS] generateGeminiTTSAudio called', {
+    textLength: text?.length ?? 0,
+    textPreview: text?.substring(0, 100),
+    voiceRole: voiceProfile.role,
+    voiceId: voiceProfile.voiceId,
+  })
+
+  if (!text?.trim()) {
+    console.warn('[GeminiTTS] Empty text provided, throwing error')
+    throw new Error('Cannot generate audio for empty text')
+  }
+
   const trimmed = text.length > 5000 ? text.slice(0, 5000) : text
   
   // Use canonical voice to ensure consistency across the podcast
   const voiceName = ROLE_VOICE_MAP[voiceProfile.role] || voiceProfile.voiceId || 'Aoede'
+
+  console.log('[GeminiTTS] Using voice:', { voiceName, role: voiceProfile.role })
 
   const body = {
     contents: [{ parts: [{ text: trimmed }] }],
@@ -88,10 +109,23 @@ export async function generateGeminiTTSAudio(
     },
   }
 
-  const audioBase64 = await callGeminiTTS(body)
-  const audioUrl = buildAudioUrl(audioBase64)
-  const duration = estimateDuration(trimmed)
-  return { audioUrl, duration }
+  try {
+    const audioBase64 = await callGeminiTTS(body)
+    const audioUrl = buildAudioUrl(audioBase64)
+    const duration = estimateDuration(trimmed)
+    console.log('[GeminiTTS] Audio generated successfully', {
+      audioUrlLength: audioUrl.length,
+      duration,
+    })
+    return { audioUrl, duration }
+  } catch (error: any) {
+    console.error('[GeminiTTS] generateGeminiTTSAudio failed:', {
+      error: error.message,
+      voiceName,
+      textLength: trimmed.length,
+    })
+    throw error
+  }
 }
 
 // ─── Multi-speaker ─────────────────────────────────────────────────────────
@@ -108,7 +142,14 @@ export async function generateGeminiMultiSpeakerChunk(
   segments: MultiSpeakerSegmentInput[],
   _language: string
 ): Promise<MultiSpeakerChunkResult> {
+  console.log('[GeminiTTS] generateGeminiMultiSpeakerChunk called', {
+    segmentCount: segments.length,
+    segmentIds: segments.map(s => s.id),
+    roles: segments.map(s => s.role),
+  })
+
   if (segments.length < 2) {
+    console.error('[GeminiTTS] Multi-speaker requires at least 2 segments, got:', segments.length)
     throw new Error('Multi-speaker chunk requires at least 2 segments')
   }
 
@@ -119,6 +160,11 @@ export async function generateGeminiMultiSpeakerChunk(
       return `${displayName}: ${s.text.trim().replace(/\s+/g, ' ')}`
     })
     .join('\n')
+
+  console.log('[GeminiTTS] Multi-speaker script:', {
+    scriptLength: script.length,
+    scriptPreview: script.substring(0, 200),
+  })
 
   // Build speaker voice config with CANONICAL voices only
   // This ensures Alex and Jamie always sound the same
@@ -143,11 +189,26 @@ export async function generateGeminiMultiSpeakerChunk(
     },
   }
 
-  const audioBase64 = await callGeminiTTS(body)
+  try {
+    const audioBase64 = await callGeminiTTS(body)
 
-  // Split the combined PCM proportionally by word count per segment
-  const results = splitPcmByWordCount(audioBase64, segments)
-  return { results }
+    // Split the combined PCM proportionally by word count per segment
+    console.log('[GeminiTTS] Splitting multi-speaker audio by word count...')
+    const results = splitPcmByWordCount(audioBase64, segments)
+    console.log('[GeminiTTS] Multi-speaker chunk generated successfully', {
+      resultCount: results.length,
+      resultIds: results.map(r => r.id),
+      hasAudioUrls: results.map(r => !!r.audioUrl),
+    })
+    return { results }
+  } catch (error: any) {
+    console.error('[GeminiTTS] generateGeminiMultiSpeakerChunk failed:', {
+      error: error.message,
+      segmentCount: segments.length,
+      scriptLength: script.length,
+    })
+    throw error
+  }
 }
 
 /**
@@ -171,6 +232,12 @@ async function callGeminiTTS(body: object): Promise<string> {
   const apiKey = getGeminiKey()
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
 
+  console.log('[GeminiTTS] Calling Gemini TTS API...', {
+    model: GEMINI_TTS_MODEL,
+    hasApiKey: !!apiKey,
+    apiKeyPrefix: apiKey ? `${apiKey.substring(0, 8)}...` : 'none',
+  })
+
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 60000)
 
@@ -182,12 +249,29 @@ async function callGeminiTTS(body: object): Promise<string> {
       body: JSON.stringify(body),
       signal: controller.signal,
     })
+    console.log('[GeminiTTS] API response received', {
+      status: res.status,
+      statusText: res.statusText,
+      ok: res.ok,
+    })
+  } catch (fetchError: any) {
+    console.error('[GeminiTTS] Fetch error:', {
+      message: fetchError.message,
+      name: fetchError.name,
+      isAbort: fetchError.name === 'AbortError',
+    })
+    throw fetchError
   } finally {
     clearTimeout(timer)
   }
 
   if (!res.ok) {
     const errText = await res.text()
+    console.error('[GeminiTTS] API error response:', {
+      status: res.status,
+      statusText: res.statusText,
+      body: errText.substring(0, 500),
+    })
     const hint =
       res.status === 401 ? ' | Hint: Gemini TTS needs an AI Studio key (GEMINI_API_KEY).' :
       res.status === 429 ? ' | Hint: Gemini TTS rate limit exceeded. Wait and retry.' : ''
@@ -205,12 +289,28 @@ async function callGeminiTTS(body: object): Promise<string> {
     }>
   }
 
+  console.log('[GeminiTTS] API response parsed:', {
+    hasCandidates: !!data.candidates,
+    candidatesCount: data.candidates?.length ?? 0,
+    firstCandidateHasContent: !!data.candidates?.[0]?.content,
+    firstCandidatePartsCount: data.candidates?.[0]?.content?.parts?.length ?? 0,
+  })
+
   const audioBase64 = data.candidates
     ?.flatMap(c => c.content?.parts || [])
     ?.map(p => p.inlineData?.data || p.inline_data?.data)
     ?.find(d => !!d)
 
-  if (!audioBase64) throw new Error('Gemini TTS returned no audio data')
+  if (!audioBase64) {
+    console.error('[GeminiTTS] No audio data found in response:', {
+      fullResponse: JSON.stringify(data).substring(0, 1000),
+    })
+    throw new Error('Gemini TTS returned no audio data')
+  }
+
+  console.log('[GeminiTTS] Audio data extracted successfully', {
+    audioBase64Length: audioBase64.length,
+  })
   return audioBase64
 }
 
@@ -235,11 +335,28 @@ function splitPcmByWordCount(
   pcmBase64: string,
   segments: MultiSpeakerSegmentInput[]
 ): Array<{ id: string; audioUrl: string; duration: number }> {
+  console.log('[GeminiTTS] splitPcmByWordCount:', {
+    pcmBase64Length: pcmBase64.length,
+    segmentCount: segments.length,
+  })
+
   const pcmBytes = Buffer.from(pcmBase64, 'base64')
   const totalSamples = pcmBytes.length / PCM_BYTES_PER_SAMPLE
 
+  console.log('[GeminiTTS] PCM buffer info:', {
+    pcmBytesLength: pcmBytes.length,
+    totalSamples,
+    estimatedDurationSec: totalSamples / PCM_SAMPLE_RATE,
+  })
+
   const wordCounts = segments.map(s => Math.max(1, s.text.split(/\s+/).filter(Boolean).length))
   const totalWords = wordCounts.reduce((a, b) => a + b, 0)
+
+  console.log('[GeminiTTS] Word count distribution:', {
+    wordCounts,
+    totalWords,
+    segmentTexts: segments.map(s => ({ id: s.id, words: wordCounts[segments.indexOf(s)], textPreview: s.text.substring(0, 50) })),
+  })
 
   const results: Array<{ id: string; audioUrl: string; duration: number }> = []
   let sampleOffset = 0
@@ -263,12 +380,31 @@ function splitPcmByWordCount(
     const byteEnd = byteStart + samplesForSegment * PCM_BYTES_PER_SAMPLE
     const segmentPcm = pcmBytes.slice(byteStart, byteEnd)
 
+    console.log(`[GeminiTTS] Splitting segment ${i} (${segments[i].id}):`, {
+      sampleOffset,
+      samplesForSegment,
+      byteStart,
+      byteEnd,
+      segmentPcmLength: segmentPcm.length,
+    })
+
     const audioUrl = pcmBufToWavDataUrl(segmentPcm, PCM_SAMPLE_RATE)
     const duration = Math.max(1, samplesForSegment / PCM_SAMPLE_RATE)
+
+    console.log(`[GeminiTTS] Segment ${i} result:`, {
+      id: segments[i].id,
+      audioUrlLength: audioUrl.length,
+      duration,
+    })
 
     results.push({ id: segments[i].id, audioUrl, duration })
     sampleOffset += samplesForSegment
   }
+
+  console.log('[GeminiTTS] splitPcmByWordCount complete:', {
+    resultCount: results.length,
+    allHaveAudioUrls: results.every(r => r.audioUrl && r.audioUrl.length > 0),
+  })
 
   return results
 }
