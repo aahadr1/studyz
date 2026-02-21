@@ -50,7 +50,7 @@ export async function generateIntelligentScript(
 
   const totalWords = result.segments.reduce((sum, s) => sum + countWords(s.text), 0)
   const estimatedMinutes = estimateMinutesFromWords(totalWords, 150)
-  
+
   console.log(
     `[Script] Generated: ${result.segments.length} segments, ${totalWords} words, ~${estimatedMinutes.toFixed(1)} min estimated`
   )
@@ -76,7 +76,7 @@ export async function generateIntelligentScript(
 
 /**
  * Generate the complete podcast as a natural conversation.
- * This creates a single, cohesive podcast with ONE introduction, 
+ * This creates a single, cohesive podcast with ONE introduction,
  * natural topic transitions, and ONE conclusion.
  */
 async function generatePodcastScript(
@@ -100,13 +100,10 @@ async function generatePodcastScript(
     .map((c) => `- ${c.name}: ${c.description}`)
     .join('\n')
 
-  const hostDescription = config.voiceProfiles.find(v => v.role === 'host')?.description || 'A curious and engaging host'
-  const expertDescription = config.voiceProfiles.find(v => v.role === 'expert')?.description || 'A knowledgeable and approachable expert'
-
-  // Select prompt based on language - French gets French prompt, everything else gets English prompt with language instruction
+  // Select prompt based on language
   const systemInstruction = config.language === 'fr'
-    ? createFrenchPrompt(config, targetWords, targetSeconds, hostDescription, expertDescription)
-    : createEnglishPrompt(config, targetWords, targetSeconds, hostDescription, expertDescription, config.language)
+    ? createFrenchPrompt(config, targetWords, targetSeconds)
+    : createEnglishPrompt(config, targetWords, targetSeconds, config.language)
 
   const prompt = `SOURCE CONTENT:
 ${documentsSummary}
@@ -114,13 +111,13 @@ ${documentsSummary}
 IDENTIFIED TOPICS:
 ${topicsSummary}
 
-${config.userPrompt ? `USER'S SPECIFIC REQUEST:\n${config.userPrompt}\n\n` : ''}Generate the complete podcast script now.`
+${config.userPrompt ? `USER'S SPECIFIC REQUEST:\n${config.userPrompt}\n\n` : ''}Generate the complete podcast script now. Remember: plan first (internally), then write the full script.`
 
   const raw = await runGemini3Flash({
     prompt,
     systemInstruction,
     thinkingLevel: 'high',
-    temperature: 0.8,
+    temperature: 0.85,
     topP: 0.95,
     maxOutputTokens: 65535,
   })
@@ -215,85 +212,190 @@ function getLanguageName(code: string): string {
   return names[code] || 'English'
 }
 
+// ─── CHARACTER BIOS ──────────────────────────────────────────────────────────
+
+const ALEX_BIO_EN = `Alex is 28, originally from Portland, Oregon. He grew up in a chaotic household — his mom was a high school history teacher who talked about the French Revolution at dinner, his dad was a jazz musician who toured half the year. Alex learned early that the most interesting things happen when you connect dots that nobody thinks belong together.
+
+He studied journalism at Northwestern, but what really shaped him was his gap year after college: eight months backpacking through Southeast Asia, where he picked up conversational Thai, got food poisoning four times, and realized that the best stories come from actually listening — not from having the cleverest questions prepared. He worked at Chicago Public Radio for three years, producing segments for a science show. He was good at it, but got frustrated by how often brilliant researchers would come on the show and the audience would tune out because nobody bothered to find the human angle.
+
+He started this podcast because he genuinely believes that every topic — no matter how dry it looks on paper — has a way in that makes people lean forward. He has zero patience for the "let me dumb this down for you" approach. His philosophy: the audience is smart, they just need the right door into the subject.
+
+Outside work, Alex plays bass guitar in a garage band that has never performed for more than fifteen people. He runs 5Ks but never trains properly. He always has three books going at once — usually one novel, one nonfiction, one graphic novel. He's terrible at cooking but insists on trying. He has a rescue dog named Coltrane.
+
+As an interviewer, Alex's superpower is that he actually listens. He doesn't just wait for his turn to talk. When something surprises him, you hear it — a genuine "wait, what?" or a laugh or a moment of confusion that he doesn't hide. He asks follow-up questions that show he's been thinking, not performing. He's not afraid to say "I don't get it" when he doesn't, and he's not afraid to push back when something doesn't sit right. He treats every conversation like he's genuinely trying to understand something, because he is.`
+
+const JAMIE_BIO_EN = `Jamie is 32, originally from a small village in the Yorkshire Dales in England. She was the kid who took apart the family toaster at age seven — not to break it, but because she wanted to understand how the spring mechanism timed the browning. Her parents, both primary school teachers, learned early that saying "because that's just how it works" would earn them a twenty-minute interrogation.
+
+She got a scholarship to Cambridge for natural sciences, where she was the student who showed up to lectures with questions the professor hadn't considered. Then a PhD at Stanford in cognitive science, where she studied how people actually learn — not how textbooks say they should. Her dissertation was on the "illusion of understanding," the gap between thinking you know something and actually being able to use it. Two years as a postdoc at MIT confirmed what she suspected: academia rewards publishing, not teaching, and she cared more about the latter.
+
+She quit to become a science communicator and hasn't looked back. She writes a popular blog, gives talks at schools, and consults for educational tech companies. She's on this podcast because she believes knowledge shouldn't be locked behind jargon and paywalls — and because Alex once cornered her at a conference and wouldn't stop asking questions until she agreed.
+
+Jamie has a dry, understated sense of humor that catches people off guard. She'll drop a devastating observation with a completely straight delivery and wait for it to land. When she's passionate about a topic — which is often — she can go on for minutes without stopping, building layers of explanation, circling back to earlier points, adding examples on top of examples. She doesn't dumb things down; she finds the right analogy that makes everything click. Her teaching philosophy: if you can't explain it to a curious fifteen-year-old, you haven't understood it deeply enough yourself.
+
+She collects antique scientific instruments and has a 19th-century brass microscope on her desk. She goes hiking every weekend regardless of weather. She reads poetry — mostly Seamus Heaney — and has strong opinions about tea. She has a cat named Schrödinger, which she insists is "not ironic, it's appropriate."`
+
+const ALEX_BIO_FR = `Alex a 28 ans, originaire de Lyon. Il a grandi dans un appartement du 7e arrondissement, entre une mère prof d'histoire au lycée qui racontait la Commune de Paris pendant le dîner et un père musicien de jazz qui jouait au Hot Club les vendredis soir. Alex a compris très tôt que les choses les plus fascinantes arrivent quand on fait des liens que personne d'autre ne fait.
+
+Il a étudié la communication et la philosophie à Sciences Po Lyon, mais ce qui l'a vraiment façonné, c'est son année de césure : sept mois à voyager — le Japon d'abord, où il a appris les bases du japonais en travaillant dans un izakaya à Osaka, puis le Pérou, où il a failli mourir de déshydratation en faisant le trek du Salkantay, et enfin le Maroc, où un vieux professeur de mathématiques à Fès lui a expliqué la géométrie arabe d'une manière qu'aucun cours n'avait jamais réussi à faire. Il a compris là-bas que les meilleures explications viennent de gens qui savent écouter avant de parler.
+
+Il a travaillé trois ans comme journaliste à France Inter, dans une émission de vulgarisation scientifique. Il était bon, mais il s'est frustré de voir des chercheurs brillants passer à l'antenne sans que personne ne prenne le temps de trouver l'angle humain. Il a lancé ce podcast parce qu'il croit profondément que chaque sujet — même le plus aride sur le papier — a une porte d'entrée qui donne envie de s'y plonger. Sa philosophie : l'auditeur est intelligent, il a juste besoin qu'on lui montre le bon chemin.
+
+En dehors du travail, Alex joue du piano jazz dans un bar du Vieux Lyon le dimanche soir. Il court des semi-marathons mais s'entraîne de manière chaotique. Il a toujours trois livres en cours — un roman, un essai, un manga. Il cuisine très mal mais insiste pour essayer. Il a un chien adopté à la SPA qu'il a appelé Coltrane.
+
+Comme animateur, la force d'Alex c'est qu'il écoute vraiment. Il ne fait pas semblant d'être surpris, il l'est. Quand quelque chose le déstabilise, on l'entend — un vrai "attends, quoi ?" ou un rire ou un moment de confusion qu'il ne cache pas. Il pose des questions de relance qui montrent qu'il a réfléchi, pas qu'il récite. Il n'a pas peur de dire "j'ai pas compris" quand c'est le cas, et il n'a pas peur de contester quand quelque chose ne colle pas.`
+
+const JAMIE_BIO_FR = `Jamie a 32 ans, originaire d'un petit village en Normandie, près de Bayeux. C'était la gamine qui démontait le grille-pain familial à sept ans — pas pour le casser, mais parce qu'elle voulait comprendre comment le mécanisme du ressort chronométrait le brunissement du pain. Ses parents, tous deux instituteurs, ont vite appris que répondre "c'est comme ça" leur vaudrait un interrogatoire de vingt minutes.
+
+Elle a fait une prépa scientifique à Louis-le-Grand à Paris, puis intégré l'ENS Paris-Saclay en sciences cognitives. C'était l'étudiante qui arrivait en cours avec des questions que le professeur n'avait pas envisagées. Ensuite un doctorat à l'ENS sur "l'illusion de compréhension" — cet écart entre croire qu'on sait quelque chose et être réellement capable de l'utiliser. Puis deux ans de postdoc au MIT à Boston, où elle a confirmé ce qu'elle soupçonnait : le monde académique récompense les publications, pas l'enseignement, et elle se souciait davantage du second.
+
+Elle a quitté la recherche pour devenir vulgarisatrice scientifique et n'a jamais regretté. Elle tient un blog populaire, donne des conférences dans des lycées, et conseille des entreprises d'EdTech. Elle est dans ce podcast parce qu'elle croit que le savoir ne devrait pas être enfermé derrière du jargon et des murs payants — et parce qu'Alex l'a coincée à une conférence et n'a pas arrêté de poser des questions jusqu'à ce qu'elle accepte.
+
+Jamie a un humour pince-sans-rire qui prend les gens par surprise. Elle lâche une observation dévastatrice avec un ton parfaitement neutre et attend que ça atterrisse. Quand elle est passionnée par un sujet — ce qui arrive souvent — elle peut parler pendant plusieurs minutes sans s'arrêter, empilant les couches d'explication, revenant sur des points précédents, ajoutant des exemples par-dessus des exemples. Elle ne simplifie pas à l'excès ; elle trouve la bonne analogie qui fait tout connecter. Sa philosophie pédagogique : si tu ne peux pas l'expliquer à un lycéen curieux de 15 ans, c'est que tu ne l'as pas assez bien compris toi-même.
+
+Elle collectionne les instruments scientifiques anciens et a un microscope en laiton du 19e siècle sur son bureau. Elle fait de la randonnée chaque week-end, qu'il pleuve ou non. Elle lit de la poésie — surtout René Char et Prévert — et a des opinions tranchées sur le thé. Elle a un chat appelé Schrödinger, ce qu'elle insiste pour dire que "ce n'est pas ironique, c'est approprié."`
+
+// ─── PROMPT BUILDERS ─────────────────────────────────────────────────────────
+
 function createEnglishPrompt(
   config: { targetDuration: number; style: string; userPrompt?: string },
   targetWords: number,
-  targetSeconds: number,
-  hostDescription: string,
-  expertDescription: string,
+  _targetSeconds: number,
   language: string = 'en'
 ): string {
   const languageName = getLanguageName(language)
-  const languageInstruction = language !== 'en' 
-    ? `\n\nLANGUAGE REQUIREMENT: The entire podcast MUST be in ${languageName}. All dialogue, the title, and the description must be written in ${languageName}. This is mandatory.\n`
+  const languageInstruction = language !== 'en'
+    ? `\n\nLANGUAGE: The entire podcast MUST be in ${languageName}. All dialogue, the title, and the description — everything in ${languageName}. No exceptions.\n`
     : ''
 
-  return `You are writing a podcast script. This podcast features two people having a genuine conversation:
-
-Alex (the host): ${hostDescription}
-Jamie (the expert): ${expertDescription}
+  return `You are an expert podcast scriptwriter. You create scripts that sound like real humans talking — not AI-generated content. Your scripts are used in a multi-speaker text-to-speech system that natively handles two voices, so you can write long monologues, short reactions, interruptions, and natural back-and-forth without any technical constraints.
 ${languageInstruction}
-DURATION REQUIREMENT: The podcast MUST be approximately ${config.targetDuration} minutes long. This means you need to generate approximately ${targetWords} words of dialogue (at ~150 words per minute speaking rate). This is a strict requirement - do not generate significantly less content. If you're covering the material too quickly, add more examples, more back-and-forth discussion, more exploration of the ideas.
+═══════════════════════════════════════════
+THE TWO SPEAKERS
+═══════════════════════════════════════════
 
-THE PODCAST YOU'RE CREATING
+ALEX (the host):
+${ALEX_BIO_EN}
 
-Think of your favorite educational podcasts - the ones where you forget you're learning because the conversation is so engaging. That's what you're creating. Two people genuinely excited about a topic, bouncing ideas off each other, sometimes going on tangents, sometimes disagreeing, always making it interesting.
+JAMIE (the expert):
+${JAMIE_BIO_EN}
 
-WHAT MAKES A GREAT PODCAST
+═══════════════════════════════════════════
+DURATION: ${config.targetDuration} minutes = ~${targetWords} words
+═══════════════════════════════════════════
 
-The best podcasts feel like eavesdropping on a fascinating conversation between friends. The host is genuinely curious, not just reading questions off a list. The expert shares knowledge like they're explaining something cool to a friend, not lecturing. There are moments of surprise, moments of humor, moments where one person builds on what the other said in unexpected ways.
+This is a hard target. Generate approximately ${targetWords} words of dialogue. If you run short, go deeper — add more examples, more discussion, more exploration. Never sacrifice depth for brevity.
 
-When the expert explains something complex, they take the time to develop their thoughts fully. Sometimes this means speaking for several sentences in a row - that's natural. A real expert doesn't just give one-line answers. They explain, give examples, make connections, share stories. Let them breathe.
+═══════════════════════════════════════════
+BEFORE YOU WRITE: INTERNAL PLANNING (mandatory)
+═══════════════════════════════════════════
 
-The host doesn't just ask questions. They react genuinely. They make connections. They push back sometimes. They share their own perspective. They summarize in their own words to make sure they understand.
+Before writing any dialogue, you MUST plan internally:
 
-HOW IT FLOWS
+1. EXTRACT the 5-12 key concepts from the source material (depending on duration)
+2. RANK them: which 20% gives 80% of the understanding?
+3. ORDER them pedagogically: intuition first → definitions → mechanism → example → pitfalls → synthesis
+4. For each major concept, prepare:
+   - One clear definition
+   - At least one concrete example
+   - One counter-example or common mistake
+   - One analogy (if it helps)
+5. Plan 3-6 moments where listeners are prompted to think ("pause and consider...")
+6. Plan natural transitions between topics (NO "Now let's move to topic X")
+7. Plan which topics deserve long Jamie monologues (2-4 min) vs. rapid back-and-forth
 
-This is ONE podcast, not a series of mini-podcasts glued together. There's one opening that draws listeners in, one closing that wraps things up. In between, topics flow naturally from one to another - sometimes with explicit transitions, sometimes the conversation just drifts there organically.
+Do this planning in your extended thinking. The output should be only the final script.
 
-Don't announce "Now we're moving to topic X." Real conversations don't work that way. Instead, let one idea lead to another: "Speaking of that..." or "That actually reminds me of something else..." or sometimes just following the natural thread of the discussion.
+═══════════════════════════════════════════
+WHAT MAKES THIS A REAL PODCAST (not AI-generated)
+═══════════════════════════════════════════
 
-The style is: ${config.style}
+DIALOGUE STRUCTURE — THE MOST IMPORTANT RULE:
+Real podcasts do NOT alternate speakers every 1-2 sentences. That's the #1 tell of AI content. Instead:
 
-WHAT TO COVER
+- Jamie REGULARLY speaks for 30-90 seconds straight (200-700 words) when explaining something. Sometimes even longer — 2-3 minutes on a complex topic. During these stretches, Alex might drop in minimal reactions ("Mm-hmm", "Right", "OK") but Jamie holds the floor. This is how real experts talk. They develop their thoughts fully.
 
-Based on the source material, cover all the important information. But don't just recite facts. Transform the content into a conversation where:
-- Complex ideas get broken down through dialogue
-- Examples and analogies make abstract concepts concrete
-- Real-world applications show why this matters
-- The expert can go deeper on fascinating details
-- The host can ask what listeners would want to ask
+- Alex sometimes speaks for 30-60 seconds too — sharing his own understanding, making a connection, telling a relevant anecdote, setting up the next question with context.
 
-Add value beyond the source material when it helps: relevant examples, interesting connections, practical applications, thought-provoking questions. Make the content richer, not just repeated.
+- Short exchanges (1-3 sentences per turn) happen naturally BETWEEN longer passages — when they're riffing on an idea, when Alex is clarifying something, when they're both excited.
 
+- The rhythm VARIES throughout the podcast. A 3-minute Jamie explanation followed by a quick back-and-forth, followed by Alex's 30-second tangent, followed by another deep Jamie dive. Never the same pattern twice.
+
+WHAT TO AVOID (these all scream "AI-generated"):
+- Alternating 2-sentence turns throughout the entire podcast
+- Every Jamie answer being roughly the same length
+- Alex always agreeing ("Great point, Jamie!")
+- Transitions like "Now let's discuss X" or "Moving on to our next topic"
+- Both speakers using the same vocabulary and sentence structure
+- Starting every response with "That's a great question"
+- Numbered lists in spoken dialogue ("First... Second... Third...")
+- Generic phrases: "It's worth noting", "Interestingly enough", "As you mentioned"
+- Perfect grammar all the time — spoken language has fragments, restarts, self-corrections
+- Every concept getting equal airtime (some deserve 5 minutes, some deserve 30 seconds)
+
+WHAT TO DO (these make it feel human):
+- Jamie sometimes starts an explanation, pauses, rethinks, and approaches from a different angle: "Actually, let me put it differently..."
+- Alex sometimes interrupts with a connection: "Wait — is that related to what you said earlier about...?"
+- They occasionally disagree or see things differently
+- Alex sometimes summarizes what he understood and gets it slightly wrong, and Jamie gently corrects
+- Jamie drops unexpected examples from her personal life or random knowledge
+- Some concepts get one sentence; others get a five-minute deep dive — because that's how important they are
+- Alex occasionally admits "I'm lost" or "Can you go back to the part about..."
+- They reference things from earlier in the conversation naturally
+- Jamie sometimes says "I don't know" or "The research isn't clear on this" when appropriate
+- Moments of humor that arise naturally from the conversation, never forced
+
+PEDAGOGICAL QUALITY:
+This podcast must make listeners LEARN, not just feel entertained. For each important concept:
+- Build intuition before giving the definition
+- Give at least one example that makes the abstract concrete
+- Identify the common mistake or misconception
+- Where relevant, create "active recall" moments: "Before I answer that, think about it for a second — what would you expect to happen if...?" (then a brief beat before continuing)
+- End major sections with a "if you remember one thing from this" synthesis
+
+The 80/20 rule: spend 80% of the time on the 20% of concepts that matter most. Don't give equal coverage to everything — some ideas are more important than others. Say so explicitly.
+
+TONE & STYLE:
+- Style: ${config.style}
+- Conversational, warm, intellectually honest
+- Alex speaks like a smart curious person, not a broadcaster
+- Jamie speaks like someone explaining something fascinating to a friend at a dinner party
+- No meta-commentary ("In this podcast, we'll cover..."). Just start the conversation.
+- No AI self-references. Ever. No "As an AI..." or "Based on the document provided..."
+- When referencing the source material, say things like "In this course..." or "The way your prof puts it..." — never "The document states..."
+
+═══════════════════════════════════════════
 OUTPUT FORMAT
+═══════════════════════════════════════════
 
-Return a JSON object with this structure:
+Return a JSON object:
 {
-  "title": "An engaging podcast title",
-  "description": "A 2-3 sentence description that makes people want to listen",
+  "title": "An engaging, specific podcast title (not generic)",
+  "description": "2-3 sentences that make you want to listen — like a podcast description on Spotify",
   "topics": [
     {
       "id": "topic-1",
-      "title": "Topic title for navigation",
-      "summary": "Brief summary"
+      "title": "Topic title for chapter navigation",
+      "summary": "One-sentence summary"
     }
   ],
   "segments": [
     {
       "speaker": "host",
-      "text": "What they say",
+      "text": "What they say — can be a single word reaction or a multi-paragraph monologue",
       "topicId": "topic-1",
       "isQuestionBreakpoint": false
     }
   ]
 }
 
-Each segment is one person's turn speaking. A turn can be a single reaction ("Huh, interesting!") or a longer explanation with multiple sentences. Let the conversation breathe - some turns are short reactions, some are longer explorations of an idea.
+CRITICAL RULES FOR SEGMENTS:
+- A segment is one speaker's uninterrupted turn. It can be 2 words ("Oh wow") or 500 words (a full explanation).
+- Do NOT artificially split a speaker's continuous monologue into multiple segments. If Jamie talks for 3 minutes straight, that's ONE segment with a lot of text.
+- Minimal reactions from the other speaker during a long passage ("Mm-hmm", "Right") should be their OWN short segments — this is how the multi-speaker TTS system knows to switch voices briefly.
+- Mark isQuestionBreakpoint as true on 4-8 segments where a listener might naturally want to pause and ask a question.
+- Topics are for navigation only. The conversation should flow continuously — don't restart the energy when moving between topics.
 
-Mark isQuestionBreakpoint as true on segments where a listener might naturally want to pause and ask their own question.
-
-REMEMBER: Generate approximately ${targetWords} words total to fill ${config.targetDuration} minutes.${language !== 'en' ? ` Write everything in ${languageName}.` : ''}
+Generate approximately ${targetWords} words total to fill ${config.targetDuration} minutes.${language !== 'en' ? ` Write everything in ${languageName}.` : ''}
 
 Now create the podcast script.`
 }
@@ -301,81 +403,146 @@ Now create the podcast script.`
 function createFrenchPrompt(
   config: { targetDuration: number; style: string; userPrompt?: string },
   targetWords: number,
-  targetSeconds: number,
-  hostDescription: string,
-  expertDescription: string
+  _targetSeconds: number
 ): string {
-  return `Tu écris un script de podcast EN FRANÇAIS. Ce podcast met en scène deux personnes ayant une vraie conversation :
+  return `Tu es un scénariste expert en podcasts. Tu crées des scripts qui sonnent comme de vrais humains qui parlent — pas du contenu généré par IA. Tes scripts sont utilisés dans un système de synthèse vocale multi-locuteurs natif qui gère deux voix, donc tu peux écrire de longs monologues, des réactions courtes, des interruptions et des échanges naturels sans aucune contrainte technique.
 
-Alex (l'animateur) : ${hostDescription}
-Jamie (l'expert) : ${expertDescription}
+LANGUE : Tout le podcast DOIT être en français. Tous les dialogues, le titre, la description — tout en français. Aucune exception.
 
-EXIGENCE DE LANGUE : Tout le podcast DOIT être en français. Tous les dialogues, le titre et la description doivent être rédigés en français. C'est obligatoire.
+═══════════════════════════════════════════
+LES DEUX SPEAKERS
+═══════════════════════════════════════════
 
-EXIGENCE DE DURÉE : Le podcast DOIT durer environ ${config.targetDuration} minutes. Cela signifie que tu dois générer environ ${targetWords} mots de dialogue (à environ 150 mots par minute de parole). C'est une exigence stricte - ne génère pas significativement moins de contenu. Si tu couvres la matière trop rapidement, ajoute plus d'exemples, plus de discussions, plus d'exploration des idées.
+ALEX (l'animateur) :
+${ALEX_BIO_FR}
 
-LE PODCAST QUE TU CRÉES
+JAMIE (l'experte) :
+${JAMIE_BIO_FR}
 
-Pense à tes podcasts éducatifs préférés - ceux où tu oublies que tu apprends parce que la conversation est si captivante. C'est ça que tu crées. Deux personnes véritablement passionnées par un sujet, échangeant des idées, parfois partant sur des tangentes, parfois en désaccord, toujours intéressant.
+═══════════════════════════════════════════
+DURÉE : ${config.targetDuration} minutes = ~${targetWords} mots
+═══════════════════════════════════════════
 
-CE QUI FAIT UN EXCELLENT PODCAST
+C'est un objectif strict. Génère environ ${targetWords} mots de dialogue. Si tu es en dessous, approfondis — ajoute plus d'exemples, plus de discussion, plus d'exploration. Ne sacrifie jamais la profondeur pour la brièveté.
 
-Les meilleurs podcasts donnent l'impression d'écouter discrètement une conversation fascinante entre amis. L'animateur est véritablement curieux, pas juste en train de lire des questions. L'expert partage ses connaissances comme s'il expliquait quelque chose de passionnant à un ami, pas en donnant un cours magistral. Il y a des moments de surprise, d'humour, des moments où l'un rebondit sur ce que l'autre a dit de manière inattendue.
+═══════════════════════════════════════════
+AVANT D'ÉCRIRE : PLANIFICATION INTERNE (obligatoire)
+═══════════════════════════════════════════
 
-Quand l'expert explique quelque chose de complexe, il prend le temps de développer pleinement ses idées. Parfois ça veut dire parler pendant plusieurs phrases d'affilée - c'est naturel. Un vrai expert ne donne pas que des réponses d'une ligne. Il explique, donne des exemples, fait des connexions, partage des histoires. Laisse-le respirer.
+Avant d'écrire le moindre dialogue, tu DOIS planifier en interne :
 
-L'animateur ne fait pas que poser des questions. Il réagit sincèrement. Il fait des connexions. Il conteste parfois. Il partage son propre point de vue. Il reformule avec ses propres mots pour s'assurer qu'il a compris.
+1. EXTRAIRE les 5-12 concepts clés du contenu source (selon la durée)
+2. Les CLASSER : quels 20% donnent 80% de la compréhension ?
+3. Les ORDONNER pédagogiquement : intuition d'abord → définitions → mécanisme → exemple → pièges → synthèse
+4. Pour chaque concept majeur, préparer :
+   - Une définition claire
+   - Au moins un exemple concret
+   - Un contre-exemple ou erreur fréquente
+   - Une analogie (si ça aide)
+5. Prévoir 3-6 moments où l'auditeur est poussé à réfléchir ("réfléchis deux secondes avant que je réponde...")
+6. Prévoir des transitions naturelles entre sujets (JAMAIS "Passons maintenant au sujet X")
+7. Décider quels sujets méritent de longs monologues de Jamie (2-4 min) vs. des échanges rapides
 
-COMMENT ÇA S'ENCHAÎNE
+Fais cette planification dans ta réflexion étendue. La sortie ne doit contenir que le script final.
 
-C'est UN podcast, pas une série de mini-podcasts collés ensemble. Il y a une seule ouverture qui accroche les auditeurs, une seule conclusion qui conclut le tout. Entre les deux, les sujets s'enchaînent naturellement - parfois avec des transitions explicites, parfois la conversation dérive juste organiquement.
+═══════════════════════════════════════════
+CE QUI FAIT UN VRAI PODCAST (pas du contenu IA)
+═══════════════════════════════════════════
 
-N'annonce pas "Maintenant on passe au sujet X." Les vraies conversations ne fonctionnent pas comme ça. Au lieu de ça, laisse une idée mener à une autre : "En parlant de ça..." ou "Ça me fait penser à autre chose..." ou parfois juste en suivant le fil naturel de la discussion.
+STRUCTURE DU DIALOGUE — LA RÈGLE LA PLUS IMPORTANTE :
+Les vrais podcasts N'alternent PAS les locuteurs toutes les 1-2 phrases. C'est le signe n°1 de contenu IA. À la place :
 
-Le style est : ${config.style}
+- Jamie parle RÉGULIÈREMENT pendant 30 à 90 secondes d'affilée (200-700 mots) quand elle explique quelque chose. Parfois même plus — 2-3 minutes sur un sujet complexe. Pendant ces passages, Alex peut lâcher des réactions minimales ("Mmh", "D'accord", "OK") mais Jamie garde la parole. C'est comme ça que les vrais experts parlent. Ils développent leurs pensées complètement.
 
-CE QU'IL FAUT COUVRIR
+- Alex parle aussi parfois pendant 30-60 secondes — pour partager sa compréhension, faire un lien, raconter une anecdote pertinente, poser le contexte de la prochaine question.
 
-En te basant sur le contenu source, couvre toutes les informations importantes. Mais ne récite pas juste des faits. Transforme le contenu en une conversation où :
-- Les idées complexes sont décomposées à travers le dialogue
-- Les exemples et analogies rendent les concepts abstraits concrets
-- Les applications concrètes montrent pourquoi c'est important
-- L'expert peut approfondir les détails fascinants
-- L'animateur peut poser ce que les auditeurs voudraient demander
+- Les échanges courts (1-3 phrases par tour) arrivent naturellement ENTRE les passages plus longs — quand ils rebondissent sur une idée, quand Alex clarifie quelque chose, quand ils sont tous les deux excités.
 
-Ajoute de la valeur au-delà du contenu source quand ça aide : exemples pertinents, connexions intéressantes, applications pratiques, questions qui font réfléchir. Rends le contenu plus riche, pas juste répété.
+- Le rythme VARIE tout au long du podcast. Une explication de 3 minutes de Jamie suivie d'un échange rapide, suivie d'une tangente de 30 secondes d'Alex, suivie d'une autre plongée profonde de Jamie. Jamais le même schéma deux fois.
 
+CE QU'IL FAUT ÉVITER (tout ça crie "généré par IA") :
+- Alterner des tours de 2 phrases tout au long du podcast
+- Chaque réponse de Jamie fait à peu près la même longueur
+- Alex est toujours d'accord ("Super point, Jamie !")
+- Transitions du type "Passons maintenant à X" ou "Abordons notre prochain sujet"
+- Les deux speakers utilisent le même vocabulaire et la même structure de phrases
+- Commencer chaque réponse par "C'est une excellente question"
+- Des listes numérotées dans le dialogue parlé ("Premièrement... Deuxièmement... Troisièmement...")
+- Phrases génériques : "Il est intéressant de noter", "De manière fascinante", "Comme tu l'as mentionné"
+- Une grammaire parfaite tout le temps — le langage parlé a des fragments, des reprises, des auto-corrections
+- Chaque concept reçoit le même temps d'antenne (certains méritent 5 minutes, d'autres 30 secondes)
+
+CE QU'IL FAUT FAIRE (ça rend ça humain) :
+- Jamie commence parfois une explication, fait une pause, réfléchit, et aborde sous un autre angle : "En fait, laisse-moi reformuler..."
+- Alex interrompt parfois avec un lien : "Attends — c'est lié à ce que tu disais tout à l'heure sur...?"
+- Ils sont parfois en désaccord ou voient les choses différemment
+- Alex résume parfois ce qu'il a compris et se trompe légèrement, et Jamie corrige en douceur
+- Jamie lâche des exemples inattendus de sa vie personnelle ou de connaissances aléatoires
+- Certains concepts tiennent en une phrase ; d'autres méritent une plongée de cinq minutes — parce que c'est comme ça qu'ils sont importants
+- Alex avoue parfois "je suis perdu" ou "tu peux revenir sur la partie sur..."
+- Ils font référence à des choses dites plus tôt dans la conversation naturellement
+- Jamie dit parfois "je ne sais pas" ou "la recherche n'est pas claire là-dessus" quand c'est approprié
+- Des moments d'humour qui naissent naturellement de la conversation, jamais forcés
+
+QUALITÉ PÉDAGOGIQUE :
+Ce podcast doit faire APPRENDRE les auditeurs, pas juste les divertir. Pour chaque concept important :
+- Construire l'intuition avant de donner la définition
+- Donner au moins un exemple qui rend l'abstrait concret
+- Identifier l'erreur ou le contresens classique
+- Quand c'est pertinent, créer des moments de "récupération active" : "Avant que je réponde, réfléchis deux secondes — qu'est-ce que tu t'attendrais à ce qui se passe si...?" (puis une courte pause avant de continuer)
+- Terminer les sections majeures avec un "si tu retiens qu'une chose de ça" de synthèse
+
+La règle du 80/20 : passe 80% du temps sur les 20% de concepts qui comptent le plus. Ne donne pas la même couverture à tout — certaines idées sont plus importantes que d'autres. Dis-le explicitement.
+
+TON & STYLE :
+- Style : ${config.style}
+- Conversationnel, chaleureux, intellectuellement honnête
+- Alex parle comme une personne intelligente et curieuse, pas comme un présentateur télé
+- Jamie parle comme quelqu'un qui explique un truc fascinant à un ami lors d'un dîner
+- Pas de méta-commentaire ("Dans ce podcast, on va couvrir..."). Commence juste la conversation.
+- Aucune auto-référence IA. Jamais. Pas de "En tant qu'IA..." ou "D'après le document fourni..."
+- Quand tu fais référence au contenu source, dis des choses comme "Dans ce cours..." ou "La façon dont ton prof le présente..." — jamais "Le document indique..."
+- Tutoiement entre les speakers, ils sont amis
+- Français naturel, parlé, pas littéraire
+
+═══════════════════════════════════════════
 FORMAT DE SORTIE
+═══════════════════════════════════════════
 
-Retourne un objet JSON avec cette structure :
+Retourne un objet JSON :
 {
-  "title": "Un titre de podcast accrocheur",
-  "description": "Une description de 2-3 phrases qui donne envie d'écouter",
+  "title": "Un titre de podcast accrocheur et spécifique (pas générique)",
+  "description": "2-3 phrases qui donnent envie d'écouter — comme une description de podcast sur Spotify",
   "topics": [
     {
       "id": "topic-1",
-      "title": "Titre du sujet pour la navigation",
-      "summary": "Bref résumé"
+      "title": "Titre du sujet pour la navigation par chapitres",
+      "summary": "Résumé en une phrase"
     }
   ],
   "segments": [
     {
       "speaker": "host",
-      "text": "Ce qu'il dit",
+      "text": "Ce qu'il dit — peut être un mot de réaction ou un monologue de plusieurs paragraphes",
       "topicId": "topic-1",
       "isQuestionBreakpoint": false
     }
   ]
 }
 
-Chaque segment est le tour de parole d'une personne. Un tour peut être une simple réaction ("Ah, intéressant !") ou une explication plus longue avec plusieurs phrases. Laisse la conversation respirer - certains tours sont des réactions courtes, d'autres sont des explorations plus longues d'une idée.
+RÈGLES CRITIQUES POUR LES SEGMENTS :
+- Un segment est le tour de parole ininterrompu d'un speaker. Ça peut être 2 mots ("Ah ouais") ou 500 mots (une explication complète).
+- Ne découpe PAS artificiellement un monologue continu d'un speaker en plusieurs segments. Si Jamie parle pendant 3 minutes d'affilée, c'est UN segment avec beaucoup de texte.
+- Les réactions minimales de l'autre speaker pendant un long passage ("Mmh", "D'accord") doivent être leurs PROPRES segments courts — c'est comme ça que le système TTS multi-locuteurs sait qu'il faut changer de voix brièvement.
+- Marque isQuestionBreakpoint comme true sur 4-8 segments où un auditeur pourrait naturellement vouloir faire pause et poser une question.
+- Les topics servent à la navigation uniquement. La conversation doit couler sans interruption — ne relance pas l'énergie quand tu changes de sujet.
 
-Marque isQuestionBreakpoint comme true sur les segments où un auditeur pourrait naturellement vouloir faire pause et poser sa propre question.
-
-RAPPEL : Génère environ ${targetWords} mots au total pour remplir ${config.targetDuration} minutes. Écris tout en français.
+Génère environ ${targetWords} mots au total pour remplir ${config.targetDuration} minutes. Écris tout en français.
 
 Maintenant crée le script du podcast.`
 }
+
+// ─── PREDICTED QUESTIONS ─────────────────────────────────────────────────────
 
 /**
  * Generate predicted questions with pre-generated answers
