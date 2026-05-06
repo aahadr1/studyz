@@ -40,10 +40,12 @@ export default function NewFlashcardDeckPage() {
 
   // Text tab state
   const [pastedText, setPastedText] = useState('')
+  const [groupByTheme, setGroupByTheme] = useState(false)
 
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
+  const [phaseLabel, setPhaseLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [token, setToken] = useState('')
   const [user, setUser] = useState<any>(null)
@@ -146,7 +148,8 @@ export default function NewFlashcardDeckPage() {
     }
     setError(null)
     setStatus('generating')
-    setProgress(10)
+    setProgress(8)
+    setPhaseLabel('Setup')
     setProgressMsg('Creating deck...')
 
     try {
@@ -158,8 +161,32 @@ export default function NewFlashcardDeckPage() {
       if (!deckRes.ok) throw new Error((await deckRes.json()).error || 'Failed to create deck')
       const { deck } = await deckRes.json()
 
-      setProgress(30)
-      setProgressMsg('Analyzing text and generating cards...')
+      // Animated progress while the server runs the 2-phase generation.
+      // Phase 1 = identifying questions. Phase 2 = generating answers in batches.
+      setPhaseLabel('Phase 1 / 2 — Identifying questions')
+      setProgressMsg('Analyzing your text and detecting real study questions...')
+      setProgress(15)
+
+      let progressTicker: ReturnType<typeof setInterval> | null = null
+      let p = 15
+      let phaseOneFinished = false
+
+      progressTicker = setInterval(() => {
+        // Slowly creep up to 55% during phase 1, then to 92% during phase 2
+        const ceiling = phaseOneFinished ? 92 : 55
+        if (p < ceiling) {
+          p += phaseOneFinished ? 1.2 : 0.8
+          setProgress(Math.min(Math.round(p), ceiling))
+        }
+      }, 600)
+
+      // Switch the message after a short delay (heuristic — server is doing phase 1 first)
+      const phaseOneApprox = Math.max(8000, Math.min(60000, Math.ceil(pastedText.length / 12)))
+      setTimeout(() => {
+        phaseOneFinished = true
+        setPhaseLabel('Phase 2 / 2 — Generating detailed answers')
+        setProgressMsg('Writing complete answers in batches for accuracy...')
+      }, phaseOneApprox)
 
       const genRes = await fetch(`/api/flashcards/${deck.id}/generate`, {
         method: 'POST',
@@ -167,8 +194,11 @@ export default function NewFlashcardDeckPage() {
         body: JSON.stringify({
           text: pastedText,
           customInstructions: customInstructions.trim() || null,
+          groupByTheme,
         }),
       })
+
+      if (progressTicker) clearInterval(progressTicker)
 
       if (!genRes.ok) {
         const err = await genRes.json()
@@ -177,9 +207,18 @@ export default function NewFlashcardDeckPage() {
 
       const data = await genRes.json()
       setProgress(100)
-      setProgressMsg(`${data.cardsCreated} cards generated!`)
-      setStatus('done')
-      setTimeout(() => router.push(`/flashcards/${deck.id}`), 800)
+
+      if (data.mode === 'themed' && Array.isArray(data.decks)) {
+        setPhaseLabel('Done')
+        setProgressMsg(`${data.cardsCreated} cards across ${data.decks.length} themed decks`)
+        setStatus('done')
+        setTimeout(() => router.push('/flashcards'), 1200)
+      } else {
+        setPhaseLabel('Done')
+        setProgressMsg(`${data.cardsCreated} cards generated from ${data.questionsExtracted ?? '?'} questions`)
+        setStatus('done')
+        setTimeout(() => router.push(`/flashcards/${deck.id}`), 1000)
+      }
     } catch (err: any) {
       setError(err.message)
       setStatus('error')
@@ -335,9 +374,12 @@ export default function NewFlashcardDeckPage() {
               <textarea
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
-                placeholder="Paste your notes, lesson, article, or any study material here. The AI will analyze it and produce flashcards.
+                placeholder={`Paste your study material — questions, notes, lessons, articles. The AI will:
 
-Tip: works best with structured content (definitions, lists, formulas, paragraphs). Up to ~50 000 characters supported."
+  1. Identify real study questions (up to 500), even if mixed with unrelated text
+  2. Generate complete, detailed answers (from your text or general knowledge)
+
+Long lists of questions are perfectly supported — answers are produced in small batches for accuracy.`}
                 rows={14}
                 disabled={isProcessing}
                 className="input w-full resize-y text-sm leading-relaxed"
@@ -346,6 +388,24 @@ Tip: works best with structured content (definitions, lists, formulas, paragraph
                 <span>{pastedText.length.toLocaleString()} chars</span>
                 <span>{pastedText.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words</span>
               </div>
+
+              {/* Group by theme toggle */}
+              <label className="mt-4 flex items-start gap-3 p-4 bg-elevated border border-border rounded-xl cursor-pointer hover:bg-hover transition-all">
+                <input
+                  type="checkbox"
+                  checked={groupByTheme}
+                  onChange={(e) => setGroupByTheme(e.target.checked)}
+                  disabled={isProcessing}
+                  className="mt-0.5 w-4 h-4 accent-text-primary"
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-text-primary">Group by theme</div>
+                  <p className="text-xs text-text-tertiary mt-0.5 leading-relaxed">
+                    Instead of one big deck, the AI groups the cards by topic and creates several
+                    smaller numbered sub-decks (e.g. <span className="mono">{deckName || 'My Deck'} — 01 — Theme A</span>).
+                  </p>
+                </div>
+              </label>
             </div>
           )}
 
@@ -411,17 +471,28 @@ Tip: works best with structured content (definitions, lists, formulas, paragraph
 
           {/* Progress */}
           {isProcessing && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between text-xs text-text-tertiary mb-2">
+            <div className="mb-6 p-4 bg-elevated border border-border rounded-xl">
+              {phaseLabel && (
+                <div className="text-xs text-text-tertiary uppercase tracking-wider mono mb-2">
+                  {phaseLabel}
+                </div>
+              )}
+              <div className="flex items-center justify-between text-sm text-text-primary mb-2">
                 <span>{progressMsg}</span>
-                <span className="mono">{progress}%</span>
+                <span className="mono text-text-tertiary">{progress}%</span>
               </div>
-              <div className="w-full h-1.5 bg-elevated rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-surface rounded-full overflow-hidden">
                 <div
                   className="h-full bg-text-primary rounded-full transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>
+              {sourceTab === 'text' && (
+                <p className="text-xs text-text-tertiary mt-3 leading-relaxed">
+                  Long texts are split into chunks for question extraction, and answers are
+                  generated in batches of 12 questions for maximum accuracy.
+                </p>
+              )}
             </div>
           )}
 

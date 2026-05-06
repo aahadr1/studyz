@@ -26,6 +26,7 @@ export default function MobileNewFlashcardDeckPage() {
   const [sourceTab, setSourceTab] = useState<SourceTab>('pdf')
   const [file, setFile] = useState<File | null>(null)
   const [pastedText, setPastedText] = useState('')
+  const [groupByTheme, setGroupByTheme] = useState(false)
   const [deckName, setDeckName] = useState('')
   const [description, setDescription] = useState('')
   const [showInstructions, setShowInstructions] = useState(false)
@@ -34,6 +35,7 @@ export default function MobileNewFlashcardDeckPage() {
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
+  const [phaseLabel, setPhaseLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [token, setToken] = useState('')
 
@@ -117,7 +119,8 @@ export default function MobileNewFlashcardDeckPage() {
     }
     setError(null)
     setStatus('generating')
-    setProgress(20)
+    setProgress(8)
+    setPhaseLabel('Setup')
     setProgressMsg('Creating deck...')
 
     try {
@@ -129,8 +132,28 @@ export default function MobileNewFlashcardDeckPage() {
       if (!deckRes.ok) throw new Error((await deckRes.json()).error)
       const { deck } = await deckRes.json()
 
-      setProgress(50)
-      setProgressMsg('Generating cards...')
+      setPhaseLabel('Phase 1 / 2 — Identifying questions')
+      setProgressMsg('Detecting study questions in your text...')
+      setProgress(15)
+
+      let progressTicker: ReturnType<typeof setInterval> | null = null
+      let p = 15
+      let phaseOneFinished = false
+
+      progressTicker = setInterval(() => {
+        const ceiling = phaseOneFinished ? 92 : 55
+        if (p < ceiling) {
+          p += phaseOneFinished ? 1.2 : 0.8
+          setProgress(Math.min(Math.round(p), ceiling))
+        }
+      }, 600)
+
+      const phaseOneApprox = Math.max(8000, Math.min(60000, Math.ceil(pastedText.length / 12)))
+      setTimeout(() => {
+        phaseOneFinished = true
+        setPhaseLabel('Phase 2 / 2 — Writing answers')
+        setProgressMsg('Generating answers in small batches for accuracy...')
+      }, phaseOneApprox)
 
       const genRes = await fetch(`/api/flashcards/${deck.id}/generate`, {
         method: 'POST',
@@ -138,14 +161,26 @@ export default function MobileNewFlashcardDeckPage() {
         body: JSON.stringify({
           text: pastedText,
           customInstructions: customInstructions.trim() || null,
+          groupByTheme,
         }),
       })
+
+      if (progressTicker) clearInterval(progressTicker)
+
       if (!genRes.ok) throw new Error((await genRes.json()).error || 'Generation failed')
       const data = await genRes.json()
-      setProgressMsg(`${data.cardsCreated} cards created!`)
       setProgress(100)
-      setStatus('done')
-      setTimeout(() => router.push(`/m/flashcards/${deck.id}`), 600)
+      setPhaseLabel('Done')
+
+      if (data.mode === 'themed' && Array.isArray(data.decks)) {
+        setProgressMsg(`${data.cardsCreated} cards across ${data.decks.length} themed decks`)
+        setStatus('done')
+        setTimeout(() => router.push('/m/flashcards'), 1000)
+      } else {
+        setProgressMsg(`${data.cardsCreated} cards created!`)
+        setStatus('done')
+        setTimeout(() => router.push(`/m/flashcards/${deck.id}`), 800)
+      }
     } catch (err: any) {
       setError(err.message)
       setStatus('error')
@@ -250,19 +285,39 @@ export default function MobileNewFlashcardDeckPage() {
 
         {/* Text source */}
         {sourceTab === 'text' && (
-          <div>
+          <div className="space-y-3">
             <textarea
               value={pastedText}
               onChange={(e) => setPastedText(e.target.value)}
-              placeholder="Paste your notes, lesson, or any text..."
+              placeholder={`Paste questions, notes or any study material.
+
+The AI will:
+1. Detect real study questions
+2. Write detailed answers in batches`}
               rows={10}
               disabled={isProcessing}
               className="input w-full resize-y text-sm"
             />
-            <div className="flex justify-between text-xs text-text-tertiary mono mt-1">
+            <div className="flex justify-between text-xs text-text-tertiary mono">
               <span>{pastedText.length.toLocaleString()} chars</span>
               <span>{pastedText.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words</span>
             </div>
+
+            <label className="flex items-start gap-3 p-3 bg-elevated border border-border rounded-xl">
+              <input
+                type="checkbox"
+                checked={groupByTheme}
+                onChange={(e) => setGroupByTheme(e.target.checked)}
+                disabled={isProcessing}
+                className="mt-0.5 w-4 h-4 accent-text-primary"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium">Group by theme</div>
+                <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
+                  Create several smaller numbered sub-decks instead of one large one.
+                </p>
+              </div>
+            </label>
           </div>
         )}
 
@@ -323,12 +378,17 @@ export default function MobileNewFlashcardDeckPage() {
 
         {/* Progress */}
         {isProcessing && (
-          <div>
-            <div className="flex justify-between text-xs text-text-tertiary mb-1">
-              <span>{progressMsg}</span>
-              <span className="mono">{progress}%</span>
+          <div className="p-3 bg-elevated border border-border rounded-xl">
+            {phaseLabel && (
+              <div className="text-[10px] uppercase tracking-wider mono text-text-tertiary mb-1">
+                {phaseLabel}
+              </div>
+            )}
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-text-primary">{progressMsg}</span>
+              <span className="mono text-text-tertiary">{progress}%</span>
             </div>
-            <div className="w-full h-1.5 bg-elevated rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-surface rounded-full overflow-hidden">
               <div className="h-full bg-text-primary rounded-full transition-all" style={{ width: `${progress}%` }} />
             </div>
           </div>

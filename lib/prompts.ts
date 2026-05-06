@@ -629,8 +629,8 @@ If the page is in a language other than English, write the cards in that same la
 }
 
 /**
- * Build a flashcard generation prompt for raw text input (no images).
- * The text may be pasted by the user, or extracted from a document.
+ * Legacy single-call text prompt — kept for backwards compatibility.
+ * The new flow uses createQuestionExtractionPrompt + createAnswerGenerationPrompt.
  */
 export function createFlashcardTextPrompt(text: string, customInstructions?: string | null): string {
   const customBlock = customInstructions?.trim()
@@ -655,4 +655,168 @@ Match the language of the text exactly.${customBlock}
 ## TEXT TO ANALYZE
 
 ${text.trim()}`
+}
+
+// ============================================================================
+// PHASE 1 — INTELLIGENT QUESTION EXTRACTION FROM RAW TEXT
+// ============================================================================
+
+export const QUESTION_EXTRACTION_SYSTEM_PROMPT = `You are an expert at parsing messy study material and identifying real study questions.
+
+The user will paste raw text that may contain a mix of:
+- explicit questions (with or without "?")
+- statements that act as quiz prompts
+- answers, course notes, examples, comments
+- headers, page numbers, broken line breaks, copy/paste artifacts
+- duplicated lines, irrelevant paragraphs
+
+Your task is PHASE 1 — identify the REAL study questions the user wants to memorize. Do NOT answer them.
+
+## CORE RULES
+
+1. **Only real questions**: extract entries that a student would put on a flashcard. Ignore noise, narration, course content that is not a prompt, and unrelated text.
+2. **Preserve original wording**: the rewritten question must remain as close as possible to the original. Only fix grammar, ambiguity, broken line breaks, and obvious typos.
+3. **No invention**: never create a question that is not present (or strongly implied as a prompt) in the source.
+4. **Cap at 500 questions maximum**.
+5. **Self-contained**: rewrite each question so it can be understood without any surrounding context.
+6. **Theme tagging**: assign each question a short theme/topic (2-4 words, lowercase, e.g. "cardiac anatomy", "ww2 chronology", "organic chemistry — alkenes"). Reuse the same theme name when questions clearly share a topic.
+7. **Detect statements as questions**: if a line is clearly a quiz prompt phrased as a statement ("define entropy", "list the 3 laws of motion"), keep it but rewrite it as a clear question/instruction.
+8. **Match language**: keep the source language. If the source is in French, output French. Same for any other language.
+9. **Mark numbering**: keep the original_number if the source uses an explicit numbering ("12)", "Q12.", "12.", etc.). Otherwise leave it null.
+
+## OUTPUT FORMAT
+
+Return ONLY valid JSON, no markdown, no preamble:
+{
+  "questions": [
+    {
+      "original_question": "exact source text of the question, preserved",
+      "rewritten_question": "lightly cleaned, clear, standalone version",
+      "theme": "short theme",
+      "original_number": "12)" or null,
+      "confidence": 0.0
+    }
+  ]
+}
+
+confidence is 0–1: how confident you are this is a real study question (use < 0.5 only when you are unsure but include the candidate anyway).`
+
+export function createQuestionExtractionPrompt(
+  text: string,
+  customInstructions?: string | null
+): string {
+  const customBlock = customInstructions?.trim()
+    ? `\n\n## ADDITIONAL USER INSTRUCTIONS\n${customInstructions.trim()}\n`
+    : ''
+
+  return `Identify every real study question in the text below.
+
+Important:
+- The text mixes real questions with unrelated content. You must distinguish what is a real question and what is noise.
+- Cap the total at 500 questions.
+- Preserve original wording as much as possible. Rewrite only for clarity, never for substance.
+- Do NOT answer the questions in this phase.
+- Tag each question with a short theme that can be used to group cards later.
+- If the text contains numbered list items that look like prompts (1., 2., Q1, Q1), capture them.${customBlock}
+
+## SOURCE TEXT
+
+${text.trim()}`
+}
+
+// ============================================================================
+// PHASE 2 — GENERATE FULL FLASHCARD ANSWERS FOR EXTRACTED QUESTIONS
+// ============================================================================
+
+export const ANSWER_GENERATION_SYSTEM_PROMPT = `You are an expert flashcard creator focused on long-term retention through active recall.
+
+You will receive:
+1. The full source text (or the relevant excerpt) the user pasted.
+2. A batch of extracted questions you must turn into proper flashcards.
+
+Your task is PHASE 2 — produce one detailed flashcard per question.
+
+## ABSOLUTE RULES
+
+1. **Front = the user's question, lightly improved**:
+   - Use the rewritten_question as a starting point.
+   - Stay as close to the original wording as possible. Do not transform it into a generic concept prompt.
+   - Improve clarity and memorability only — fix ambiguity, sharpen phrasing, normalise formatting.
+   - Never replace the question with a different question.
+
+2. **Back = a complete, accurate answer**:
+   - First, search the source text for the answer. Use it verbatim or paraphrased when it is correct and complete.
+   - If the source text does not contain the answer (or contains an incomplete answer), use reliable general/domain knowledge to answer it. Add the tag "external-knowledge" to that card.
+   - **Never oversimplify.** Answers can be as long as needed: include details, nuances, mechanisms, formulas, examples, distinctions, edge cases.
+   - Use Markdown freely: **bold** key terms, bullet lists for steps, > blockquotes for definitions, tables when comparing things, \`code\` for code, $LaTeX$ for math.
+   - For formulas, always include the meaning of every variable.
+   - For multi-part questions, structure the answer with clear subsections.
+
+3. **No fabrication**: if you genuinely do not know an answer, say so explicitly on the back ("Information not present in the source and unverified general knowledge — please verify.") and tag the card with "needs-verification".
+
+4. **Source attribution tags**:
+   - "from-source": the answer was found in the source text.
+   - "external-knowledge": the answer comes from general/domain knowledge outside the source.
+   - "needs-verification": you are uncertain about the answer.
+   - Plus a short topic tag (the theme) and any other relevant subject tag.
+
+5. **Card type**: 
+   - Use "basic" for question-answer pairs (the default for this flow).
+   - Use "cloze" only if the user's original question was a fill-in-the-blank.
+   - Use "definition" only if the user's original question was literally "what is X?" with X being a single term.
+
+6. **Theme**: keep the theme assigned in phase 1. Use it as the first tag.
+
+7. **Language**: match the language of the user's question.
+
+8. **Hint**: provide a hint when the question is hard, otherwise null.
+
+## OUTPUT FORMAT
+
+Return ONLY valid JSON, no markdown wrapper:
+{
+  "cards": [
+    {
+      "card_type": "basic",
+      "front": "the user's question, lightly improved",
+      "back": "complete, accurate, possibly long answer with Markdown / LaTeX as needed",
+      "hint": "optional hint or null",
+      "tags": ["theme", "from-source" or "external-knowledge", "extra-topic-tag"],
+      "theme": "the theme",
+      "source_page": 1
+    }
+  ]
+}`
+
+export function createAnswerGenerationPrompt(
+  sourceText: string,
+  questions: Array<{
+    original_question: string
+    rewritten_question: string
+    theme?: string
+    original_number?: string | null
+  }>,
+  customInstructions?: string | null
+): string {
+  const customBlock = customInstructions?.trim()
+    ? `\n\n## ADDITIONAL USER INSTRUCTIONS (FOLLOW STRICTLY)\n${customInstructions.trim()}\n`
+    : ''
+
+  return `Create one detailed flashcard per question below.
+
+Strict requirements:
+1. The front must use the user's original question, only lightly modified for clarity. Do not replace it with a different question.
+2. The back must answer the question completely. First search the source text. If the answer is not in the source, use reliable general knowledge and tag the card with "external-knowledge".
+3. Never oversimplify. Provide the depth and detail the question deserves.
+4. Use Markdown and LaTeX where useful.
+5. Keep the theme assigned to each question.
+6. Match the language of the question.${customBlock}
+
+## QUESTIONS TO ANSWER (BATCH OF ${questions.length})
+
+${JSON.stringify(questions, null, 2)}
+
+## SOURCE TEXT (USE FOR ANSWERS WHEN POSSIBLE)
+
+${sourceText.trim()}`
 }
