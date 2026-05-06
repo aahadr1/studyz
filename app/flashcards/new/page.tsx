@@ -42,6 +42,16 @@ export default function NewFlashcardDeckPage() {
   const [pastedText, setPastedText] = useState('')
   const [groupByTheme, setGroupByTheme] = useState(false)
 
+  // Phase 0 — analyze (count + themes)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysis, setAnalysis] = useState<null | {
+    count: number
+    themes: string[]
+    language: string
+    noise: string
+    forText: string
+  }>(null)
+
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
@@ -137,6 +147,40 @@ export default function NewFlashcardDeckPage() {
     }
   }
 
+  const analyzeText = async () => {
+    if (!pastedText.trim()) { setError('Paste some text first'); return }
+    if (pastedText.trim().length < 50) {
+      setError('Text is too short — at least 50 characters needed')
+      return
+    }
+    setError(null)
+    setAnalyzing(true)
+    setAnalysis(null)
+    try {
+      const res = await fetch('/api/flashcards/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text: pastedText }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Analysis failed')
+      const data = await res.json()
+      setAnalysis({
+        count: data.estimated_question_count || 0,
+        themes: data.themes || [],
+        language: data.language || 'unknown',
+        noise: data.noise_summary || '',
+        forText: pastedText,
+      })
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  // If the user edits the text again, the analysis is stale
+  const analysisStale = !!analysis && analysis.forText !== pastedText
+
   const generateFromText = async () => {
     if (!pastedText.trim() || !deckName.trim()) {
       setError('Please provide a deck name and some text')
@@ -149,7 +193,7 @@ export default function NewFlashcardDeckPage() {
     setError(null)
     setStatus('generating')
     setProgress(8)
-    setPhaseLabel('Setup')
+    setPhaseLabel(analysis ? 'Phase 1 / 3 — Setup' : 'Setup')
     setProgressMsg('Creating deck...')
 
     try {
@@ -161,10 +205,16 @@ export default function NewFlashcardDeckPage() {
       if (!deckRes.ok) throw new Error((await deckRes.json()).error || 'Failed to create deck')
       const { deck } = await deckRes.json()
 
-      // Animated progress while the server runs the 2-phase generation.
-      // Phase 1 = identifying questions. Phase 2 = generating answers in batches.
-      setPhaseLabel('Phase 1 / 2 — Identifying questions')
-      setProgressMsg('Analyzing your text and detecting real study questions...')
+      // Phases. If we already have an analysis, we skip the count detection step server-side.
+      const hasAnalysis = !!analysis && !analysisStale
+      const phasePrefix = hasAnalysis ? '/ 2' : '/ 2'
+
+      setPhaseLabel(`Phase 1 ${phasePrefix} — Cleaning & numbering questions`)
+      setProgressMsg(
+        hasAnalysis
+          ? `Cleaning & numbering ~${analysis!.count} detected questions...`
+          : 'Identifying real study questions in your text...'
+      )
       setProgress(15)
 
       let progressTicker: ReturnType<typeof setInterval> | null = null
@@ -172,7 +222,6 @@ export default function NewFlashcardDeckPage() {
       let phaseOneFinished = false
 
       progressTicker = setInterval(() => {
-        // Slowly creep up to 55% during phase 1, then to 92% during phase 2
         const ceiling = phaseOneFinished ? 92 : 55
         if (p < ceiling) {
           p += phaseOneFinished ? 1.2 : 0.8
@@ -180,12 +229,11 @@ export default function NewFlashcardDeckPage() {
         }
       }, 600)
 
-      // Switch the message after a short delay (heuristic — server is doing phase 1 first)
       const phaseOneApprox = Math.max(8000, Math.min(60000, Math.ceil(pastedText.length / 12)))
       setTimeout(() => {
         phaseOneFinished = true
-        setPhaseLabel('Phase 2 / 2 — Generating detailed answers')
-        setProgressMsg('Writing complete answers in batches for accuracy...')
+        setPhaseLabel(`Phase 2 ${phasePrefix} — Generating detailed answers`)
+        setProgressMsg('Writing complete answers in small batches for accuracy...')
       }, phaseOneApprox)
 
       const genRes = await fetch(`/api/flashcards/${deck.id}/generate`, {
@@ -195,6 +243,8 @@ export default function NewFlashcardDeckPage() {
           text: pastedText,
           customInstructions: customInstructions.trim() || null,
           groupByTheme,
+          expectedCount: hasAnalysis ? analysis!.count : null,
+          themesHint: hasAnalysis ? analysis!.themes : null,
         }),
       })
 
@@ -406,6 +456,78 @@ Long lists of questions are perfectly supported — answers are produced in smal
                   </p>
                 </div>
               </label>
+
+              {/* Phase 0 — Analyze */}
+              <div className="mt-4 p-4 border border-border rounded-xl bg-surface/40">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="text-sm font-medium text-text-primary">Step 1 — Detect questions</div>
+                    <p className="text-xs text-text-tertiary mt-0.5 leading-relaxed">
+                      Quickly count how many real study questions your text contains, before generating any cards.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={analyzeText}
+                    disabled={analyzing || isProcessing || pastedText.trim().length < 50}
+                    className="btn-secondary text-sm whitespace-nowrap disabled:opacity-50"
+                  >
+                    {analyzing ? (
+                      <><div className="spinner w-3.5 h-3.5" /> Analyzing...</>
+                    ) : analysis && !analysisStale ? (
+                      <>Re-analyze</>
+                    ) : (
+                      <>Analyze text</>
+                    )}
+                  </button>
+                </div>
+
+                {analysis && (
+                  <div className="mt-4 space-y-3">
+                    <div className={`p-3 rounded-lg border ${analysisStale ? 'border-amber-500/30 bg-amber-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
+                      <div className="flex items-baseline gap-2">
+                        <span className={`text-2xl font-semibold mono ${analysisStale ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {analysis.count}
+                        </span>
+                        <span className="text-sm text-text-secondary">
+                          {analysis.count === 1 ? 'question detected' : 'questions detected'}
+                        </span>
+                        {analysisStale && (
+                          <span className="ml-auto text-[10px] uppercase tracking-wider mono text-amber-400">stale — re-analyze</span>
+                        )}
+                      </div>
+                      {analysis.language && analysis.language !== 'unknown' && (
+                        <p className="text-xs text-text-tertiary mt-1">
+                          Source language: <span className="mono">{analysis.language}</span>
+                        </p>
+                      )}
+                      {analysis.noise && (
+                        <p className="text-xs text-text-tertiary mt-1 italic">{analysis.noise}</p>
+                      )}
+                    </div>
+
+                    {analysis.themes.length > 0 && (
+                      <div>
+                        <p className="text-xs uppercase tracking-wider mono text-text-tertiary mb-1.5">Themes</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {analysis.themes.map((t, i) => (
+                            <span
+                              key={`${t}-${i}`}
+                              className="text-xs px-2 py-0.5 rounded-full border border-border bg-elevated text-text-secondary"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-text-tertiary leading-relaxed">
+                      The next step will use this count as a target so the AI doesn't silently drop questions, and it will produce a clean numbered version of each (Q1, Q2, …, Q{analysis.count}).
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -532,6 +654,8 @@ Long lists of questions are perfectly supported — answers are produced in smal
               >
                 {isProcessing ? (
                   <><div className="spinner w-4 h-4" /> Generating...</>
+                ) : analysis && !analysisStale ? (
+                  <><FiZap className="w-4 h-4" strokeWidth={2} /> Step 2 — Generate {analysis.count} flashcards</>
                 ) : (
                   <><FiZap className="w-4 h-4" strokeWidth={2} /> Generate from Text</>
                 )}

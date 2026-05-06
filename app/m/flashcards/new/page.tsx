@@ -32,6 +32,16 @@ export default function MobileNewFlashcardDeckPage() {
   const [showInstructions, setShowInstructions] = useState(false)
   const [customInstructions, setCustomInstructions] = useState('')
 
+  // Phase 0 analysis
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysis, setAnalysis] = useState<null | {
+    count: number
+    themes: string[]
+    language: string
+    noise: string
+    forText: string
+  }>(null)
+
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
@@ -108,6 +118,38 @@ export default function MobileNewFlashcardDeckPage() {
     }
   }
 
+  const analyzeText = async () => {
+    if (!pastedText.trim() || pastedText.trim().length < 50) {
+      setError('Text is too short — at least 50 characters')
+      return
+    }
+    setError(null)
+    setAnalyzing(true)
+    setAnalysis(null)
+    try {
+      const res = await fetch('/api/flashcards/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text: pastedText }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Analysis failed')
+      const data = await res.json()
+      setAnalysis({
+        count: data.estimated_question_count || 0,
+        themes: data.themes || [],
+        language: data.language || 'unknown',
+        noise: data.noise_summary || '',
+        forText: pastedText,
+      })
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const analysisStale = !!analysis && analysis.forText !== pastedText
+
   const generateFromText = async () => {
     if (!pastedText.trim() || !deckName.trim()) {
       setError('Please provide a deck name and some text')
@@ -132,8 +174,13 @@ export default function MobileNewFlashcardDeckPage() {
       if (!deckRes.ok) throw new Error((await deckRes.json()).error)
       const { deck } = await deckRes.json()
 
-      setPhaseLabel('Phase 1 / 2 — Identifying questions')
-      setProgressMsg('Detecting study questions in your text...')
+      const hasAnalysis = !!analysis && !analysisStale
+      setPhaseLabel('Phase 1 / 2 — Cleaning & numbering')
+      setProgressMsg(
+        hasAnalysis
+          ? `Cleaning ~${analysis!.count} questions...`
+          : 'Detecting study questions...'
+      )
       setProgress(15)
 
       let progressTicker: ReturnType<typeof setInterval> | null = null
@@ -152,7 +199,7 @@ export default function MobileNewFlashcardDeckPage() {
       setTimeout(() => {
         phaseOneFinished = true
         setPhaseLabel('Phase 2 / 2 — Writing answers')
-        setProgressMsg('Generating answers in small batches for accuracy...')
+        setProgressMsg('Answers in small batches for accuracy...')
       }, phaseOneApprox)
 
       const genRes = await fetch(`/api/flashcards/${deck.id}/generate`, {
@@ -162,6 +209,8 @@ export default function MobileNewFlashcardDeckPage() {
           text: pastedText,
           customInstructions: customInstructions.trim() || null,
           groupByTheme,
+          expectedCount: hasAnalysis ? analysis!.count : null,
+          themesHint: hasAnalysis ? analysis!.themes : null,
         }),
       })
 
@@ -318,6 +367,58 @@ The AI will:
                 </p>
               </div>
             </label>
+
+            {/* Phase 0 analyze */}
+            <div className="p-3 border border-border rounded-xl bg-surface/40">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium">Step 1 — Detect questions</div>
+                  <p className="text-xs text-text-tertiary mt-0.5 leading-snug">
+                    Count real questions before generating cards.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={analyzeText}
+                  disabled={analyzing || isProcessing || pastedText.trim().length < 50}
+                  className="btn-secondary text-xs whitespace-nowrap disabled:opacity-50"
+                >
+                  {analyzing ? 'Analyzing...' : analysis && !analysisStale ? 'Re-analyze' : 'Analyze'}
+                </button>
+              </div>
+
+              {analysis && (
+                <div className="mt-3 space-y-2">
+                  <div className={`p-2.5 rounded-lg border ${analysisStale ? 'border-amber-500/30 bg-amber-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
+                    <div className="flex items-baseline gap-2">
+                      <span className={`text-xl font-semibold mono ${analysisStale ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {analysis.count}
+                      </span>
+                      <span className="text-xs text-text-secondary">
+                        {analysis.count === 1 ? 'question detected' : 'questions detected'}
+                      </span>
+                    </div>
+                    {analysisStale && (
+                      <p className="text-[10px] uppercase tracking-wider mono text-amber-400 mt-1">
+                        Text changed — re-analyze
+                      </p>
+                    )}
+                  </div>
+                  {analysis.themes.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {analysis.themes.slice(0, 8).map((t, i) => (
+                        <span
+                          key={`${t}-${i}`}
+                          className="text-[10px] px-1.5 py-0.5 rounded-full border border-border bg-elevated text-text-secondary"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -406,7 +507,13 @@ The AI will:
             disabled={isProcessing || !deckName.trim()}
             className="btn-primary w-full disabled:opacity-50"
           >
-            {isProcessing ? <><div className="spinner w-4 h-4" /> Generating...</> : <><FiZap className="w-4 h-4" /> Generate with AI</>}
+            {isProcessing ? (
+              <><div className="spinner w-4 h-4" /> Generating...</>
+            ) : sourceTab === 'text' && analysis && !analysisStale ? (
+              <><FiZap className="w-4 h-4" /> Step 2 — Generate {analysis.count} flashcards</>
+            ) : (
+              <><FiZap className="w-4 h-4" /> Generate with AI</>
+            )}
           </button>
         ) : (
           <button onClick={handleManual} disabled={!deckName.trim()} className="btn-secondary w-full disabled:opacity-50">

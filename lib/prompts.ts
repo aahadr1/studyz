@@ -658,6 +658,49 @@ ${text.trim()}`
 }
 
 // ============================================================================
+// PHASE 0 — QUICK QUESTION DETECTION (just count + theme preview)
+// ============================================================================
+
+export const QUESTION_DETECTION_SYSTEM_PROMPT = `You are an expert at quickly scanning study material to estimate how many real study questions it contains.
+
+Your only task is to:
+1. Read the entire text the user pasted.
+2. Count how many distinct, real study questions are present (questions a student would put on a flashcard).
+3. List the main themes/topics covered.
+4. Identify the language of the source.
+
+DO NOT extract or rewrite the questions yet. DO NOT answer them. Only return the high-level analysis.
+
+## RULES
+
+- Be strict: only count entries that are truly questions a student would memorize. Skip narration, course content that is not a prompt, headers, page numbers, broken artifacts.
+- Be exhaustive: it is fine to count 200, 300 or 500 questions if they are really there. The cap is 500.
+- A clear instruction phrased as a statement still counts ("define entropy", "list the 3 laws of motion").
+- A single multi-part question = 1 question (do not inflate the count).
+- Themes: 3 to 12 short topic labels (lowercase, 1-4 words each), grouping the questions by subject.
+- "noise_summary": 1 short sentence describing what kind of irrelevant content was ignored, if any.
+
+## OUTPUT FORMAT
+
+Return ONLY valid JSON, no markdown wrapper:
+{
+  "estimated_question_count": 153,
+  "themes": ["cardiac anatomy", "ww2 chronology", "organic chemistry — alkenes"],
+  "language": "fr",
+  "noise_summary": "the text also contained course narration and page headers, which were ignored"
+}`
+
+export function createQuestionDetectionPrompt(text: string): string {
+  return `Analyse the text below and return how many real study questions it contains, plus the list of themes covered.
+
+Do not extract the questions themselves. Just return the high-level analysis as JSON.
+
+## SOURCE TEXT
+
+${text.trim()}`
+}
+
+// ============================================================================
 // PHASE 1 — INTELLIGENT QUESTION EXTRACTION FROM RAW TEXT
 // ============================================================================
 
@@ -670,19 +713,21 @@ The user will paste raw text that may contain a mix of:
 - headers, page numbers, broken line breaks, copy/paste artifacts
 - duplicated lines, irrelevant paragraphs
 
-Your task is PHASE 1 — identify the REAL study questions the user wants to memorize. Do NOT answer them.
+Your task is PHASE 1 — identify the REAL study questions the user wants to memorize, rewrite each one cleanly, and produce a clean numbered list.
 
 ## CORE RULES
 
 1. **Only real questions**: extract entries that a student would put on a flashcard. Ignore noise, narration, course content that is not a prompt, and unrelated text.
 2. **Preserve original wording**: the rewritten question must remain as close as possible to the original. Only fix grammar, ambiguity, broken line breaks, and obvious typos.
 3. **No invention**: never create a question that is not present (or strongly implied as a prompt) in the source.
-4. **Cap at 500 questions maximum**.
-5. **Self-contained**: rewrite each question so it can be understood without any surrounding context.
-6. **Theme tagging**: assign each question a short theme/topic (2-4 words, lowercase, e.g. "cardiac anatomy", "ww2 chronology", "organic chemistry — alkenes"). Reuse the same theme name when questions clearly share a topic.
-7. **Detect statements as questions**: if a line is clearly a quiz prompt phrased as a statement ("define entropy", "list the 3 laws of motion"), keep it but rewrite it as a clear question/instruction.
-8. **Match language**: keep the source language. If the source is in French, output French. Same for any other language.
-9. **Mark numbering**: keep the original_number if the source uses an explicit numbering ("12)", "Q12.", "12.", etc.). Otherwise leave it null.
+4. **Target the detected count**: in phase 0, the system detected an approximate number of questions present in the text. You MUST aim for that target. Do not silently drop questions to be safe. If you genuinely find fewer or more, that is allowed, but you should be exhaustive.
+5. **Cap at 500 questions maximum**.
+6. **Self-contained**: rewrite each question so it can be understood without any surrounding context.
+7. **Clean numbering**: assign a sequential clean_number starting from the first question of the BATCH ID provided (the system will renumber globally after merging). Within the batch the numbering must be 1, 2, 3, ...
+8. **Theme tagging**: assign each question a short theme/topic (2-4 words, lowercase, e.g. "cardiac anatomy", "ww2 chronology", "organic chemistry — alkenes"). Reuse the same theme name when questions clearly share a topic.
+9. **Detect statements as questions**: if a line is clearly a quiz prompt phrased as a statement ("define entropy", "list the 3 laws of motion"), keep it but rewrite it as a clear question/instruction.
+10. **Match language**: keep the source language. If the source is in French, output French. Same for any other language.
+11. **Mark original numbering**: keep the original_number if the source uses an explicit numbering ("12)", "Q12.", "12.", etc.). Otherwise leave it null. This is separate from clean_number.
 
 ## OUTPUT FORMAT
 
@@ -690,6 +735,7 @@ Return ONLY valid JSON, no markdown, no preamble:
 {
   "questions": [
     {
+      "clean_number": 1,
       "original_question": "exact source text of the question, preserved",
       "rewritten_question": "lightly cleaned, clear, standalone version",
       "theme": "short theme",
@@ -703,13 +749,39 @@ confidence is 0–1: how confident you are this is a real study question (use < 
 
 export function createQuestionExtractionPrompt(
   text: string,
-  customInstructions?: string | null
+  customInstructions?: string | null,
+  context?: {
+    expectedCount?: number | null
+    chunkIndex?: number
+    totalChunks?: number
+    knownThemes?: string[]
+  }
 ): string {
   const customBlock = customInstructions?.trim()
     ? `\n\n## ADDITIONAL USER INSTRUCTIONS\n${customInstructions.trim()}\n`
     : ''
 
-  return `Identify every real study question in the text below.
+  const contextLines: string[] = []
+  if (context?.expectedCount && context.expectedCount > 0) {
+    if (context.totalChunks && context.totalChunks > 1) {
+      const approxPerChunk = Math.ceil(context.expectedCount / context.totalChunks)
+      contextLines.push(
+        `Phase 0 detected approximately ${context.expectedCount} real questions in the FULL text. This is chunk ${(context.chunkIndex ?? 0) + 1}/${context.totalChunks}, so aim for roughly ${approxPerChunk} questions in this chunk. Be thorough — do not silently drop questions.`
+      )
+    } else {
+      contextLines.push(
+        `Phase 0 detected approximately ${context.expectedCount} real questions in this text. Aim to extract that many. Be thorough — do not silently drop questions.`
+      )
+    }
+  }
+  if (context?.knownThemes && context.knownThemes.length > 0) {
+    contextLines.push(
+      `Use these themes when assigning a topic to each question (reuse exact wording when applicable, add a new theme only if none fit): ${context.knownThemes.join(', ')}.`
+    )
+  }
+  const contextBlock = contextLines.length > 0 ? `\n\n## CONTEXT FROM PHASE 0\n${contextLines.join('\n')}\n` : ''
+
+  return `Identify every real study question in the text below and produce a clean, numbered version of each.
 
 Important:
 - The text mixes real questions with unrelated content. You must distinguish what is a real question and what is noise.
@@ -717,7 +789,8 @@ Important:
 - Preserve original wording as much as possible. Rewrite only for clarity, never for substance.
 - Do NOT answer the questions in this phase.
 - Tag each question with a short theme that can be used to group cards later.
-- If the text contains numbered list items that look like prompts (1., 2., Q1, Q1), capture them.${customBlock}
+- Number the cleaned questions sequentially within the batch (1, 2, 3, ...). The system will renumber globally afterwards.
+- If the text contains numbered list items that look like prompts (1., 2., Q1, Q1), capture them and store the original marker in original_number.${contextBlock}${customBlock}
 
 ## SOURCE TEXT
 
@@ -791,6 +864,7 @@ Return ONLY valid JSON, no markdown wrapper:
 export function createAnswerGenerationPrompt(
   sourceText: string,
   questions: Array<{
+    clean_number?: number
     original_question: string
     rewritten_question: string
     theme?: string
@@ -806,11 +880,12 @@ export function createAnswerGenerationPrompt(
 
 Strict requirements:
 1. The front must use the user's original question, only lightly modified for clarity. Do not replace it with a different question.
-2. The back must answer the question completely. First search the source text. If the answer is not in the source, use reliable general knowledge and tag the card with "external-knowledge".
-3. Never oversimplify. Provide the depth and detail the question deserves.
-4. Use Markdown and LaTeX where useful.
-5. Keep the theme assigned to each question.
-6. Match the language of the question.${customBlock}
+2. Each question has been pre-numbered (clean_number). Preserve that number — return one card per question, in the same order, and add the number as the first tag (e.g. "Q12") so the user can correlate cards with the original list.
+3. The back must answer the question completely. First search the source text. If the answer is not in the source, use reliable general knowledge and tag the card with "external-knowledge".
+4. Never oversimplify. Provide the depth and detail the question deserves.
+5. Use Markdown and LaTeX where useful.
+6. Keep the theme assigned to each question.
+7. Match the language of the question.${customBlock}
 
 ## QUESTIONS TO ANSWER (BATCH OF ${questions.length})
 

@@ -79,6 +79,7 @@ function normaliseForDedup(s: string): string {
 }
 
 interface ExtractedQuestion {
+  clean_number?: number
   original_question: string
   rewritten_question: string
   theme: string
@@ -127,11 +128,14 @@ function normaliseTheme(t: string | null | undefined): string {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Phase 1 — extract real questions from a possibly long, noisy text
+// Phase 1 — extract real questions from a possibly long, noisy text.
+// Uses Phase 0 hints (expected count, themes) when available so each chunk
+// knows how many questions to aim for and which themes to reuse.
 // ────────────────────────────────────────────────────────────────────────────
 async function extractQuestionsFromText(
   text: string,
-  customInstructions?: string | null
+  customInstructions?: string | null,
+  context?: { expectedCount?: number | null; themes?: string[] }
 ): Promise<ExtractedQuestion[]> {
   const openai = getOpenAI()
   const trimmed = text.trim().slice(0, MAX_INPUT_CHARS)
@@ -151,7 +155,15 @@ async function extractQuestionsFromText(
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: QUESTION_EXTRACTION_SYSTEM_PROMPT },
-          { role: 'user', content: createQuestionExtractionPrompt(chunk, customInstructions) },
+          {
+            role: 'user',
+            content: createQuestionExtractionPrompt(chunk, customInstructions, {
+              expectedCount: context?.expectedCount ?? null,
+              chunkIndex: i,
+              totalChunks: chunks.length,
+              knownThemes: context?.themes ?? [],
+            }),
+          },
         ],
       })
 
@@ -165,7 +177,7 @@ async function extractQuestionsFromText(
     }
   }
 
-  // Dedupe + sort + clamp at MAX_QUESTIONS
+  // Dedupe + clamp at MAX_QUESTIONS, then assign GLOBAL clean numbering
   const seen = new Set<string>()
   const deduped: ExtractedQuestion[] = []
   for (const q of all) {
@@ -184,6 +196,11 @@ async function extractQuestionsFromText(
     })
     if (deduped.length >= MAX_QUESTIONS) break
   }
+
+  // Global clean numbering 1..N (overrides anything the model produced)
+  deduped.forEach((q, idx) => {
+    q.clean_number = idx + 1
+  })
 
   console.log(`[Flashcards/Phase1] Total unique questions kept: ${deduped.length}`)
   return deduped
@@ -219,6 +236,7 @@ async function generateAnswersForQuestions(
             content: createAnswerGenerationPrompt(
               trimmedSource,
               batch.map((q) => ({
+                clean_number: q.clean_number,
                 original_question: q.original_question,
                 rewritten_question: q.rewritten_question,
                 theme: q.theme,
@@ -234,9 +252,16 @@ async function generateAnswersForQuestions(
       const parsed = safeJsonParse<{ cards: RawCard[] }>(raw, { cards: [] })
       const list = Array.isArray(parsed.cards) ? parsed.cards : []
 
-      // Re-attach the theme that came from phase 1 if the model omitted it
+      // Re-attach theme + clean_number from phase 1, and prepend a Q-tag
       list.forEach((c, idx) => {
-        if (!c.theme && batch[idx]) c.theme = batch[idx].theme
+        const q = batch[idx]
+        if (!q) return
+        if (!c.theme) c.theme = q.theme
+        const qTag = q.clean_number ? `Q${q.clean_number}` : null
+        const existingTags = Array.isArray(c.tags) ? c.tags : []
+        if (qTag && !existingTags.includes(qTag)) {
+          c.tags = [qTag, ...existingTags]
+        }
       })
 
       allCards.push(...list)
@@ -293,11 +318,15 @@ export async function POST(
       text,
       customInstructions,
       groupByTheme,
+      expectedCount,
+      themesHint,
     } = body as {
       pages?: Array<{ pageNumber: number; dataUrl: string }>
       text?: string
       customInstructions?: string | null
       groupByTheme?: boolean
+      expectedCount?: number | null
+      themesHint?: string[] | null
     }
 
     if ((!pages || pages.length === 0) && (!text || !text.trim())) {
@@ -315,8 +344,11 @@ export async function POST(
     if (text && text.trim()) {
       const sourceText = text.trim().slice(0, MAX_INPUT_CHARS)
 
-      // Phase 1: extract questions
-      const questions = await extractQuestionsFromText(sourceText, customInstructions)
+      // Phase 1: extract questions (informed by phase 0 hints if provided)
+      const questions = await extractQuestionsFromText(sourceText, customInstructions, {
+        expectedCount: typeof expectedCount === 'number' ? expectedCount : null,
+        themes: Array.isArray(themesHint) ? themesHint : [],
+      })
 
       if (questions.length === 0) {
         return NextResponse.json(
