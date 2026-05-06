@@ -150,6 +150,69 @@ function strategyLoose(text: string): CountStrategyResult {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Strategy 3.5 — auto-detect ANY consistent prefix word followed by a number.
+//
+// Catches custom card/section markers like:
+//   CARTE 001   FICHE 12   CARD 03   ITEM 5   EXERCICE 1   FLASH 042
+//   Section 3   Chapter 12   Carte n°1   Q 1   Ex 1
+//
+// We group line-starts by their prefix word and report the prefix that yields
+// the densest 1..N sequence. This is what makes the detector robust to any
+// custom numbering convention without needing to enumerate them.
+// ────────────────────────────────────────────────────────────────────────────
+
+function strategyAnyPrefix(text: string): CountStrategyResult {
+  const lines = text.split(/\r?\n/)
+  const groups = new Map<string, Set<number>>()
+
+  // Words we explicitly DON'T treat as a numbering prefix (years, dates, page
+  // numbers, etc. would collide otherwise — but those rarely start lines as
+  // a clean prefix anyway).
+  const skipPrefixes = new Set(['page', 'p', 'tome', 'volume', 'vol', 'edition'])
+
+  for (const rawLine of lines) {
+    const line = stripLeading(rawLine.trim())
+    if (!line) continue
+
+    // Match: optional one-or-two-word prefix (letters/dots only), then space(s),
+    // then a 1-4 digit number. We deliberately allow short prefixes (1-30
+    // chars) and ignore anything after the number.
+    //
+    // Examples that match:
+    //   "CARTE 001"           prefix="carte"   n=1
+    //   "Q 12"                prefix="q"       n=12
+    //   "Question 12 :"       prefix="question" n=12
+    //   "Carte n° 5"          prefix="carte n" n=5  (close enough, still groups)
+    //   "Section 12.1"        prefix="section" n=12
+    const m = line.match(/^([\p{L}][\p{L}.\-]{0,28})\s+(\d{1,4})\b/u)
+    if (m) {
+      const rawPrefix = m[1].toLowerCase().replace(/[.\-]+$/, '')
+      const n = parseInt(m[2], 10)
+      if (!Number.isFinite(n) || n < 1 || n > 999) continue
+      if (skipPrefixes.has(rawPrefix)) continue
+      if (!groups.has(rawPrefix)) groups.set(rawPrefix, new Set())
+      groups.get(rawPrefix)!.add(n)
+    }
+  }
+
+  // Pick the prefix that produces the largest, densest sequence
+  let best: { prefix: string; count: number; result: CountStrategyResult } | null = null
+  for (const [prefix, nums] of groups) {
+    if (nums.size < 5) continue
+    const result = finaliseSequence('any-prefix', nums, { prefix })
+    if (result.count > 0 && (!best || result.count > best.count)) {
+      best = { prefix, count: result.count, result }
+    }
+  }
+
+  if (!best) {
+    return { name: 'any-prefix', count: 0, confidence: 0, details: { reason: 'no-prefix-group' } }
+  }
+
+  return best.result
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Strategy 4 — question marks: count lines ending with "?"
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -268,6 +331,7 @@ export function countQuestions(text: string): QuestionCountResult {
   const strategies: CountStrategyResult[] = [
     strategyLinePrefix(text),
     strategyInline(text),
+    strategyAnyPrefix(text),
     strategyLoose(text),
     strategyQuestionMarks(text),
     strategyImperatives(text),

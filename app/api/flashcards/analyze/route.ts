@@ -12,7 +12,13 @@ export const maxDuration = 180
 export const dynamic = 'force-dynamic'
 
 // Tunables
-const MAX_INPUT_CHARS = 200_000
+//   • DETERMINISTIC_MAX_CHARS — regex parser is O(n), can comfortably handle
+//     1MB of text. We use a generous cap so very large numbered lists (e.g.
+//     500 cards × 2k chars each) are counted accurately.
+//   • LLM_MAX_INPUT_CHARS — what we feed to the LLM (still chunked). This is
+//     more conservative because LLM cost scales linearly.
+const DETERMINISTIC_MAX_CHARS = 1_500_000
+const LLM_MAX_INPUT_CHARS = 200_000
 const ANALYSIS_CHUNK_CHARS = 12_000
 const ANALYSIS_CHUNK_OVERLAP = 600
 const HARD_CAP = 500
@@ -92,18 +98,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const trimmed = text.slice(0, MAX_INPUT_CHARS)
-
     // ────────────────────────────────────────────────────────────────────
     // Strategy A — deterministic multi-strategy parser (no LLM)
+    //   We run it on the FULL text (up to 1.5MB) so that very long numbered
+    //   pastes are still counted correctly. Truncating before this step is
+    //   what caused "244 cards → 105 detected" on long inputs.
     // ────────────────────────────────────────────────────────────────────
-    const detected = countQuestions(trimmed)
-    console.log('[Flashcards/Analyze] Deterministic strategies:', JSON.stringify(detected, null, 2))
+    const detText = text.slice(0, DETERMINISTIC_MAX_CHARS)
+    const detected = countQuestions(detText)
+    console.log(
+      `[Flashcards/Analyze] Deterministic on ${detText.length} chars (full=${text.length}):`,
+      JSON.stringify(detected, null, 2)
+    )
 
     // ────────────────────────────────────────────────────────────────────
     // Strategy B — LLM enumeration (used for theme detection + as a
     // sanity check). We still run it because we need themes for grouping.
+    //   The LLM only ever sees the truncated text. The deterministic count
+    //   above remains the source of truth for explicitly numbered lists.
     // ────────────────────────────────────────────────────────────────────
+    const trimmed = text.slice(0, LLM_MAX_INPUT_CHARS)
     const chunks = chunkText(trimmed, ANALYSIS_CHUNK_CHARS, ANALYSIS_CHUNK_OVERLAP)
     const openai = getOpenAI()
 
@@ -215,8 +229,14 @@ export async function POST(request: NextRequest) {
       .map(([t]) => t)
 
     let noiseSummary = ''
-    if (countSource.startsWith('det:line-prefix') || countSource.startsWith('det:inline')) {
-      noiseSummary = `Detected an explicitly numbered list (1…${finalCount}). The count comes from the numbering itself, not from AI estimation.`
+    if (
+      countSource.startsWith('det:line-prefix') ||
+      countSource.startsWith('det:inline') ||
+      countSource.startsWith('det:any-prefix')
+    ) {
+      const prefix = (bestStrategy?.details as any)?.prefix
+      const prefixLabel = prefix && typeof prefix === 'string' ? ` ("${prefix.toUpperCase()} N…")` : ''
+      noiseSummary = `Detected an explicitly numbered list (1…${finalCount})${prefixLabel}. The count comes from the numbering itself, not from AI estimation.`
     } else if (countSource === 'llm-enumeration') {
       noiseSummary = `No clear numbering detected. The count comes from an AI enumeration of every question.`
     }
@@ -231,13 +251,16 @@ export async function POST(request: NextRequest) {
       language: detectedLanguage,
       noise_summary: noiseSummary,
       char_count: text.length,
-      truncated: text.length > MAX_INPUT_CHARS,
+      truncated: text.length > LLM_MAX_INPUT_CHARS,
       _debug: {
         chunks: chunks.length,
         raw_listed: allListed.length,
         unique_listed: llmCount,
         deterministic: detected,
         count_source: countSource,
+        det_chars: detText.length,
+        llm_chars: trimmed.length,
+        full_chars: text.length,
       },
     })
   } catch (err: any) {
