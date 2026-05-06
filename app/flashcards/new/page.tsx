@@ -50,7 +50,9 @@ export default function NewFlashcardDeckPage() {
     language: string
     noise: string
     forText: string
+    debug?: any
   }>(null)
+  const [showDebug, setShowDebug] = useState(false)
 
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [progress, setProgress] = useState(0)
@@ -170,6 +172,7 @@ export default function NewFlashcardDeckPage() {
         language: data.language || 'unknown',
         noise: data.noise_summary || '',
         forText: pastedText,
+        debug: data._debug,
       })
     } catch (err: any) {
       setError(err.message)
@@ -525,6 +528,35 @@ Long lists of questions are perfectly supported — answers are produced in smal
                     <p className="text-xs text-text-tertiary leading-relaxed">
                       The next step will use this count as a target so the AI doesn't silently drop questions, and it will produce a clean numbered version of each (Q1, Q2, …, Q{analysis.count}).
                     </p>
+
+                    {/* Debug breakdown — surfaces every strategy's signal so the user can see why we chose this count */}
+                    {analysis.debug && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowDebug((v) => !v)}
+                          className="text-[11px] text-text-tertiary hover:text-text-primary mono underline-offset-2 hover:underline"
+                        >
+                          {showDebug ? 'Hide' : 'Show'} detection details
+                        </button>
+                        {showDebug && (
+                          <div className="mt-2 p-3 bg-elevated border border-border rounded-lg text-[11px] font-mono space-y-1.5 leading-snug">
+                            <div className="text-text-secondary">source: <span className="text-text-primary">{analysis.debug.count_source}</span></div>
+                            <div className="text-text-secondary">LLM enumeration: <span className="text-text-primary">{analysis.debug.unique_listed} unique / {analysis.debug.raw_listed} raw across {analysis.debug.chunks} chunk(s)</span></div>
+                            {analysis.debug.deterministic?.strategies && (
+                              <div>
+                                <div className="text-text-secondary mt-1.5">deterministic strategies:</div>
+                                {analysis.debug.deterministic.strategies.map((s: any) => (
+                                  <div key={s.name} className={`pl-3 ${s.count > 0 ? 'text-text-primary' : 'text-text-tertiary'}`}>
+                                    {s.name}: count={s.count}, conf={s.confidence.toFixed(2)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

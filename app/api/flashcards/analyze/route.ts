@@ -5,6 +5,7 @@ import {
   QUESTION_LISTING_SYSTEM_PROMPT,
   createQuestionListingPrompt,
 } from '@/lib/prompts'
+import { countQuestions } from '@/lib/question-counter'
 
 export const runtime = 'nodejs'
 export const maxDuration = 180
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic'
 
 // Tunables
 const MAX_INPUT_CHARS = 200_000
-const ANALYSIS_CHUNK_CHARS = 12_000   // smaller → fewer questions per call → less risk of token-limit truncation
+const ANALYSIS_CHUNK_CHARS = 12_000
 const ANALYSIS_CHUNK_OVERLAP = 600
 const HARD_CAP = 500
 
@@ -61,76 +62,6 @@ function normaliseForDedup(s: string): string {
     .trim()
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Deterministic detector for explicitly numbered lists.
-//
-// Many users paste lists like:
-//
-//     1. What is X?
-//     2. Define Y.
-//     ...
-//     244. Compare Z and W.
-//
-// In that case the count IS the largest number in the sequence. We do not
-// need to ask the LLM to count for us — it's a parsing problem, not an
-// inference problem.
-//
-// The detector is permissive about formats:
-//   1. ...        1) ...        1- ...        1 / ...
-//   Q1. ...       Q.1 ...       Question 1: ...   N°1. ...
-// ────────────────────────────────────────────────────────────────────────────
-interface ExplicitNumbering {
-  count: number
-  unique: number
-  max: number
-  density: number  // unique / max  — how dense the sequence is
-  positions: number[] // line offsets, for debug
-}
-
-function detectExplicitNumbering(text: string): ExplicitNumbering | null {
-  const lines = text.split(/\r?\n/)
-  const numbers: number[] = []
-  const seen = new Set<number>()
-
-  // Allowed prefixes: nothing, Q, N°, Question, exo, exercice, item, etc.
-  // Allowed separators after the number: . ) - / : ° space
-  const re = /^\s*(?:[-•*\u2022]\s*)?(?:(?:question|exercice|exo|item|n[\u00b0o]|q\.?)\s*)?(\d{1,4})\s*[\)\.\-\u2013\u2014\/:\u00b0]\s+/i
-
-  for (const line of lines) {
-    const m = line.match(re)
-    if (!m) continue
-    const n = parseInt(m[1], 10)
-    if (!Number.isFinite(n) || n < 1 || n > 999) continue
-    if (seen.has(n)) continue
-    seen.add(n)
-    numbers.push(n)
-  }
-
-  if (numbers.length < 5) return null
-
-  numbers.sort((a, b) => a - b)
-  const max = numbers[numbers.length - 1]
-  const unique = numbers.length
-
-  // Density check — at least 70% of the numbers from 1..max must be present.
-  // This avoids confusing a few stray numbers (like dates or section IDs) with
-  // a real numbered list.
-  const density = unique / max
-
-  // Also require the sequence to start near 1 (not 145..980)
-  const startsNearOne = numbers[0] <= 3
-
-  if (density < 0.7 || !startsNearOne) return null
-
-  return {
-    count: max,
-    unique,
-    max,
-    density,
-    positions: [],
-  }
-}
-
 interface ListedQ {
   n?: number
   snippet: string
@@ -163,15 +94,16 @@ export async function POST(request: NextRequest) {
 
     const trimmed = text.slice(0, MAX_INPUT_CHARS)
 
-    // ── Step A: deterministic regex detection of explicit numbering ────────
-    const explicit = detectExplicitNumbering(trimmed)
-    if (explicit) {
-      console.log(
-        `[Flashcards/Analyze] Explicit numbering detected: count=${explicit.count}, unique=${explicit.unique}, density=${explicit.density.toFixed(2)}`
-      )
-    }
+    // ────────────────────────────────────────────────────────────────────
+    // Strategy A — deterministic multi-strategy parser (no LLM)
+    // ────────────────────────────────────────────────────────────────────
+    const detected = countQuestions(trimmed)
+    console.log('[Flashcards/Analyze] Deterministic strategies:', JSON.stringify(detected, null, 2))
 
-    // ── Step B: LLM enumeration in chunks (themes + sanity cross-check) ────
+    // ────────────────────────────────────────────────────────────────────
+    // Strategy B — LLM enumeration (used for theme detection + as a
+    // sanity check). We still run it because we need themes for grouping.
+    // ────────────────────────────────────────────────────────────────────
     const chunks = chunkText(trimmed, ANALYSIS_CHUNK_CHARS, ANALYSIS_CHUNK_OVERLAP)
     const openai = getOpenAI()
 
@@ -181,12 +113,12 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]
-      console.log(`[Flashcards/Analyze] Chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`)
+      console.log(`[Flashcards/Analyze] LLM chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`)
 
       try {
         const response = await openai.chat.completions.create({
           model: 'gpt-4o',
-          max_tokens: 16000, // gpt-4o supports up to 16384 output tokens
+          max_tokens: 16000,
           temperature: 0.0,
           response_format: { type: 'json_object' },
           messages: [
@@ -206,7 +138,7 @@ export async function POST(request: NextRequest) {
         const finishReason = response.choices[0]?.finish_reason
         const raw = response.choices[0]?.message?.content || ''
         if (finishReason === 'length') {
-          console.warn(`[Flashcards/Analyze] Chunk ${i + 1} hit token limit (length); JSON may be truncated`)
+          console.warn(`[Flashcards/Analyze] LLM chunk ${i + 1} hit token limit`)
         }
 
         const parsed = safeJsonParse<{ language?: string; questions?: ListedQ[] }>(raw, {
@@ -219,7 +151,7 @@ export async function POST(request: NextRequest) {
 
         const list = Array.isArray(parsed.questions) ? parsed.questions : []
         console.log(
-          `[Flashcards/Analyze] Chunk ${i + 1}: listed ${list.length} questions (finish_reason=${finishReason})`
+          `[Flashcards/Analyze] LLM chunk ${i + 1}: listed ${list.length} questions (finish=${finishReason})`
         )
 
         for (const q of list) {
@@ -235,11 +167,11 @@ export async function POST(request: NextRequest) {
           themeFrequency.set(theme, (themeFrequency.get(theme) || 0) + 1)
         }
       } catch (err: any) {
-        console.error(`[Flashcards/Analyze] Chunk ${i + 1} failed:`, err.message)
+        console.error(`[Flashcards/Analyze] LLM chunk ${i + 1} failed:`, err.message)
       }
     }
 
-    // Dedupe across chunks
+    // Dedupe across chunks for the LLM count
     const seen = new Set<string>()
     const unique: ListedQ[] = []
     for (const q of allListed) {
@@ -249,24 +181,32 @@ export async function POST(request: NextRequest) {
       unique.push(q)
       if (unique.length >= HARD_CAP) break
     }
-
     const llmCount = unique.length
 
-    // ── Step C: pick the count ───────────────────────────────────────────
-    // Rule of thumb:
-    //   • If explicit numbering was detected, trust it (it's deterministic).
-    //   • Otherwise, use the LLM unique count.
-    //   • Take the max as a safety net — never report fewer questions than
-    //     the largest reliable signal.
+    // ────────────────────────────────────────────────────────────────────
+    // Decide the final count.
+    //
+    //   • Deterministic detection wins if its confidence is >= 0.6.
+    //     In practice that means: a numbered list with density >= 0.7
+    //     starting near 1. We trust this absolutely.
+    //   • Otherwise, take the max of (deterministic count, LLM count) so
+    //     we never undercount.
+    // ────────────────────────────────────────────────────────────────────
+    const bestStrategy = detected.strategies
+      .filter((s) => s.count > 0)
+      .sort((a, b) => b.confidence - a.confidence)[0]
+
     let finalCount: number
-    let countSource: 'explicit-numbering' | 'llm-enumeration' | 'max'
-    if (explicit) {
-      finalCount = Math.max(explicit.count, llmCount)
-      countSource = explicit.count >= llmCount ? 'explicit-numbering' : 'max'
+    let countSource: string
+    if (bestStrategy && bestStrategy.confidence >= 0.6) {
+      finalCount = Math.max(bestStrategy.count, llmCount)
+      countSource = bestStrategy.count >= llmCount ? `det:${bestStrategy.name}` : 'det+llm:max'
     } else {
-      finalCount = llmCount
-      countSource = 'llm-enumeration'
+      finalCount = Math.max(detected.count, llmCount)
+      countSource = detected.count > llmCount ? `det:${detected.source}` : 'llm-enumeration'
     }
+
+    finalCount = Math.min(HARD_CAP, finalCount)
 
     // Themes — top 16 by frequency
     const themes = [...themeFrequency.entries()]
@@ -274,26 +214,29 @@ export async function POST(request: NextRequest) {
       .slice(0, 16)
       .map(([t]) => t)
 
+    let noiseSummary = ''
+    if (countSource.startsWith('det:line-prefix') || countSource.startsWith('det:inline')) {
+      noiseSummary = `Detected an explicitly numbered list (1…${finalCount}). The count comes from the numbering itself, not from AI estimation.`
+    } else if (countSource === 'llm-enumeration') {
+      noiseSummary = `No clear numbering detected. The count comes from an AI enumeration of every question.`
+    }
+
     console.log(
-      `[Flashcards/Analyze] FINAL: count=${finalCount} (source=${countSource}, llm=${llmCount}, explicit=${explicit?.count ?? 'none'})`
+      `[Flashcards/Analyze] FINAL: count=${finalCount}, source=${countSource}, llm=${llmCount}, det.best=${bestStrategy?.name ?? 'none'}@${bestStrategy?.count ?? 0} (conf ${bestStrategy?.confidence?.toFixed(2) ?? 'n/a'})`
     )
 
     return NextResponse.json({
       estimated_question_count: finalCount,
       themes,
       language: detectedLanguage,
-      noise_summary:
-        countSource === 'explicit-numbering'
-          ? `Detected an explicitly numbered list (1…${explicit?.max}). The count comes from the numbering itself.`
-          : '',
+      noise_summary: noiseSummary,
       char_count: text.length,
       truncated: text.length > MAX_INPUT_CHARS,
       _debug: {
         chunks: chunks.length,
         raw_listed: allListed.length,
         unique_listed: llmCount,
-        explicit_count: explicit?.count ?? null,
-        explicit_density: explicit?.density ?? null,
+        deterministic: detected,
         count_source: countSource,
       },
     })
