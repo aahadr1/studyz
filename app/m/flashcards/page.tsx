@@ -113,9 +113,11 @@ export default function MobileFlashcardsPage() {
         )}
       </div>
 
-      <FloatingActionButton onClick={() => router.push('/m/flashcards/new')}>
-        <FiPlus className="w-6 h-6" />
-      </FloatingActionButton>
+      <FloatingActionButton
+        onClick={() => router.push('/m/flashcards/new')}
+        icon={<FiPlus className="w-6 h-6" />}
+        label="New deck"
+      />
     </MobileLayout>
   )
 }
