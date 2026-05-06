@@ -92,9 +92,10 @@ export default function MobileFlashcardDeckPage({ params }: { params: Promise<{ 
 
   const currentStudyCard = dueCards[studyIndex]
   const studyProgress = dueCards.length > 0 ? Math.round((studyIndex / dueCards.length) * 100) : 0
+  const currentTab: Tab = tab
 
   // Study tab
-  if (tab === 'study') {
+  if (currentTab === 'study') {
     if (summary) {
       return (
         <MobileLayout>
@@ -207,8 +208,8 @@ export default function MobileFlashcardDeckPage({ params }: { params: Promise<{ 
       <div className="mobile-content p-4 pb-24">
         {/* Tab bar */}
         <div className="flex gap-1 p-1 bg-elevated border border-border rounded-xl mb-4 w-fit">
-          <button onClick={() => setTab('browse')} className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === 'browse' ? 'bg-text-primary text-background' : 'text-text-secondary'}`}>Browse</button>
-          <button onClick={() => { setSummary(null); setStudyIndex(0); setFlipped(false); setTab('study') }} className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === 'study' ? 'bg-text-primary text-background' : 'text-text-secondary'}`}>
+          <button onClick={() => setTab('browse')} className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${currentTab === 'browse' ? 'bg-text-primary text-background' : 'text-text-secondary'}`}>Browse</button>
+          <button onClick={() => { setSummary(null); setStudyIndex(0); setFlipped(false); setTab('study') }} className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${currentTab === 'study' ? 'bg-text-primary text-background' : 'text-text-secondary'}`}>
             Study {dueCards.length > 0 && `(${dueCards.length})`}
           </button>
         </div>
