@@ -92,10 +92,9 @@ export default function MobileFlashcardDeckPage({ params }: { params: Promise<{ 
 
   const currentStudyCard = dueCards[studyIndex]
   const studyProgress = dueCards.length > 0 ? Math.round((studyIndex / dueCards.length) * 100) : 0
-  const currentTab: Tab = tab
 
   // Study tab
-  if (currentTab === 'study') {
+  if (tab === 'study') {
     if (summary) {
       return (
         <MobileLayout>
@@ -208,8 +207,9 @@ export default function MobileFlashcardDeckPage({ params }: { params: Promise<{ 
       <div className="mobile-content p-4 pb-24">
         {/* Tab bar */}
         <div className="flex gap-1 p-1 bg-elevated border border-border rounded-xl mb-4 w-fit">
-          <button onClick={() => setTab('browse')} className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${currentTab === 'browse' ? 'bg-text-primary text-background' : 'text-text-secondary'}`}>Browse</button>
-          <button onClick={() => { setSummary(null); setStudyIndex(0); setFlipped(false); setTab('study') }} className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${currentTab === 'study' ? 'bg-text-primary text-background' : 'text-text-secondary'}`}>
+          {/* We only reach this JSX when tab === 'browse', so Browse is always active */}
+          <button onClick={() => setTab('browse')} className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all bg-text-primary text-background">Browse</button>
+          <button onClick={() => { setSummary(null); setStudyIndex(0); setFlipped(false); setTab('study') }} className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all text-text-secondary">
             Study {dueCards.length > 0 && `(${dueCards.length})`}
           </button>
         </div>
