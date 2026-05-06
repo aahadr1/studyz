@@ -1,0 +1,175 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+export const runtime = 'nodejs'
+export const maxDuration = 300 // 5 minutes
+
+async function createAuthClient() {
+  const cookieStore = await cookies()
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set(name, value, options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set(name, '', options)
+          } catch {
+            // Called from Server Component
+          }
+        },
+      },
+    }
+  )
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
+      console.error('[Podcast] GEMINI_API_KEY is not set')
+      return NextResponse.json(
+        { error: 'This feature is temporarily unavailable. Please try again later.' },
+        { status: 500 }
+      )
+    }
+
+    const supabase = await createAuthClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      console.error('[Podcast] Auth error:', authError)
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const {
+      documents,
+      targetDuration = 30,
+      language = 'auto',
+      style = 'conversational',
+      voiceProvider = 'gemini',
+      userPrompt = '',
+    } = body as {
+      documents?: Array<{
+        name: string
+        storage_path?: string
+        page_images?: Array<{ page_number: number; url: string }>
+      }>
+      targetDuration?: number
+      language?: string
+      style?: 'educational' | 'conversational' | 'technical' | 'storytelling'
+      voiceProvider?: 'gemini' | 'openai'
+      userPrompt?: string
+    }
+
+    if (!documents || documents.length === 0) {
+      return NextResponse.json({ error: 'At least one document is required' }, { status: 400 })
+    }
+
+    // Require page_images (MCQ-style: client renders PDF -> images)
+    const missingPageImages = documents.filter(
+      (d: any) => !Array.isArray(d?.page_images) || d.page_images.length === 0
+    )
+    if (missingPageImages.length > 0) {
+      return NextResponse.json(
+        { error: 'Please re-upload your documents and try again.' },
+        { status: 400 }
+      )
+    }
+
+    console.log(`[Podcast] Starting generation for ${documents.length} document(s)`)
+    console.log(`[Podcast] User: ${user.id}, Style: ${style}, Duration: ${targetDuration}min`)
+
+    // Create podcast record with "pending" status - will be processed separately
+    const placeholderTitle = documents.map(d => d.name.replace(/\.pdf$/i, '')).join(', ')
+    const { data: podcast, error: insertError } = await supabase
+      .from('intelligent_podcasts')
+      .insert({
+        user_id: user.id,
+        title: placeholderTitle,
+        description: 'Waiting to start...',
+        duration: 0,
+        language: language === 'auto' ? 'en' : language,
+        document_ids: documents.map((d) => d.storage_path || d.name),
+        knowledge_graph: { concepts: [], relationships: [], embeddings: {} },
+        chapters: [],
+        segments: [],
+        predicted_questions: [],
+        status: 'pending',
+        generation_progress: 0,
+      })
+      .select()
+      .single()
+
+    if (insertError || !podcast) {
+      console.error('[Podcast] Failed to create podcast record:', insertError)
+      return NextResponse.json({ error: 'Could not create podcast. Please try again.' }, { status: 500 })
+    }
+
+    console.log(`[Podcast] Created podcast ${podcast.id} with pending status`)
+
+    // Persist source document references (for resumability)
+    const { error: docsError } = await supabase
+      .from('intelligent_podcast_documents')
+      .insert(
+        documents.map((d) => ({
+          podcast_id: podcast.id,
+          user_id: user.id,
+          name: d.name,
+          storage_path: d.storage_path || '',
+          page_count: Array.isArray(d.page_images) ? d.page_images.length : 0,
+          page_images: d.page_images || [],
+        }))
+      )
+
+    if (docsError) {
+      console.error('[Podcast] Failed to create document rows:', docsError)
+
+      // Mark podcast errored so UI doesn't keep retrying blindly
+      await supabase
+        .from('intelligent_podcasts')
+        .update({ status: 'error', description: `Erreur: ${docsError.message}` })
+        .eq('id', podcast.id)
+
+      const looksLikeMissingMigration =
+        docsError.code === '42P01' || /relation\s+"intelligent_podcast_documents"\s+does not exist/i.test(docsError.message || '')
+      const looksLikeMissingColumn =
+        docsError.code === '42703' || /column\s+"page_images"\s+does not exist/i.test(docsError.message || '')
+
+      return NextResponse.json(
+        { error: 'Something went wrong. Please try again later.' },
+        { status: 500 }
+      )
+    }
+
+    // Return immediately with podcast ID and processing config
+    return NextResponse.json({
+      id: podcast.id,
+      status: 'pending',
+      message: 'Podcast record created, ready for processing',
+      documents,
+      config: {
+        targetDuration,
+        language,
+        style,
+        voiceProvider,
+        userPrompt: String(userPrompt || ''),
+      },
+    })
+  } catch (error: any) {
+    console.error('[Podcast] Setup error:', error)
+    return NextResponse.json({ error: 'Could not start podcast. Please try again later.' }, { status: 500 })
+  }
+}
