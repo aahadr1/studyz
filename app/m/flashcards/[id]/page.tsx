@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import MobileLayout, { MobileHeader } from '@/components/mobile/MobileLayout'
@@ -13,8 +13,8 @@ import type { FlashcardDeck, FlashcardCardWithReview, ReviewQuality, SessionSumm
 
 type Tab = 'browse' | 'study'
 
-export default function MobileFlashcardDeckPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: deckId } = use(params)
+export default function MobileFlashcardDeckPage({ params }: { params: { id: string } }) {
+  const deckId = params.id
   const router = useRouter()
   const searchParams = useSearchParams()
 

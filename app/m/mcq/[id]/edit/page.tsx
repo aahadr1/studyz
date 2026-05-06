@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import MobileLayout, { MobileHeader, BottomSheet } from '@/components/mobile/MobileLayout'
@@ -29,10 +29,9 @@ interface MCQQuestion {
   explanation?: string
 }
 
-export default function MobileMCQEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function MobileMCQEditPage({ params }: { params: { id: string } }) {
   const router = useRouter()
-  const mcqSetId = resolvedParams.id
+  const mcqSetId = params.id
 
   const [mcqSet, setMcqSet] = useState<any>(null)
   const [questions, setQuestions] = useState<MCQQuestion[]>([])

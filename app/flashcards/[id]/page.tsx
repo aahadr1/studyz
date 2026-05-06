@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
@@ -13,8 +13,8 @@ import type { FlashcardDeck, FlashcardCardWithReview, SessionSummary } from '@/t
 
 type Tab = 'browse' | 'study'
 
-export default function FlashcardDeckPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: deckId } = use(params)
+export default function FlashcardDeckPage({ params }: { params: { id: string } }) {
+  const deckId = params.id
   const router = useRouter()
   const searchParams = useSearchParams()
 
