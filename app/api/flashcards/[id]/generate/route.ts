@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
-import { FLASHCARD_GENERATION_SYSTEM_PROMPT, createFlashcardUserPrompt } from '@/lib/prompts'
+import {
+  FLASHCARD_GENERATION_SYSTEM_PROMPT,
+  createFlashcardUserPrompt,
+  createFlashcardTextPrompt,
+} from '@/lib/prompts'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -20,8 +24,34 @@ function getOpenAI() {
   return openaiInstance
 }
 
+function safeJsonParse(raw: string): { cards: any[] } {
+  try {
+    const jsonStr = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
+    return JSON.parse(jsonStr)
+  } catch {
+    return { cards: [] }
+  }
+}
+
+function normaliseCards(rawCards: any[], deckId: string, userId: string, sourcePage: number): any[] {
+  return (rawCards || [])
+    .map((c: any) => ({
+      deck_id: deckId,
+      user_id: userId,
+      card_type: ['basic', 'cloze', 'definition'].includes(c.card_type) ? c.card_type : 'basic',
+      front: String(c.front || '').trim(),
+      back: String(c.back || '').trim(),
+      hint: c.hint ? String(c.hint).trim() : null,
+      tags: Array.isArray(c.tags) ? c.tags.map(String) : [],
+      source_page: typeof c.source_page === 'number' ? c.source_page : sourcePage,
+    }))
+    .filter((c: any) => c.front && c.back)
+}
+
 // POST /api/flashcards/[id]/generate
-// Body: { pages: Array<{ pageNumber: number, dataUrl: string }> }
+// Body — one of:
+//   { pages: Array<{ pageNumber, dataUrl }>, customInstructions?: string }
+//   { text: string,                          customInstructions?: string }
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -53,72 +83,96 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { pages } = body as {
-      pages: Array<{ pageNumber: number; dataUrl: string }>
+    const {
+      pages,
+      text,
+      customInstructions,
+    } = body as {
+      pages?: Array<{ pageNumber: number; dataUrl: string }>
+      text?: string
+      customInstructions?: string | null
     }
 
-    if (!pages || pages.length === 0) {
-      return NextResponse.json({ error: 'pages array is required' }, { status: 400 })
+    if ((!pages || pages.length === 0) && (!text || !text.trim())) {
+      return NextResponse.json(
+        { error: 'Provide either "pages" (image-based) or "text" (raw text) input' },
+        { status: 400 }
+      )
     }
 
     const openai = getOpenAI()
     const allCards: any[] = []
 
-    for (const page of pages) {
-      try {
-        console.log(`[Flashcards] Generating cards for page ${page.pageNumber}...`)
+    // ── Path 1: Raw text input ─────────────────────────────────────────
+    if (text && text.trim()) {
+      // Chunk long text so we don't blow past context windows.
+      const MAX_CHARS = 12_000
+      const trimmed = text.trim()
+      const chunks: string[] = []
+      for (let i = 0; i < trimmed.length; i += MAX_CHARS) {
+        chunks.push(trimmed.slice(i, i + MAX_CHARS))
+      }
 
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          max_tokens: 4096,
-          messages: [
-            { role: 'system', content: FLASHCARD_GENERATION_SYSTEM_PROMPT },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: createFlashcardUserPrompt(page.pageNumber) },
-                {
-                  type: 'image_url',
-                  image_url: { url: page.dataUrl, detail: 'high' },
-                },
-              ],
-            },
-          ],
-        })
-
-        const raw = response.choices[0]?.message?.content || ''
-        let parsed: { cards: any[] } = { cards: [] }
-
+      for (let i = 0; i < chunks.length; i++) {
         try {
-          // Strip markdown code fences if present
-          const jsonStr = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
-          parsed = JSON.parse(jsonStr)
-        } catch {
-          console.warn(`[Flashcards] Failed to parse JSON for page ${page.pageNumber}:`, raw.slice(0, 200))
-          continue
+          console.log(`[Flashcards] Text chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`)
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            max_tokens: 4096,
+            messages: [
+              { role: 'system', content: FLASHCARD_GENERATION_SYSTEM_PROMPT },
+              { role: 'user', content: createFlashcardTextPrompt(chunks[i], customInstructions) },
+            ],
+            response_format: { type: 'json_object' },
+          })
+
+          const raw = response.choices[0]?.message?.content || ''
+          const parsed = safeJsonParse(raw)
+          const cards = normaliseCards(parsed.cards || [], deckId, user.id, i + 1)
+          allCards.push(...cards)
+          console.log(`[Flashcards] Chunk ${i + 1}: ${cards.length} cards`)
+        } catch (err: any) {
+          console.error(`[Flashcards] Error on text chunk ${i + 1}:`, err.message)
         }
+      }
+    }
 
-        const pageCards = (parsed.cards || []).map((c: any) => ({
-          deck_id: deckId,
-          user_id: user.id,
-          card_type: ['basic', 'cloze', 'definition'].includes(c.card_type) ? c.card_type : 'basic',
-          front: String(c.front || '').trim(),
-          back: String(c.back || '').trim(),
-          hint: c.hint ? String(c.hint).trim() : null,
-          tags: Array.isArray(c.tags) ? c.tags.map(String) : [],
-          source_page: page.pageNumber,
-        })).filter((c: any) => c.front && c.back)
+    // ── Path 2: Image-based pages ─────────────────────────────────────
+    if (pages && pages.length > 0) {
+      for (const page of pages) {
+        try {
+          console.log(`[Flashcards] Generating cards for page ${page.pageNumber}...`)
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            max_tokens: 4096,
+            messages: [
+              { role: 'system', content: FLASHCARD_GENERATION_SYSTEM_PROMPT },
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: createFlashcardUserPrompt(page.pageNumber, customInstructions) },
+                  { type: 'image_url', image_url: { url: page.dataUrl, detail: 'high' } },
+                ],
+              },
+            ],
+          })
 
-        allCards.push(...pageCards)
-        console.log(`[Flashcards] Page ${page.pageNumber}: ${pageCards.length} cards generated`)
-      } catch (pageErr: any) {
-        console.error(`[Flashcards] Error on page ${page.pageNumber}:`, pageErr.message)
-        // Continue with other pages
+          const raw = response.choices[0]?.message?.content || ''
+          const parsed = safeJsonParse(raw)
+          const cards = normaliseCards(parsed.cards || [], deckId, user.id, page.pageNumber)
+          allCards.push(...cards)
+          console.log(`[Flashcards] Page ${page.pageNumber}: ${cards.length} cards`)
+        } catch (pageErr: any) {
+          console.error(`[Flashcards] Error on page ${page.pageNumber}:`, pageErr.message)
+        }
       }
     }
 
     if (allCards.length === 0) {
-      return NextResponse.json({ error: 'No cards could be generated from the provided pages' }, { status: 422 })
+      return NextResponse.json(
+        { error: 'No cards could be generated from the provided input' },
+        { status: 422 }
+      )
     }
 
     // Insert all cards

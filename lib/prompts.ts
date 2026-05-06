@@ -608,7 +608,11 @@ Return a JSON object — nothing else:
 - Never invent information not present on the page.
 - Keep fronts short and unambiguous. Keep backs complete but concise.`
 
-export function createFlashcardUserPrompt(pageNumber: number): string {
+export function createFlashcardUserPrompt(pageNumber: number, customInstructions?: string | null): string {
+  const customBlock = customInstructions?.trim()
+    ? `\n\n## ADDITIONAL USER INSTRUCTIONS (FOLLOW STRICTLY)\n${customInstructions.trim()}\n`
+    : ''
+
   return `Analyze page ${pageNumber} of this document and extract all important knowledge as flashcards.
 
 Follow the system instructions precisely. Return only the JSON object with a "cards" array.
@@ -621,5 +625,34 @@ For each card:
 5. Set source_page to ${pageNumber}
 
 If the page contains mathematical formulas, use LaTeX notation.
-If the page is in a language other than English, write the cards in that same language.`
+If the page is in a language other than English, write the cards in that same language.${customBlock}`
+}
+
+/**
+ * Build a flashcard generation prompt for raw text input (no images).
+ * The text may be pasted by the user, or extracted from a document.
+ */
+export function createFlashcardTextPrompt(text: string, customInstructions?: string | null): string {
+  const customBlock = customInstructions?.trim()
+    ? `\n\n## ADDITIONAL USER INSTRUCTIONS (FOLLOW STRICTLY)\n${customInstructions.trim()}\n`
+    : ''
+
+  return `Analyze the following text and extract all important knowledge as flashcards.
+
+Follow the system instructions precisely. Return only the JSON object with a "cards" array.
+
+For each card:
+1. Choose the most appropriate card_type (basic, cloze, or definition)
+2. Write a clear, atomic front prompt
+3. Write a complete, self-contained back
+4. Add relevant tags and an optional hint for difficult cards
+5. Set source_page to 1 (since this comes from raw text)
+
+Aim for a good density: produce 5–25 cards depending on how rich the text is.
+If the text contains mathematical formulas, use LaTeX notation.
+Match the language of the text exactly.${customBlock}
+
+## TEXT TO ANALYZE
+
+${text.trim()}`
 }

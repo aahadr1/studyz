@@ -2,20 +2,35 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { convertPdfToImagesClient } from '@/lib/client-pdf-to-images'
 import MobileLayout, { MobileHeader } from '@/components/mobile/MobileLayout'
-import { FiUpload, FiFile, FiX, FiZap, FiPlus } from 'react-icons/fi'
+import {
+  FiUpload, FiFile, FiX, FiZap, FiPlus, FiFileText, FiSettings, FiChevronDown, FiChevronUp,
+} from 'react-icons/fi'
 
+type SourceTab = 'pdf' | 'text'
 type UploadStatus = 'idle' | 'converting' | 'generating' | 'done' | 'error'
+
+const PRESETS: Array<{ label: string; instructions: string }> = [
+  { label: 'High-yield', instructions: 'Generate only the most high-yield, exam-relevant cards. Keep them concise.' },
+  { label: 'Definitions', instructions: 'Prioritise the "definition" card type for every key term.' },
+  { label: 'Cloze-only', instructions: 'Generate ONLY cloze cards using {{c1::ANSWER}} markers.' },
+  { label: 'Math', instructions: 'Focus on formulas and theorems. Use LaTeX rigorously.' },
+]
 
 export default function MobileNewFlashcardDeckPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [sourceTab, setSourceTab] = useState<SourceTab>('pdf')
   const [file, setFile] = useState<File | null>(null)
+  const [pastedText, setPastedText] = useState('')
   const [deckName, setDeckName] = useState('')
   const [description, setDescription] = useState('')
+  const [showInstructions, setShowInstructions] = useState(false)
+  const [customInstructions, setCustomInstructions] = useState('')
+
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
@@ -40,7 +55,9 @@ export default function MobileNewFlashcardDeckPage() {
     }
   }
 
-  const handleGenerate = async () => {
+  const isProcessing = status === 'converting' || status === 'generating'
+
+  const generateFromPdf = async () => {
     if (!file || !deckName.trim()) { setError('Please provide a deck name and upload a PDF'); return }
     setError(null)
     setStatus('converting')
@@ -50,7 +67,7 @@ export default function MobileNewFlashcardDeckPage() {
     try {
       const pageImages = await convertPdfToImagesClient(file, 1.2, 0.6)
       setProgress(20)
-      setProgressMsg(`${pageImages.length} pages found. Creating deck...`)
+      setProgressMsg(`${pageImages.length} pages found...`)
 
       const deckRes = await fetch('/api/flashcards', {
         method: 'POST',
@@ -66,17 +83,66 @@ export default function MobileNewFlashcardDeckPage() {
 
       for (let i = 0; i < pageImages.length; i += batchSize) {
         const batch = pageImages.slice(i, i + batchSize)
-        setProgressMsg(`Pages ${i + 1}–${Math.min(i + batchSize, pageImages.length)} of ${pageImages.length}...`)
+        setProgressMsg(`Pages ${i + 1}–${Math.min(i + batchSize, pageImages.length)}/${pageImages.length}`)
 
         await fetch(`/api/flashcards/${deck.id}/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ pages: batch.map((p) => ({ pageNumber: p.pageNumber, dataUrl: p.dataUrl })) }),
+          body: JSON.stringify({
+            pages: batch.map((p) => ({ pageNumber: p.pageNumber, dataUrl: p.dataUrl })),
+            customInstructions: customInstructions.trim() || null,
+          }),
         })
         processed += batch.length
         setProgress(20 + Math.round((processed / pageImages.length) * 75))
       }
 
+      setProgress(100)
+      setStatus('done')
+      setTimeout(() => router.push(`/m/flashcards/${deck.id}`), 600)
+    } catch (err: any) {
+      setError(err.message)
+      setStatus('error')
+    }
+  }
+
+  const generateFromText = async () => {
+    if (!pastedText.trim() || !deckName.trim()) {
+      setError('Please provide a deck name and some text')
+      return
+    }
+    if (pastedText.trim().length < 50) {
+      setError('Text is too short — at least 50 characters needed')
+      return
+    }
+    setError(null)
+    setStatus('generating')
+    setProgress(20)
+    setProgressMsg('Creating deck...')
+
+    try {
+      const deckRes = await fetch('/api/flashcards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: deckName.trim(), description: description.trim() || null }),
+      })
+      if (!deckRes.ok) throw new Error((await deckRes.json()).error)
+      const { deck } = await deckRes.json()
+
+      setProgress(50)
+      setProgressMsg('Generating cards...')
+
+      const genRes = await fetch(`/api/flashcards/${deck.id}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          text: pastedText,
+          customInstructions: customInstructions.trim() || null,
+        }),
+      })
+      if (!genRes.ok) throw new Error((await genRes.json()).error || 'Generation failed')
+      const data = await genRes.json()
+      setProgressMsg(`${data.cardsCreated} cards created!`)
       setProgress(100)
       setStatus('done')
       setTimeout(() => router.push(`/m/flashcards/${deck.id}`), 600)
@@ -98,7 +164,7 @@ export default function MobileNewFlashcardDeckPage() {
     router.push(`/m/flashcards/${deck.id}`)
   }
 
-  const isProcessing = status === 'converting' || status === 'generating'
+  const hasInput = (sourceTab === 'pdf' && !!file) || (sourceTab === 'text' && pastedText.trim().length >= 50)
 
   return (
     <MobileLayout>
@@ -129,28 +195,131 @@ export default function MobileNewFlashcardDeckPage() {
           />
         </div>
 
-        {/* File */}
-        {!file ? (
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full py-8 border-2 border-dashed border-border rounded-xl flex flex-col items-center gap-2 text-text-tertiary"
-          >
-            <FiUpload className="w-6 h-6" />
-            <span className="text-sm">Tap to upload PDF</span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-3 p-4 bg-elevated border border-border rounded-xl">
-            <FiFile className="w-5 h-5 text-text-tertiary" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{file.name}</p>
-              <p className="text-xs text-text-tertiary">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
-            </div>
-            {!isProcessing && (
-              <button onClick={() => setFile(null)}><FiX className="w-4 h-4 text-text-tertiary" /></button>
+        {/* Source tabs */}
+        <div>
+          <label className="label mb-2 block">Source</label>
+          <div className="flex gap-1 p-1 bg-elevated border border-border rounded-xl">
+            <button
+              onClick={() => setSourceTab('pdf')}
+              disabled={isProcessing}
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                sourceTab === 'pdf' ? 'bg-text-primary text-background' : 'text-text-secondary'
+              } disabled:opacity-50`}
+            >
+              <FiFile className="w-3.5 h-3.5" /> PDF
+            </button>
+            <button
+              onClick={() => setSourceTab('text')}
+              disabled={isProcessing}
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                sourceTab === 'text' ? 'bg-text-primary text-background' : 'text-text-secondary'
+              } disabled:opacity-50`}
+            >
+              <FiFileText className="w-3.5 h-3.5" /> Text
+            </button>
+          </div>
+        </div>
+
+        {/* PDF source */}
+        {sourceTab === 'pdf' && (
+          <>
+            {!file ? (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
+                className="w-full py-8 border-2 border-dashed border-border rounded-xl flex flex-col items-center gap-2 text-text-tertiary disabled:opacity-50"
+              >
+                <FiUpload className="w-6 h-6" />
+                <span className="text-sm">Tap to upload PDF</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-3 p-4 bg-elevated border border-border rounded-xl">
+                <FiFile className="w-5 h-5 text-text-tertiary" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{file.name}</p>
+                  <p className="text-xs text-text-tertiary">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+                </div>
+                {!isProcessing && (
+                  <button onClick={() => setFile(null)}><FiX className="w-4 h-4 text-text-tertiary" /></button>
+                )}
+              </div>
             )}
+            <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileSelect} />
+          </>
+        )}
+
+        {/* Text source */}
+        {sourceTab === 'text' && (
+          <div>
+            <textarea
+              value={pastedText}
+              onChange={(e) => setPastedText(e.target.value)}
+              placeholder="Paste your notes, lesson, or any text..."
+              rows={10}
+              disabled={isProcessing}
+              className="input w-full resize-y text-sm"
+            />
+            <div className="flex justify-between text-xs text-text-tertiary mono mt-1">
+              <span>{pastedText.length.toLocaleString()} chars</span>
+              <span>{pastedText.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words</span>
+            </div>
           </div>
         )}
-        <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileSelect} />
+
+        {/* Custom instructions */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowInstructions((v) => !v)}
+            className="w-full flex items-center justify-between p-3 bg-elevated border border-border rounded-xl"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <FiSettings className="w-4 h-4" />
+              AI Instructions
+              {customInstructions.trim() && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 mono">on</span>
+              )}
+            </span>
+            {showInstructions ? <FiChevronUp className="w-4 h-4 text-text-tertiary" /> : <FiChevronDown className="w-4 h-4 text-text-tertiary" />}
+          </button>
+
+          {showInstructions && (
+            <div className="mt-2 p-3 border border-border rounded-xl bg-elevated space-y-2">
+              <p className="text-xs text-text-tertiary">Tell the AI exactly how you want your cards.</p>
+
+              <div className="flex flex-wrap gap-1.5">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setCustomInstructions(p.instructions)}
+                    className="text-xs px-2 py-1 rounded-full border border-border bg-surface text-text-secondary"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                {customInstructions && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomInstructions('')}
+                    className="text-xs px-2 py-1 rounded-full border border-error/30 bg-error/5 text-error"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              <textarea
+                value={customInstructions}
+                onChange={(e) => setCustomInstructions(e.target.value)}
+                placeholder="e.g. Only cloze cards. Write in French."
+                rows={4}
+                disabled={isProcessing}
+                className="input w-full resize-y text-sm"
+              />
+            </div>
+          )}
+        </div>
 
         {/* Progress */}
         {isProcessing && (
@@ -171,9 +340,9 @@ export default function MobileNewFlashcardDeckPage() {
 
         {error && <p className="text-sm text-error">{error}</p>}
 
-        {file ? (
+        {hasInput ? (
           <button
-            onClick={handleGenerate}
+            onClick={sourceTab === 'pdf' ? generateFromPdf : generateFromText}
             disabled={isProcessing || !deckName.trim()}
             className="btn-primary w-full disabled:opacity-50"
           >
