@@ -658,42 +658,75 @@ ${text.trim()}`
 }
 
 // ============================================================================
-// PHASE 0 — QUICK QUESTION DETECTION (just count + theme preview)
+// PHASE 0 — ACCURATE QUESTION LISTING / COUNTING (chunked)
+// ============================================================================
+//
+// To count reliably, we ask the model to LIST every real question with a short
+// snippet (first ~80 chars). The list length = the count. Snippets are then
+// deduplicated across chunks so overlap doesn't inflate the count.
 // ============================================================================
 
-export const QUESTION_DETECTION_SYSTEM_PROMPT = `You are an expert at quickly scanning study material to estimate how many real study questions it contains.
+export const QUESTION_LISTING_SYSTEM_PROMPT = `You are an expert at scanning study material and listing every real study question.
 
-Your only task is to:
-1. Read the entire text the user pasted.
-2. Count how many distinct, real study questions are present (questions a student would put on a flashcard).
-3. List the main themes/topics covered.
-4. Identify the language of the source.
+The user will paste raw text that may mix:
+- explicit questions (with or without "?")
+- statements that act as quiz prompts ("define X", "list the 3 laws of...")
+- answers, course narration, examples, comments
+- headers, page numbers, broken line breaks, copy/paste artifacts
+- duplicated lines, irrelevant paragraphs
 
-DO NOT extract or rewrite the questions yet. DO NOT answer them. Only return the high-level analysis.
+Your task is PHASE 0 — produce a complete, accurate enumeration of EVERY real study question, with a short snippet and a short theme tag for each. Do NOT rewrite, clean up, or answer them yet.
 
 ## RULES
 
-- Be strict: only count entries that are truly questions a student would memorize. Skip narration, course content that is not a prompt, headers, page numbers, broken artifacts.
-- Be exhaustive: it is fine to count 200, 300 or 500 questions if they are really there. The cap is 500.
-- A clear instruction phrased as a statement still counts ("define entropy", "list the 3 laws of motion").
-- A single multi-part question = 1 question (do not inflate the count).
-- Themes: 3 to 12 short topic labels (lowercase, 1-4 words each), grouping the questions by subject.
-- "noise_summary": 1 short sentence describing what kind of irrelevant content was ignored, if any.
+1. **Enumerate every real question — be exhaustive**. If the source clearly contains 244 questions, you MUST return 244 entries. Do not stop early. Do not summarise. The hard cap is 500.
+2. **Real questions only**. Skip narration, lecture text, examples, headers, footers, page numbers, copy-paste noise. A line is a question only if a student would put it on a flashcard.
+3. **A statement that is clearly a quiz prompt counts** ("define entropy", "list the 3 laws of motion", "compare X and Y").
+4. **A multi-part question = 1 entry** (do not inflate the count).
+5. **Snippets**: 60–120 characters from the original line, enough to identify the question uniquely. Keep the original wording (no rewrite). Use ellipsis "…" if you truncate.
+6. **Themes**: a short topic label (1–4 words, lowercase, e.g. "cardiac anatomy", "ww2 chronology"). Reuse the same label for related questions.
+7. **Original numbering**: if the source uses an explicit number ("12.", "Q12)", "12)"), keep it in original_number. Otherwise null.
+8. **Numbering**: number each entry sequentially within the chunk you receive (1, 2, 3, …). The system will renumber globally after merging chunks.
+9. **Language**: return the source language (ISO-like short code: "fr", "en", "es", "unknown").
 
-## OUTPUT FORMAT
+## OUTPUT FORMAT — STRICT JSON ONLY
 
-Return ONLY valid JSON, no markdown wrapper:
 {
-  "estimated_question_count": 153,
-  "themes": ["cardiac anatomy", "ww2 chronology", "organic chemistry — alkenes"],
   "language": "fr",
-  "noise_summary": "the text also contained course narration and page headers, which were ignored"
-}`
+  "questions": [
+    {
+      "n": 1,
+      "snippet": "first 60–120 chars of the original question, preserved",
+      "theme": "short theme",
+      "original_number": "12)" or null
+    }
+  ]
+}
 
-export function createQuestionDetectionPrompt(text: string): string {
-  return `Analyse the text below and return how many real study questions it contains, plus the list of themes covered.
+Do NOT wrap in markdown. Do NOT add commentary. Return only the JSON object.`
 
-Do not extract the questions themselves. Just return the high-level analysis as JSON.
+export function createQuestionListingPrompt(
+  text: string,
+  ctx?: { chunkIndex?: number; totalChunks?: number; runningCountSoFar?: number; knownThemes?: string[] }
+): string {
+  const lines: string[] = []
+  if (ctx?.totalChunks && ctx.totalChunks > 1) {
+    lines.push(
+      `This is chunk ${(ctx.chunkIndex ?? 0) + 1}/${ctx.totalChunks} of a longer text. List every question that appears in THIS chunk.`
+    )
+    if (typeof ctx.runningCountSoFar === 'number') {
+      lines.push(`Total questions counted in earlier chunks so far: ${ctx.runningCountSoFar}.`)
+    }
+  } else {
+    lines.push('List every real study question in the text below.')
+  }
+  if (ctx?.knownThemes && ctx.knownThemes.length > 0) {
+    lines.push(`Reuse these existing theme labels when applicable: ${ctx.knownThemes.join(', ')}.`)
+  }
+
+  return `${lines.join('\n')}
+
+Be exhaustive — do NOT skip questions to be safe. The hard cap is 500.
 
 ## SOURCE TEXT
 
