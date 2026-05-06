@@ -19,8 +19,8 @@ export const dynamic = 'force-dynamic'
 // ────────────────────────────────────────────────────────────────────────────
 const MAX_QUESTIONS = 500
 // Phase 1 — extraction
-const EXTRACTION_CHUNK_CHARS = 22_000   // chunk size of pasted text per extraction call
-const EXTRACTION_CHUNK_OVERLAP = 800    // overlap between consecutive chunks (avoid splitting mid-question)
+const EXTRACTION_CHUNK_CHARS = 14_000   // smaller chunks → fewer questions per call → no token-limit truncation
+const EXTRACTION_CHUNK_OVERLAP = 700    // overlap between consecutive chunks (avoid splitting mid-question)
 // Phase 2 — answers
 const ANSWER_BATCH_SIZE = 12            // number of questions per answer-generation call (smaller = more accurate)
 const ANSWER_SOURCE_BUDGET = 30_000     // max source-text chars sent to phase-2 calls (truncated if larger)
@@ -150,8 +150,8 @@ async function extractQuestionsFromText(
     try {
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
-        max_tokens: 6000,
-        temperature: 0.1, // low temp for accurate extraction
+        max_tokens: 16000, // gpt-4o max output — required for chunks with 100+ questions
+        temperature: 0.0,  // fully deterministic for extraction
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: QUESTION_EXTRACTION_SYSTEM_PROMPT },
@@ -167,10 +167,16 @@ async function extractQuestionsFromText(
         ],
       })
 
+      const finishReason = response.choices[0]?.finish_reason
       const raw = response.choices[0]?.message?.content || ''
+      if (finishReason === 'length') {
+        console.warn(`[Flashcards/Phase1] Chunk ${i + 1} hit token limit (length); JSON may be truncated`)
+      }
       const parsed = safeJsonParse<{ questions: ExtractedQuestion[] }>(raw, { questions: [] })
       const list = Array.isArray(parsed.questions) ? parsed.questions : []
-      console.log(`[Flashcards/Phase1] Chunk ${i + 1}: extracted ${list.length} candidate questions`)
+      console.log(
+        `[Flashcards/Phase1] Chunk ${i + 1}: extracted ${list.length} candidate questions (finish_reason=${finishReason})`
+      )
       all.push(...list)
     } catch (err: any) {
       console.error(`[Flashcards/Phase1] Chunk ${i + 1} failed:`, err.message)
@@ -226,7 +232,7 @@ async function generateAnswersForQuestions(
     try {
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
-        max_tokens: 6000,
+        max_tokens: 16000,
         temperature: 0.4, // some creativity for memorable phrasing, but still grounded
         response_format: { type: 'json_object' },
         messages: [
