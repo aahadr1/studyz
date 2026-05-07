@@ -169,8 +169,8 @@ export default function FlashcardStudy({ deckId, cards: initialCards, accessToke
       </div>
 
       {/* Card */}
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="w-full max-w-2xl" style={{ minHeight: '260px' }}>
+      <div className="flex-1 flex flex-col items-center justify-start overflow-y-auto">
+        <div className="w-full max-w-2xl">
           <FlashcardCard
             card={currentCard}
             flipped={flipped}

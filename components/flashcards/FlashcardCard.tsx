@@ -48,92 +48,72 @@ function MarkdownContent({ content }: { content: string }) {
 export default function FlashcardCard({ card, flipped = false, onFlip, showHint = false }: Props) {
   const typeInfo = CARD_TYPE_LABELS[card.card_type] || CARD_TYPE_LABELS.basic
 
-  // For cloze cards, show blanks on front
   const frontContent = card.card_type === 'cloze'
     ? card.front.replace(/\{\{c1::([^}]+)\}\}/g, '_____')
     : card.front
 
-  const backContent = card.card_type === 'cloze'
-    ? card.back
-    : card.back
+  const backContent = card.back
 
   return (
-    <div
-      className="relative w-full"
-      style={{ perspective: '1200px' }}
-    >
+    <div className="relative w-full cursor-pointer" onClick={onFlip}>
+      {/* Front — hidden when flipped */}
       <div
-        className="relative w-full transition-transform duration-500 cursor-pointer"
-        style={{
-          transformStyle: 'preserve-3d',
-          transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-          minHeight: '260px',
-        }}
-        onClick={onFlip}
+        className={`w-full rounded-2xl border border-border bg-elevated p-8 flex flex-col transition-opacity duration-200 ${
+          flipped ? 'hidden' : 'block'
+        }`}
       >
-        {/* Front */}
-        <div
-          className="absolute inset-0 w-full h-full rounded-2xl border border-border bg-elevated p-8 flex flex-col"
-          style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${typeInfo.color}`}>
-              {typeInfo.label}
-            </span>
-            {card.source_page && (
-              <span className="text-xs text-text-tertiary mono">p.{card.source_page}</span>
-            )}
-          </div>
-
-          <div className="flex-1 flex items-center justify-center text-center">
-            <div className="text-lg text-text-primary font-medium leading-relaxed max-w-lg">
-              <MarkdownContent content={frontContent} />
-            </div>
-          </div>
-
-          {showHint && card.hint && (
-            <div className="mt-4 pt-4 border-t border-border text-center">
-              <span className="text-xs text-text-tertiary italic">💡 {card.hint}</span>
-            </div>
+        <div className="flex items-center justify-between mb-6">
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${typeInfo.color}`}>
+            {typeInfo.label}
+          </span>
+          {card.source_page && (
+            <span className="text-xs text-text-tertiary mono">p.{card.source_page}</span>
           )}
+        </div>
 
-          <div className="mt-6 text-center">
-            <span className="text-xs text-text-tertiary">Tap to reveal answer</span>
+        <div className="min-h-[140px] flex items-center justify-center text-center">
+          <div className="text-lg text-text-primary font-medium leading-relaxed max-w-lg">
+            <MarkdownContent content={frontContent} />
           </div>
         </div>
 
-        {/* Back */}
-        <div
-          className="absolute inset-0 w-full h-full rounded-2xl border border-border bg-surface p-8 flex flex-col"
-          style={{
-            backfaceVisibility: 'hidden',
-            WebkitBackfaceVisibility: 'hidden',
-            transform: 'rotateY(180deg)',
-          }}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${typeInfo.color}`}>
-              {typeInfo.label}
-            </span>
-            <span className="text-xs text-text-tertiary">Answer</span>
+        {showHint && card.hint && (
+          <div className="mt-4 pt-4 border-t border-border text-center">
+            <span className="text-xs text-text-tertiary italic">💡 {card.hint}</span>
           </div>
+        )}
 
-          <div className="flex-1 flex items-center justify-center text-center overflow-y-auto">
-            <div className="text-base text-text-primary leading-relaxed max-w-lg">
-              <MarkdownContent content={backContent} />
-            </div>
-          </div>
-
-          {card.tags.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-1 justify-center">
-              {card.tags.map((tag) => (
-                <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-background border border-border text-text-tertiary">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
+        <div className="mt-6 text-center">
+          <span className="text-xs text-text-tertiary">Tap to reveal answer</span>
         </div>
+      </div>
+
+      {/* Back — shown when flipped, auto-height so long answers are fully visible */}
+      <div
+        className={`w-full rounded-2xl border border-border bg-surface p-8 flex flex-col transition-opacity duration-200 ${
+          flipped ? 'block' : 'hidden'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${typeInfo.color}`}>
+            {typeInfo.label}
+          </span>
+          <span className="text-xs text-text-tertiary">Answer</span>
+        </div>
+
+        <div className="text-base text-text-primary leading-relaxed text-left">
+          <MarkdownContent content={backContent} />
+        </div>
+
+        {card.tags.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-1">
+            {card.tags.map((tag) => (
+              <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-background border border-border text-text-tertiary">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

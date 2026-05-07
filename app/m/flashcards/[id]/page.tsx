@@ -145,15 +145,11 @@ export default function MobileFlashcardDeckPage({ params }: { params: { id: stri
 
           {/* Card */}
           <div
-            className="flex-1 min-h-[280px] mobile-card p-6 flex flex-col items-center justify-center text-center cursor-pointer mb-6"
+            className="flex-1 mobile-card p-6 flex flex-col overflow-y-auto cursor-pointer mb-6"
             onClick={() => !flipped && setFlipped(true)}
-            style={{ perspective: '800px' }}
           >
-            <div
-              className="w-full transition-transform duration-400"
-              style={{ transformStyle: 'preserve-3d', transform: flipped ? 'rotateY(180deg)' : 'rotateY(0)' }}
-            >
-              <div style={{ backfaceVisibility: 'hidden' }}>
+            {!flipped ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center">
                 <p className="text-xs text-text-tertiary uppercase tracking-wider mb-3">{currentStudyCard?.card_type}</p>
                 <div className="text-base text-text-primary leading-relaxed">
                   <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
@@ -162,15 +158,28 @@ export default function MobileFlashcardDeckPage({ params }: { params: { id: stri
                       : currentStudyCard?.front || ''}
                   </ReactMarkdown>
                 </div>
-                {!flipped && <p className="text-xs text-text-tertiary mt-4">Tap to reveal</p>}
+                <p className="text-xs text-text-tertiary mt-6">Tap to reveal</p>
               </div>
-            </div>
-
-            {flipped && (
-              <div className="mt-4 pt-4 border-t border-border w-full text-sm text-text-secondary">
-                <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
-                  {currentStudyCard?.back || ''}
-                </ReactMarkdown>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="text-center">
+                  <p className="text-xs text-text-tertiary uppercase tracking-wider mb-2">{currentStudyCard?.card_type}</p>
+                  <div className="text-sm text-text-secondary leading-relaxed">
+                    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+                      {currentStudyCard?.card_type === 'cloze'
+                        ? currentStudyCard.front.replace(/\{\{c1::([^}]+)\}\}/g, '_____')
+                        : currentStudyCard?.front || ''}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs text-text-tertiary uppercase tracking-wider mb-2">Answer</p>
+                  <div className="text-base text-text-primary leading-relaxed text-left">
+                    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+                      {currentStudyCard?.back || ''}
+                    </ReactMarkdown>
+                  </div>
+                </div>
               </div>
             )}
           </div>
