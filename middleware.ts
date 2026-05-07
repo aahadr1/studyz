@@ -1,10 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-// Mobile detection using User-Agent
+// Mobile detection using User-Agent.
+// Note: iPad is intentionally excluded — the desktop flashcard / lesson UIs
+// are now tablet-optimised (large touch targets, swipe gestures, landscape
+// layout). iPadOS 13+ defaults to "Request Desktop Site" anyway, so most
+// iPads already land on the desktop variant; this keeps things consistent
+// for the rare cases where iPads still announce themselves as mobile.
 function isMobileDevice(userAgent: string | null): boolean {
   if (!userAgent) return false
-  
-  const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS/i
+
+  // Treat iPad as desktop/tablet, not mobile
+  if (/iPad/i.test(userAgent)) return false
+
+  const mobileRegex = /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS/i
   return mobileRegex.test(userAgent)
 }
 

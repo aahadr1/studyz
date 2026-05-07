@@ -563,6 +563,129 @@ body {
 }
 
 /* ============================================
+   Flashcard 3D Flip + iPad-friendly study layout
+   ============================================ */
+.flashcard-3d {
+  perspective: 1600px;
+}
+.flashcard-inner {
+  position: relative;
+  width: 100%;
+  transform-style: preserve-3d;
+  transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.flashcard-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+.flashcard-face {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.flashcard-front {
+  position: relative;
+  z-index: 2;
+}
+.flashcard-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+}
+
+/* Swipe direction overlays — sit on top of the card and fade with intent */
+.swipe-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 1.5rem;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  border: 2px solid transparent;
+}
+.swipe-overlay-left {
+  background: linear-gradient(110deg, rgba(239, 68, 68, 0.35), rgba(239, 68, 68, 0.05) 60%);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  justify-content: flex-start;
+  padding-left: 2rem;
+}
+.swipe-overlay-right {
+  background: linear-gradient(250deg, rgba(59, 130, 246, 0.35), rgba(59, 130, 246, 0.05) 60%);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #93c5fd;
+  justify-content: flex-end;
+  padding-right: 2rem;
+}
+.swipe-overlay-up {
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.35), rgba(249, 115, 22, 0.05) 60%);
+  border-color: rgba(249, 115, 22, 0.5);
+  color: #fdba74;
+  align-items: flex-start;
+  padding-top: 2rem;
+}
+.swipe-overlay-down {
+  background: linear-gradient(0deg, rgba(16, 185, 129, 0.35), rgba(16, 185, 129, 0.05) 60%);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #6ee7b7;
+  align-items: flex-end;
+  padding-bottom: 2rem;
+}
+
+/* Card stack — the next two cards peek out behind the active one */
+.flashcard-stack {
+  position: relative;
+  width: 100%;
+}
+.flashcard-stack-item {
+  position: absolute;
+  inset: 0;
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms ease-out;
+}
+.flashcard-stack-active {
+  position: relative;
+  z-index: 3;
+}
+.flashcard-stack-next {
+  z-index: 2;
+  transform: scale(0.96) translateY(14px);
+  opacity: 0.78;
+}
+.flashcard-stack-next-2 {
+  z-index: 1;
+  transform: scale(0.92) translateY(28px);
+  opacity: 0.5;
+}
+
+/* Big tactile rating buttons — tuned for iPad fingers */
+.rating-btn {
+  @apply flex flex-col items-center justify-center gap-1
+         rounded-2xl border font-semibold text-sm md:text-base
+         transition-all duration-150 active:scale-[0.97]
+         min-h-[64px] md:min-h-[72px] px-3 py-3;
+  -webkit-tap-highlight-color: transparent;
+}
+.rating-btn span.shortcut {
+  @apply text-[10px] uppercase tracking-widest opacity-50 mono;
+}
+
+/* Hide system overscroll glow when you swipe a card hard left/right on iPad */
+.flashcard-arena {
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+/* No-tap-highlight for the whole study screen */
+.study-no-highlight,
+.study-no-highlight * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ============================================
    Audio Player Styling
    ============================================ */
 .audio-player {
