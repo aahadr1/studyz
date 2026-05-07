@@ -1,8 +1,8 @@
 /**
  * Starter Deck Seeder
  * --------------------
- * Inserts the default "Flashcards Oral CDC / Attaché" deck (244 cards
- * organised in 12 thematic stacks) into a user's flashcard library.
+ * Inserts the default "Flashcards Oral CDC / Attaché" deck (154 cards
+ * organised in 11 thematic stacks) into a user's flashcard library.
  *
  * Idempotent: if a deck with our marker prefix is already present for the
  * user, the seeder exits without touching anything.
@@ -20,7 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // Marker stored in flashcard_decks.source_pdf_name to identify decks
 // produced by this seeder. Bump the suffix when shipping a new version
 // to allow re-seeding without duplicating older runs.
-export const STARTER_DECK_MARKER_PREFIX = '__starter:cdc-attache-v3__'
+export const STARTER_DECK_MARKER_PREFIX = '__starter:cdc-attache-v4__'
 
 interface ManifestStack {
   number: number

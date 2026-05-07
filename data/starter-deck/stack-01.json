@@ -3,53 +3,123 @@
   "cards": [
     {
       "n": 1,
-      "front": "Vous êtes chef de bureau à la Caisse des Dépôts. Vous avez dans votre équipe plusieurs agents de catégories B et un agent de catégorie C. Ce dernier est particulièrement performant mais ne respecte pas les horaires du service. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
-      "back": "**Je n'autorise pas la performance à justifier un passe-droit sur les horaires : j'objective les faits, je reçois l'agent en entretien, je rappelle le cadre collectif applicable à tous, et si la situation perdure j'engage avec ma hiérarchie et les ressources humaines une réponse graduée.**\n\nJe ne laisse pas la performance justifier un passe-droit. Je commence par objectiver les faits : horaires constatés, fréquence, impact sur l'équipe et sur la continuité du service. Ensuite, je reçois l'agent en entretien individuel, de manière calme, pour comprendre la cause : contrainte personnelle, problème d'organisation, perte de repère, ou simple relâchement. Je rappelle ensuite le cadre collectif : les horaires s'appliquent à tous, quelle que soit la catégorie ou le niveau de performance. Si une difficulté personnelle existe, je cherche une solution compatible avec le service, par exemple un aménagement formalisé, mais jamais une tolérance informelle. Je trace l'échange, fixe un objectif clair de régularisation et prévois un point de suivi. Si le comportement persiste, j'en informe ma hiérarchie et les RH pour appliquer une réponse graduée. équité, fermeté proportionnée, absence de favoritisme."
+      "front": "Date de création de la CDC ?",
+      "back": "**La Caisse des Dépôts a été créée par la loi du 28 avril 1816 sous Louis XVIII, pour restaurer la confiance dans les finances publiques après les guerres napoléoniennes.**\n\nLoi du 28 avril 1816, sous Louis XVIII, après les guerres napoléoniennes qui avaient ruiné la confiance dans les finances publiques."
     },
     {
       "n": 2,
-      "front": "Des collaborateurs se prêtent leurs cartes de pointage. Que faites-vous ?",
-      "back": "**Je traite la situation comme un manquement grave touchant à la probité et au temps de travail : je vérifie les faits sans accusation publique, j'alerte ma hiérarchie et les ressources humaines car cela peut relever d'une procédure disciplinaire, puis je rappelle formellement que le pointage est strictement personnel.**\n\nC'est un sujet grave, parce qu'il touche à la probité, au temps de travail et à la confiance. Je ne lance pas d'accusation publique : je vérifie les faits, je rassemble des éléments objectifs et j'alerte rapidement ma hiérarchie et les RH, car cela peut relever d'une procédure disciplinaire. Je rappelle immédiatement que le pointage est personnel et qu'il engage la responsabilité de chacun. Ensuite, je reçois les agents concernés séparément, pour comprendre sans banaliser. Si les faits sont avérés, il faut mettre fin à la pratique, régulariser la situation si besoin et appliquer la procédure adaptée. Je veille aussi à prévenir la répétition : rappel écrit des règles, sensibilisation de l'équipe et contrôle renforcé temporaire. probité, traçabilité, refus de la fraude, pas de règlement de comptes."
+      "front": "Quels sont les 3 grands textes structurants de la CDC ?",
+      "back": "**Les trois textes structurants sont la loi de création du 28 avril 1816, la loi LME du 4 août 2008 qui modernise la gouvernance et soumet la CDC à la supervision prudentielle de l'ACPR, et la loi PACTE du 22 mai 2019 qui rapproche la CDC de La Poste et élargit ses missions.**\n\nLoi du 28 avril 1816 (création), loi LME du 4 août 2008 (modernisation, supervision prudentielle ACPR), loi PACTE du 22 mai 2019 (rapprochement avec La Poste, élargissement des missions)."
     },
     {
       "n": 3,
-      "front": "Un de vos agents sort 10 fois par jour pour une pause cigarette, que faites-vous ?",
-      "back": "**Je traite ce sujet comme une question d'organisation du travail et d'égalité entre agents, et non comme une question morale : j'objective la fréquence et l'impact sur le service, je reçois l'agent pour comprendre, je rappelle le cadre et oriente si besoin vers le médecin du travail, avant d'envisager une réponse managériale graduée en cas de persistance.**\n\nJe traite le sujet non comme une question morale, mais comme une question d'organisation du travail et d'égalité entre agents. Je commence par observer les faits : fréquence, durée, impact sur les collègues et sur les délais. Je reçois l'agent en entretien individuel, car il peut y avoir une dépendance, un stress ou un problème de charge. Je rappelle le cadre : les pauses doivent rester compatibles avec le fonctionnement du service et ne pas créer de déséquilibre avec les autres agents. Je peux proposer un cadre plus clair, par exemple regrouper les pauses à des moments définis, et orienter vers le médecin du travail ou les dispositifs de prévention si l'agent exprime une difficulté. Si malgré le rappel le comportement se poursuit, je passe à une réponse managériale graduée. équilibre entre bienveillance, santé au travail et continuité du service."
+      "front": "Que dit la loi de 1816 ?",
+      "back": "**L'article 110 de la loi de 1816 confie à un établissement spécial les dépôts, consignations, services de la Légion d'honneur et caisses de retraite, et pose le principe d'un placement sous la surveillance et la garantie de l'autorité législative.**\n\nArticle 110 : confie à un « établissement spécial » les dépôts, consignations, services de la Légion d'honneur et caisses de retraite. Pose le principe de placement « sous la surveillance et la garantie de l'autorité législative »."
     },
     {
       "n": 4,
-      "front": "Vous devez présider une réunion sur un sujet que vous ne maîtrisez pas et vous avez une semaine pour vous préparer. Comment procédez-vous ?",
-      "back": "**Je ne donne pas l'illusion d'une maîtrise que je n'ai pas : je clarifie l'objectif de la réunion, je rencontre les personnes expertes du sujet, je prépare un ordre du jour et une fiche de synthèse, puis j'assume mon rôle de présidence en faisant porter la technicité par les experts pour conclure sur des décisions claires.**\n\nJe ne cherche pas à donner l'illusion de maîtriser ce que je ne maîtrise pas. Je clarifie d'abord l'objectif de la réunion : informer, arbitrer, décider ou coordonner. Je récupère les documents existants, j'identifie les points sensibles et je rencontre rapidement les personnes expertes du sujet. Ensuite, je prépare un ordre du jour simple, une fiche de synthèse, les décisions attendues et les questions probables. Pendant la réunion, j'assume mon rôle de présidence : faire avancer les échanges, distribuer la parole, reformuler, faire préciser les points techniques par les experts et conclure sur des décisions claires. Après la réunion, je diffuse un relevé de décisions et les suites à donner. humilité, méthode, capacité à mobiliser l'expertise."
+      "front": "Que prévoit la loi LME de 2008 ?",
+      "back": "**La loi LME de 2008 modernise la gouvernance de la Caisse des Dépôts, redéfinit ses missions entre intérêt général et activités concurrentielles, renforce la Commission de surveillance et la soumet à la supervision prudentielle de l'ACPR comme une banque.**\n\nModernise la gouvernance, redéfinit les missions (intérêt général + activités concurrentielles), renforce la Commission de surveillance, soumet la CDC à la supervision prudentielle de l'ACPR comme une banque."
     },
     {
       "n": 5,
-      "front": "Un bureau se libère à côté de celui des agents (ils sont 4). Ils veulent tous le bureau, comment allez-vous procéder ?",
-      "back": "**Je transforme une demande individuelle en décision objectivée par l'intérêt du service : je définis des critères clairs comme la confidentialité, l'accueil du public ou les contraintes médicales, je recueille les besoins, j'envisage si besoin une rotation, et j'explique la méthode avant de décider pour éviter tout sentiment d'arbitraire.**\n\nJe ne transforme pas l'attribution du bureau en récompense personnelle. Je commence par définir des critères objectifs liés au service : confidentialité des missions, accueil du public, besoin de concentration, contraintes médicales éventuelles, ancienneté seulement si elle est pertinente, et organisation collective. Je peux demander aux agents d'exprimer leurs besoins, mais je rappelle que la décision relève de l'intérêt du service. Si aucun critère ne départage clairement, je peux envisager une rotation ou une affectation temporaire réévaluable. L'important est d'expliquer la méthode avant la décision, pour éviter le sentiment d'arbitraire. transparence, critères objectifs, décision assumée."
+      "front": "Que prévoit la loi PACTE de 2019 ?",
+      "back": "**La loi PACTE de 2019 crée un grand pôle financier public en rapprochant la Caisse des Dépôts, La Poste et CNP Assurances, fait de la CDC l'actionnaire majoritaire de La Poste à hauteur de 66% et renforce son rôle d'investisseur de long terme.**\n\nCrée le grand pôle financier public en rapprochant CDC, La Poste et CNP Assurances. La CDC devient actionnaire majoritaire de La Poste (66%). Renforce le rôle d'investisseur de long terme."
     },
     {
       "n": 6,
-      "front": "Un agent arrive tous les matins de bonne heure et vous constatez que ce matin il n'est pas là, que faites- vous ?",
-      "back": "**Je ne dramatise pas mais je reste vigilant face à un changement brutal d'habitude : je vérifie d'abord les informations simples, je tente de joindre l'agent par les moyens professionnels, j'informe ma hiérarchie ou les ressources humaines si un risque existe, puis je fais un point factuel et bienveillant à son retour.**\n\nJe ne dramatise pas immédiatement, mais je réagis avec vigilance, car un changement brutal d'habitude peut signaler un problème. Je vérifie d'abord les informations simples : congé posé, rendez-vous, télétravail, message éventuel, erreur de planning. Si aucune information n'apparaît, je tente de le joindre par les moyens professionnels habituels. En l'absence de réponse et selon la situation, j'informe ma hiérarchie ou les RH, notamment si un risque de sécurité ou de santé est possible. Quand l'agent revient, je fais un point factuel et bienveillant : soit il y a une explication simple, soit il faut régulariser l'absence et comprendre si une difficulté existe. attention aux signaux faibles, ni soupçon excessif ni indifférence."
+      "front": "Statut juridique de la CDC ?",
+      "back": "**La Caisse des Dépôts est un établissement public spécial sui generis, placé sous la surveillance et la garantie du Parlement en application de l'article L518-2 du Code monétaire et financier.**\n\nÉtablissement public spécial *sui generis*, placé sous la surveillance et la garantie du Parlement (article L518-2 du Code monétaire et financier)."
     },
     {
       "n": 7,
-      "front": "Vous constatez un vol de matériel dans votre service. Que faites-vous ?",
-      "back": "**Je sécurise la situation en vérifiant précisément les faits avant toute accusation, j'informe immédiatement ma hiérarchie et les services compétents, je dresse un état circonstancié, puis si le vol est confirmé la décision de plainte ou de procédure disciplinaire se prend collectivement, accompagnée d'un renforcement des règles d'inventaire.**\n\nJe sécurise d'abord la situation : identifier précisément le matériel manquant, vérifier qu'il ne s'agit pas d'une erreur de rangement ou de prêt non enregistré, et éviter les accusations hâtives. J'informe immédiatement ma hiérarchie et, selon les procédures internes, les services compétents : moyens généraux, sécurité, RH, voire service juridique. Je dresse un état factuel : date, lieu, matériel, personnes éventuellement concernées, circonstances. Si un vol est confirmé, la décision d'une plainte ou d'une procédure disciplinaire se prend avec la hiérarchie et les services compétents. Je rappelle ensuite les règles de gestion du matériel et je renforce si besoin les procédures d'inventaire. prudence, faits, protection du collectif, procédure."
+      "front": "Qui dirige la CDC en 2026 ?",
+      "back": "**La Caisse des Dépôts est dirigée par Olivier Sichel, nommé directeur général par décret du 12 juin 2025 après l'intérim consécutif au départ d'Éric Lombard devenu ministre de l'Économie.**\n\nOlivier Sichel, nommé directeur général par décret du 12 juin 2025, après l'intérim suite au départ d'Éric Lombard devenu ministre de l'Économie."
     },
     {
       "n": 8,
-      "front": "Un agent refuse de porter son masque, prétextant des problèmes d'allergies. Comment réagissez-vous ?",
-      "back": "**J'écoute la difficulté de l'agent sans la nier mais sans renoncer à la règle collective : je formalise sa demande, j'oriente vers la médecine du travail pour trouver une solution adaptée comme un masque différent, un aménagement de poste ou du télétravail, et j'associe les ressources humaines si nécessaire.**\n\nJe commence par écouter l'agent et je ne nie pas sa difficulté. Mais si le port du masque est obligatoire dans le contexte, je dois protéger l'ensemble du collectif et appliquer les règles sanitaires. Je demande à l'agent de formaliser sa difficulté et j'oriente vers le médecin du travail ou la médecine de prévention pour rechercher une solution adaptée : type de masque différent, aménagement de poste, télétravail temporaire si possible, ou organisation évitant l'exposition. En attendant, l'agent ne peut pas décider seul de s'exonérer d'une règle collective. Je trace l'échange et j'associe les RH si nécessaire. bienveillance sans renoncer à la sécurité collective."
+      "front": "Qui contrôle la CDC ?",
+      "back": "**La Caisse des Dépôts est contrôlée par la Commission de surveillance, présidée par un parlementaire et composée de 16 membres parlementaires, personnalités qualifiées et représentants du personnel et de l'État, qui approuve comptes, budget, stratégie et opérations majeures.**\n\nLa Commission de surveillance, présidée par un parlementaire. 16 membres : parlementaires, personnalités qualifiées, représentants du personnel et de l'État. Approuve comptes, budget, stratégie, opérations majeures."
     },
     {
       "n": 9,
-      "front": "Vous allez assister à une réunion avec les directions. Vous avez préparé cette réunion avec votre manager. Vous vous rendez-compte que ce dernier se trompe sur un point pendant la réunion. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
-      "back": "**Si l'erreur a un impact réel sur la décision, j'interviens avec tact pour la sécuriser sans mettre mon manager en difficulté ; si elle est mineure, je lui en parle après la réunion, car la loyauté ne consiste pas à se taire face à une erreur mais à savoir alerter de façon professionnelle.**\n\nJe distingue deux cas. Si l'erreur a un impact important sur la décision, le risque juridique, financier ou l'image du service, j'interviens avec tact : 'Sauf erreur de ma part, il me semble que le point avait été cadré autrement ; je propose qu'on le reprécise.' L'objectif est de sécuriser l'information, pas de mettre mon manager en difficulté. Si l'erreur est mineure ou sans effet immédiat, je prends note et je lui en parle après la réunion. Dans tous les cas, je reste loyal : la loyauté n'est pas le silence face à une erreur, c'est la capacité à alerter de façon professionnelle. loyauté intelligente, courage mesuré, sécurité de la décision."
+      "front": "Article du Code monétaire et financier qui définit la CDC ?",
+      "back": "**La Caisse des Dépôts est définie par les articles L518-1 à L518-24-1 du Code monétaire et financier, l'article L518-2 la qualifiant de groupe public au service de l'intérêt général et du développement économique du pays.**\n\nArticles L518-1 à L518-24-1 du CMF. L'article L518-2 définit la CDC comme un « groupe public au service de l'intérêt général et du développement économique du pays »."
     },
     {
       "n": 10,
-      "front": "La période du planning des congés annuels arrive. Un nouvel arrivant dans l'équipe (famille monoparentale) souhaite impérativement la semaine de Noël. Vous devez assurer la continuité de votre service. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
-      "back": "**Je concilie équité, continuité du service et situations personnelles : je recueille tous les souhaits et les précédents, je prends en compte la situation familiale comme un élément d'équité sans en faire un droit automatique, puis je recherche une solution partagée que je formalise pour éviter tout sentiment de favoritisme.**\n\nJe commence par poser le cadre : les congés doivent concilier situations personnelles, équité entre agents et continuité du service. Je recueille l'ensemble des souhaits de l'équipe, je regarde les contraintes de service et les précédents : qui a eu Noël les années passées, quelles compétences doivent être présentes, quelles permanences sont indispensables. La situation de famille monoparentale est un élément à prendre en compte au titre de l'équité, mais elle ne crée pas automatiquement un droit absolu. Je recherche une solution : rotation, partage de la période, présence allégée, télétravail si possible, ou échange volontaire. J'explique la décision et je la formalise, pour éviter le sentiment de favoritisme. équité, continuité, attention aux situations individuelles sans arbitraire."
+      "front": "Quels sont les 3 objectifs stratégiques du Groupe CDC ?",
+      "back": "**Les trois objectifs stratégiques du Groupe sont la transformation écologique, le renforcement des souverainetés énergétique, industrielle, numérique, économique et financière, et la cohésion sociale et territoriale.**\n\nLa transformation écologique, les souverainetés (énergétique, industrielle, numérique, économique, financière) et la cohésion sociale et territoriale."
+    },
+    {
+      "n": 11,
+      "front": "Quelle est la mission « historique » fondatrice ?",
+      "back": "**La mission historique fondatrice de la Caisse des Dépôts est celle des consignations, qui consiste à recevoir, conserver et restituer en toute neutralité des fonds privés faisant l'objet d'un litige ou d'une obligation légale, et qui correspond au C de CDC.**\n\nLes **consignations** : recevoir, conserver et restituer des fonds privés faisant l'objet d'un litige ou d'une obligation légale, en toute neutralité. C'est le « C » de CDC."
+    },
+    {
+      "n": 12,
+      "front": "Quelles sont les grandes missions d'intérêt général ?",
+      "back": "**Les grandes missions d'intérêt général incluent la gestion des fonds d'épargne réglementée Livret A et LDDS, le financement du logement social, la gestion des retraites pour un retraité sur cinq, les dépôts juridiques des notaires et greffiers, les consignations et le financement des territoires.**\n\nGestion des fonds d'épargne réglementée (Livret A, LDDS), financement du logement social, gestion des retraites (1 retraité sur 5), dépôts juridiques (notaires, greffiers), consignations, financement des territoires."
+    },
+    {
+      "n": 13,
+      "front": "Qu'est-ce que le rôle « contracyclique » ?",
+      "back": "**Le rôle contracyclique consiste à investir et prêter quand le marché privé se retire en période de crise ou de hausse des taux, afin de soutenir l'économie sur le long terme, comme on l'a vu très clairement dans le logement en 2023 et 2024.**\n\nInvestir et prêter quand le marché privé se retire (crises, hausse des taux), pour soutenir l'économie sur le long terme. Très visible dans le logement en 2023-2024."
+    },
+    {
+      "n": 14,
+      "front": "Que signifie « investisseur de long terme » ?",
+      "back": "**Investir avec un horizon de dix à trente ans au service de l'intérêt général, sans rechercher la rentabilité de court terme, ce qui distingue la Caisse des Dépôts des acteurs financiers privés.**\n\nInvestir avec un horizon de 10 à 30 ans, au service de l'intérêt général, sans rechercher la rentabilité court-terme, ce qui distingue la CDC des acteurs financiers privés."
+    },
+    {
+      "n": 15,
+      "front": "« Raison d'être » de la CDC ?",
+      "back": "**La raison d'être du Groupe est qu'alliance unique d'acteurs économiques publics et privés, il s'engage au cœur des territoires pour accélérer la transformation écologique et contribuer à offrir une vie meilleure pour toutes et tous.**\n\n« Alliance unique d'acteurs économiques publics et privés, le groupe Caisse des Dépôts s'engage, au cœur des territoires, pour accélérer la transformation écologique et contribuer à offrir une vie meilleure pour toutes et tous. »"
+    },
+    {
+      "n": 16,
+      "front": "Démarche « Grandissons ensemble » ?",
+      "back": "**Grandissons ensemble est la démarche managériale interne à la Caisse des Dépôts qui vise à renforcer la culture managériale commune, le développement des compétences et la cohésion du Groupe.**\n\nDémarche managériale interne à la CDC visant à renforcer la culture managériale commune, le développement des compétences et la cohésion du groupe."
+    },
+    {
+      "n": 17,
+      "front": "NEXT et CDSCOPE ?",
+      "back": "**NEXT est l'intranet du Groupe et CDSCOPE est la revue qui diffuse l'actualité stratégique et les enjeux portés par la direction générale, deux outils à consulter régulièrement avant l'oral.**\n\nNEXT = intranet du groupe. CDSCOPE = revue qui diffuse l'actualité stratégique et les enjeux portés par la direction générale. Outils à consulter régulièrement avant l'oral."
+    },
+    {
+      "n": 18,
+      "front": "Banque des Territoires ?",
+      "back": "**La Banque des Territoires est la direction de la Caisse des Dépôts créée en 2018 qui regroupe prêt, investissement, conseil avec la SCET et logement avec CDC Habitat au service des collectivités, des organismes de logement social et des professions juridiques, dirigée par Olivier Sichel.**\n\nDirection de la CDC créée en 2018 qui regroupe prêt, investissement, conseil (SCET) et logement (CDC Habitat) au service des collectivités, organismes de logement social et professions juridiques. Dirigée par Olivier Sichel."
+    },
+    {
+      "n": 19,
+      "front": "Principales filiales et participations ?",
+      "back": "**Les principales filiales et participations sont La Poste à 66%, Bpifrance à 50%, CDC Habitat, Transdev à 34%, Icade à 39%, CNP Assurances, RTE à 30%, la Compagnie des Alpes à 40%, ainsi que la SCET, Egis et EMEIS ex-Korian.**\n\nLa Poste (66%), Bpifrance (50%), CDC Habitat, Transdev (34%), Icade (39%), CNP Assurances, RTE (30%), Compagnie des Alpes (40%), SCET, Egis, EMEIS (ex-Korian)."
+    },
+    {
+      "n": 20,
+      "front": "Cinq métiers du Groupe CDC ?",
+      "back": "**Les cinq métiers du Groupe sont la Banque des Territoires, les Politiques sociales couvrant retraites, formation, handicap, grand âge et santé, la Gestion d'actifs, le suivi des filiales et participations, et Bpifrance pour le financement des entreprises.**\n\n(1) Banque des Territoires, (2) Politiques sociales (retraites, formation, handicap, grand âge, santé), (3) Gestion d'actifs, (4) Suivi des filiales et participations, (5) Bpifrance / financement des entreprises."
+    },
+    {
+      "n": 21,
+      "front": "Différence CDC / Bpifrance / BPCE ?",
+      "back": "**La Caisse des Dépôts est un établissement public et un investisseur de long terme, Bpifrance est la banque publique d'investissement filiale à parité de la CDC et de l'État qui finance les entreprises, et BPCE est un groupe bancaire mutualiste privé sans aucun lien capitalistique avec la CDC.**\n\nCDC = établissement public, investisseur long terme. Bpifrance = banque publique d'investissement, filiale CDC + État (50/50), finance les entreprises. BPCE = groupe bancaire mutualiste privé, aucun lien capitalistique avec la CDC."
+    },
+    {
+      "n": 22,
+      "front": "Combien de collaborateurs dans le Groupe ?",
+      "back": "**Le Groupe Caisse des Dépôts compte plus de 120 000 collaborateurs entre l'établissement public et ses filiales, dont environ 6 500 au sein de l'établissement public lui-même.**\n\nPlus de 120 000 collaborateurs (établissement public + filiales), dont environ 6 500 au sein de l'établissement public."
+    },
+    {
+      "n": 23,
+      "front": "Mécanisme du Livret A et lien CDC ?",
+      "back": "**Le taux du Livret A est fixé par l'État à 1,7% au 1er février 2025 et 60% des encours sont centralisés à la Caisse des Dépôts qui les transforme en prêts longs au logement social, avec une marge fonds d'épargne d'environ Livret A plus 0,46%.**\n\nTaux fixé par l'État (1,7% au 1er février 2025). Centralisation à 60% à la CDC qui les transforme en prêts longs au logement social. Marge fonds d'épargne ≈ Livret A + 0,46%."
+    },
+    {
+      "n": 24,
+      "front": "Versement à l'État ?",
+      "back": "**Une partie du résultat de la Caisse des Dépôts est reversée chaque année à l'État, le reste étant réinvesti dans les missions d'intérêt général, mécanisme structurel en place depuis 1816.**\n\nUne partie du résultat de la CDC est reversée à l'État chaque année, le reste est réinvesti dans les missions d'intérêt général. Mécanisme structurel depuis 1816."
     }
   ]
 }

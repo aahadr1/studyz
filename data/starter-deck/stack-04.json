@@ -2,59 +2,104 @@
   "stack_number": 4,
   "cards": [
     {
+      "n": 58,
+      "front": "Versants de la fonction publique ?",
+      "back": "**Les trois versants de la fonction publique sont la fonction publique d'État (FPE), la fonction publique territoriale (FPT) et la fonction publique hospitalière (FPH), qui rassemblent au total environ 5,7 millions d'agents.**\n\nFPE (État), FPT (territoriale), FPH (hospitalière). Environ 5,7 millions d'agents au total."
+    },
+    {
+      "n": 59,
+      "front": "Catégories hiérarchiques ?",
+      "back": "**Les trois catégories hiérarchiques sont la catégorie A pour la conception, l'encadrement et l'expertise, la catégorie B pour l'application et l'encadrement intermédiaire, et la catégorie C pour l'exécution, l'attaché relevant de la catégorie A.**\n\nA (conception, encadrement, expertise), B (application, encadrement intermédiaire), C (exécution). L'attaché est en catégorie A."
+    },
+    {
+      "n": 60,
+      "front": "CIGEM des attachés ?",
+      "back": "**Le CIGEM est le Corps interministériel à gestion ministérielle des attachés d'administration de l'État, créé en 2011, qui regroupe les attachés des différents ministères et établissements publics et permet la mobilité entre administrations.**\n\nCorps interministériel des attachés d'administration de l'État, créé en 2011. Regroupe les attachés des différents ministères et établissements publics. Permet la mobilité entre administrations."
+    },
+    {
+      "n": 61,
+      "front": "Grades du corps des attachés ?",
+      "back": "**Le corps des attachés comporte trois grades : attaché, attaché principal et attaché hors classe, avec une promotion possible au choix ou par examen professionnel.**\n\nAttaché, attaché principal, attaché hors classe. Promotion au choix ou par examen professionnel."
+    },
+    {
+      "n": 62,
+      "front": "Texte qui régit le statut de la fonction publique ?",
+      "back": "**Le statut de la fonction publique est régi par le Code général de la fonction publique entré en vigueur le 1er mars 2022, qui codifie l'ancienne loi Le Pors de 1983 et les lois statutaires suivantes.**\n\nCode général de la fonction publique (CGFP), entré en vigueur le 1er mars 2022. Codifie l'ancienne loi Le Pors de 1983 et les lois suivantes."
+    },
+    {
+      "n": 63,
+      "front": "Principes du statut de la fonction publique ?",
+      "back": "**Les principes du statut sont l'égalité d'accès, l'indépendance vis-à-vis du politique, la responsabilité, la séparation du grade et de l'emploi et le principe de carrière.**\n\nÉgalité d'accès, indépendance vis-à-vis du politique, responsabilité, séparation du grade et de l'emploi, principe de carrière."
+    },
+    {
+      "n": 64,
+      "front": "Principaux devoirs du fonctionnaire ?",
+      "back": "**Les principaux devoirs du fonctionnaire sont l'obéissance hiérarchique sauf ordre manifestement illégal, la neutralité, la laïcité, la discrétion professionnelle, le secret professionnel, la dignité, la probité, l'impartialité et le devoir de réserve.**\n\nObéissance hiérarchique (sauf ordre manifestement illégal), neutralité, laïcité, discrétion professionnelle, secret professionnel, dignité, probité, impartialité, devoir de réserve."
+    },
+    {
+      "n": 65,
+      "front": "Déontologie du fonctionnaire ?",
+      "back": "**La déontologie du fonctionnaire est encadrée par la loi du 20 avril 2016 et inclut la prévention des conflits d'intérêts, la déclaration d'intérêts pour certains postes, ainsi que le rôle de la HATVP et du référent déontologue.**\n\nEncadrée par la loi du 20 avril 2016. Inclut prévention des conflits d'intérêts, déclaration d'intérêts pour certains postes, rôle de la HATVP et du référent déontologue."
+    },
+    {
+      "n": 66,
+      "front": "HATVP ?",
+      "back": "**La HATVP est la Haute Autorité pour la Transparence de la Vie Publique qui contrôle les déclarations d'intérêts et de patrimoine des responsables publics et prévient les conflits d'intérêts.**\n\nHaute Autorité pour la Transparence de la Vie Publique. Contrôle les déclarations d'intérêts et de patrimoine des responsables publics, prévient les conflits d'intérêts."
+    },
+    {
+      "n": 67,
+      "front": "Déconcentration vs décentralisation ?",
+      "back": "**La déconcentration est le transfert de pouvoir au sein de l'État vers les préfets et services déconcentrés, tandis que la décentralisation est le transfert de compétences à des collectivités territoriales autonomes comme les communes, départements et régions.**\n\nDéconcentration = transfert de pouvoir au sein de l'État (préfets, services déconcentrés). Décentralisation = transfert à des collectivités territoriales autonomes (communes, départements, régions)."
+    },
+    {
+      "n": 68,
+      "front": "3 niveaux de collectivités territoriales ?",
+      "back": "**Les trois niveaux de collectivités territoriales sont les communes (environ 35 000), les départements (101) et les régions (18), auxquels s'ajoutent les EPCI (intercommunalités) et les collectivités à statut particulier comme la Corse, l'outre-mer et Paris-Lyon-Marseille.**\n\nCommunes (~35 000), départements (101), régions (18). Plus EPCI (intercommunalités) et collectivités à statut particulier (Corse, outre-mer, Paris-Lyon-Marseille)."
+    },
+    {
+      "n": 69,
+      "front": "LOLF ?",
+      "back": "**La LOLF est la Loi organique relative aux lois de finances de 2001 qui organise le budget de l'État en missions, programmes et actions, avec une logique de performance et d'évaluation.**\n\nLoi organique relative aux lois de finances (2001). Organise le budget de l'État en missions / programmes / actions, avec une logique de performance et d'évaluation."
+    },
+    {
+      "n": 70,
+      "front": "EPIC, EPA, EPCI ?",
+      "back": "**Un EPIC est un établissement public industriel et commercial comme la SNCF, un EPA est un établissement public administratif comme les universités, et un EPCI est un établissement public de coopération intercommunale comme les communautés de communes ou les métropoles.**\n\nEPIC = établissement public industriel et commercial (SNCF). EPA = établissement public administratif (universités). EPCI = établissement public de coopération intercommunale (communautés de communes, métropoles)."
+    },
+    {
+      "n": 71,
+      "front": "Réforme de la haute fonction publique ?",
+      "back": "**La réforme de la haute fonction publique a supprimé l'ENA en 2022, créé l'Institut National du Service Public et le corps des administrateurs de l'État, instauré une mobilité obligatoire et renforcé la formation continue.**\n\nSuppression de l'ENA en 2022, création de l'INSP (Institut National du Service Public), création du corps des administrateurs de l'État, mobilité obligatoire, formation continue renforcée."
+    },
+    {
+      "n": 72,
+      "front": "Principes de l'action publique ?",
+      "back": "**Les principes de l'action publique sont la continuité, l'égalité, la mutabilité, la neutralité, la laïcité, la gratuité pour certains services, la transparence et la probité.**\n\nContinuité, égalité, mutabilité (adaptabilité), neutralité, laïcité, gratuité (pour certains services), transparence, probité."
+    },
+    {
+      "n": 73,
+      "front": "Projet « DGAFP 2030 — Partenaire des services publics » ?",
+      "back": "**DGAFP 2030 est le projet stratégique finalisé en janvier 2026 qui confirme le double rôle de la DGAFP : pilote des politiques RH des trois versants et DRH de l'État au service de 5,8 millions d'agents publics.**\n\nProjet stratégique finalisé en janvier 2026. Double rôle : pilote des politiques RH des 3 versants ET DRH de l'État au service de 5,8 millions d'agents publics."
+    },
+    {
+      "n": 74,
+      "front": "Enjeux qui motivent DGAFP 2030 ?",
+      "back": "**Les enjeux qui motivent DGAFP 2030 sont le vieillissement démographique, les tensions de recrutement, l'attractivité, l'intelligence artificielle et les exigences accrues des usagers.**\n\nVieillissement démographique, tensions de recrutement, attractivité, intelligence artificielle, exigences accrues des usagers."
+    },
+    {
       "n": 75,
-      "front": "Un de vos collaborateurs refuse de faire le travail que vous lui demandez. Comment réagissez-vous ?",
-      "back": "**Je commence par comprendre la raison du refus, je rappelle l'obligation d'exécution sauf ordre manifestement illégal, j'accompagne si la difficulté est réelle et je formalise une réponse graduée avec ma hiérarchie et les ressources humaines si le refus reste injustifié.**\n\nJe commence par comprendre la raison du refus : incompréhension, surcharge, désaccord, manque de compétence, problème personnel ou opposition au cadre. Je rappelle ensuite que l'agent a une obligation d'exécuter les missions qui relèvent de son poste, sauf ordre manifestement illégal ou dangereux. Si le refus vient d'une difficulté réelle, j'accompagne : priorisation, formation, appui. Si le refus est injustifié, je formalise la demande, fixe un délai et informe ma hiérarchie/RH si nécessaire. La réponse doit être graduée, mais le refus d'exécuter une mission ne peut pas devenir une pratique acceptée."
+      "front": "Axe attractivité de DGAFP 2030 ?",
+      "back": "**L'axe attractivité de DGAFP 2030 promeut une fonction publique exemplaire, plus attractive, plus inclusive et mieux connue des citoyens, avec une attention particulière aux conditions de travail, au management et à l'égalité professionnelle.**\n\nPromouvoir une fonction publique exemplaire, plus attractive, plus inclusive et mieux connue des citoyens, avec une attention aux conditions de travail, au management et à l'égalité professionnelle."
     },
     {
       "n": 76,
-      "front": "Suite à l'obtention de l'examen, on vous nomme sur un poste en pleine réorganisation. Comment le vivez-vous ?",
-      "back": "**Je le vivrais comme un défi exigeant mais cohérent avec une fonction de cadre : je cherche d'abord à comprendre le contexte et les marges de manœuvre, j'écoute les équipes et je sécurise les agents, sans tout vouloir changer immédiatement.**\n\nJe le vivrais comme un défi exigeant, mais cohérent avec une fonction de cadre. Une réorganisation peut créer de l'incertitude, donc je chercherais d'abord à comprendre le contexte, les objectifs, le calendrier et les marges de manœuvre. Je prendrais le temps d'écouter les équipes, de repérer les risques et d'identifier les priorités. Je ne chercherais pas à tout changer immédiatement : dans une période de réorganisation, il faut à la fois donner un cap et sécuriser les agents."
+      "front": "Revue stratégique de la fonction publique 2035-2050 ?",
+      "back": "**La revue stratégique 2035-2050 est un exercice prospectif lancé le 6 octobre 2025 pour le 80e anniversaire de la DGAFP, dont les conclusions sont attendues en octobre 2026 sur le thème central « Unicité et diversité » de la fonction publique.**\n\nExercice prospectif lancé le 6 octobre 2025 (80e anniversaire DGAFP). Conclusions attendues octobre 2026. Thème central : « Unicité et diversité » de la fonction publique."
     },
     {
       "n": 77,
-      "front": "Si vous aviez su qu'il était en pleine réorganisation, l'auriez-vous tout de même accepté ? Pourquoi ?",
-      "back": "**Oui, si le poste correspond à mes compétences et si le cadre de mission est clair : une réorganisation peut être l'opportunité de reconstruire un fonctionnement plus efficace, à condition d'avoir interrogé les objectifs, les moyens et l'accompagnement prévu.**\n\nOui, si le poste correspond à mes compétences et si le cadre de mission est clair. Une réorganisation n'est pas forcément un signal négatif ; elle peut être une opportunité de reconstruire un fonctionnement plus efficace. En revanche, j'aurais posé des questions sur les objectifs, les moyens, le dialogue social et l'accompagnement prévu. Accepter un poste difficile suppose de ne pas être naïf, mais aussi de ne pas fuir les responsabilités."
-    },
-    {
-      "n": 78,
-      "front": "Vous êtes chargé d'un projet de réorganisation, la fusion de deux services. Comment procédez-vous ?",
-      "back": "**Je commence par un diagnostic complet, je définis les objectifs de la fusion, j'associe les agents et les représentants du personnel selon le cadre applicable, je construis des scénarios chiffrés et après mise en œuvre je suis le projet par des indicateurs et un retour d'expérience.**\n\nJe commence par un diagnostic : missions, effectifs, charges, compétences, processus, irritants et risques. Ensuite, je définis les objectifs de la fusion : meilleure continuité, simplification, mutualisation, lisibilité pour les usagers ou partenaires. J'associe les agents et les représentants du personnel selon le cadre applicable, avec un calendrier clair. Je construis des scénarios, j'évalue les impacts humains et organisationnels, puis je propose une décision argumentée. Après la mise en œuvre, je prévois un suivi : indicateurs, points d'équipe, ajustements et retour d'expérience."
-    },
-    {
-      "n": 79,
-      "front": "Un de vos collaborateurs vous relate une suspicion de harcèlement moral au sein de son bureau. Comment réagissez-vous ? Comment procédez-vous ?",
-      "back": "**Je prends la parole très au sérieux sans conclure trop vite, j'écoute, je recueille les faits, je protège la confidentialité et j'alerte la hiérarchie et les ressources humaines selon les procédures, en orientant vers les acteurs compétents et en protégeant l'agent contre toute représailles.**\n\nJe prends la parole très au sérieux, sans conclure trop vite. J'écoute, je recueille des faits précis, je protège la confidentialité et j'explique les suites possibles. Je ne mène pas seul une enquête informelle : j'alerte la hiérarchie et les RH selon les procédures internes, et j'oriente vers les acteurs compétents : prévention, médecine du travail, cellule d'écoute, référent ou dispositif de signalement. Je veille à protéger l'agent contre toute mesure de représailles et à préserver le collectif. L'enjeu est de traiter rapidement, objectivement et humainement."
-    },
-    {
-      "n": 80,
-      "front": "Vous prenez vos fonctions dans un nouveau service où l'ancien manager était très apprécié. L'équipe ne tarit pas d'éloges à son égard. Comment comptez-vous vous positionner et asseoir votre légitimité ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
-      "back": "**Je ne cherche pas à rivaliser avec l'ancien manager : je reconnais ce qui a bien fonctionné, je prends le temps d'écouter, et j'installe progressivement ma légitimité par la fiabilité, la clarté des décisions et le respect des engagements.**\n\nJe ne cherche pas à rivaliser avec l'ancien manager ni à effacer son héritage. Je reconnais ce qui a bien fonctionné et je prends le temps d'écouter. Ensuite, j'installe progressivement ma propre légitimité par la fiabilité : présence, clarté, décisions cohérentes, respect des engagements. Je peux dire à l'équipe : 'Je ne viens pas remplacer une personne dans son style, je viens exercer une responsabilité avec ma méthode, dans la continuité de ce qui fonctionne et avec les ajustements nécessaires.'"
-    },
-    {
-      "n": 81,
-      "front": "Deux nouveaux collaborateurs intègrent votre collectif de travail composé essentiellement de seniors. Ils sont jeunes et débordent d'idées nouvelles. Quelle sera votre stratégie pour créer et maintenir la cohésion de cette équipe recomposée ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
-      "back": "**Je valorise l'expérience des seniors et l'énergie d'innovation des nouveaux par une intégration structurée comme le tutorat ou les partages de pratiques, en veillant à ce que les idées nouvelles ne soient pas perçues comme une critique et que l'expérience ne devienne pas un frein.**\n\nJe valorise les deux apports : l'expérience des seniors et l'énergie d'innovation des nouveaux. Je mets en place une intégration structurée : tutorat, partage des pratiques, temps d'échange sur les méthodes. Je veille à ce que les idées nouvelles ne soient pas perçues comme une critique du travail existant, et à ce que l'expérience ne devienne pas un frein automatique. L'objectif est de créer une complémentarité : transmettre, tester, ajuster, et reconnaître chacun."
-    },
-    {
-      "n": 82,
-      "front": "Vous avez une suspicion de conduite addictive, alcool et psychotropes, chez un de vos collaborateurs. Comment agissez-vous ? Quels sont vos interlocuteurs au sein de votre établissement ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
-      "back": "**Je ne pose pas de diagnostic médical mais je pars des faits observables : en cas de danger immédiat je retire l'agent de la situation à risque et j'alerte la hiérarchie, puis j'associe les ressources humaines, la médecine du travail et le service social pour protéger le service et accompagner l'agent sans stigmatisation.**\n\nJe ne pose pas de diagnostic médical. Je pars des faits observables : retards, comportement inhabituel, erreurs, odeur d'alcool, mise en danger, difficultés relationnelles. S'il y a un danger immédiat pour l'agent ou les autres, je retire l'agent de la situation à risque et j'alerte la hiérarchie selon la procédure. Ensuite, j'associe les RH, la médecine du travail, l'assistant de prévention ou le service social selon l'organisation. L'objectif est double : protéger le service et accompagner l'agent, sans stigmatisation."
-    },
-    {
-      "n": 83,
-      "front": "Des collaborateurs refusent de télétravailler, prétextant un environnement familial incompatible. Comment agissez-vous ? Quels sont vos recours ?",
-      "back": "**Le télétravail suppose des conditions matérielles et personnelles adaptées : si l'environnement familial est incompatible, je vérifie le cadre interne, je recherche des solutions comme une présence sur site ou un tiers-lieu, et je m'appuie sur le dialogue puis sur le cadre des ressources humaines, sans imposer un télétravail inefficace.**\n\nLe télétravail est un mode d'organisation qui suppose des conditions matérielles et personnelles adaptées. Si l'environnement familial est incompatible, je l'écoute et je vérifie le cadre interne : le télétravail est-il obligatoire, recommandé ou simplement possible ? Je recherche des solutions : jours réduits, horaires adaptés, bureau partagé, présence sur site, tiers-lieu si prévu. Si la présence est nécessaire au service et possible, elle peut être maintenue. Le recours principal est le dialogue, puis l'application du cadre RH. On ne force pas un télétravail inefficace ou dangereux pour la qualité du travail."
-    },
-    {
-      "n": 84,
-      "front": "Un accident se produit dans votre service, chute d'une armoire et agent grièvement blessé. Êtes-vous responsable en tant que chef de service ?",
-      "back": "**Ma responsabilité peut être engagée en cas de manquement aux obligations de prévention et de sécurité : dans l'immédiat je porte secours, je sécurise la zone et j'alerte la hiérarchie, puis j'analyse les causes, car le chef de service n'est pas automatiquement coupable mais a une obligation forte de prévention et de réaction.**\n\nMa responsabilité peut être engagée si j'ai manqué à mes obligations de prévention, d'alerte ou de sécurité, notamment si le risque était connu et non traité. Dans l'immédiat, je fais porter secours, je sécurise la zone, j'alerte la hiérarchie, les RH, les services de prévention et je fais établir les déclarations nécessaires. Ensuite, il faut analyser les causes : matériel, fixation, signalement antérieur, document unique, consignes. Le chef de service n'est pas automatiquement coupable, mais il a une obligation forte de prévention et de réaction."
-    },
-    {
-      "n": 85,
-      "front": "Comment gèrerez-vous un management à distance, multi-sites et télétravailleur ? Quels sont vos points de vigilance ?",
-      "back": "**Je poserais un cadre clair en matière d'objectifs, de rituels, de disponibilité et de reporting, je circulerais entre les sites pour limiter l'isolement et l'inégalité d'information, et je repèrerais les signaux faibles, car le management à distance repose sur une confiance structurée.**\n\nJe poserais un cadre très clair : objectifs, rituels d'équipe, points individuels, outils partagés, règles de disponibilité et modalités de reporting. Le risque du multi-sites est l'inégalité d'information et le sentiment d'isolement. Je veillerais donc à circuler entre les sites, à organiser des temps collectifs, à repérer les signaux faibles et à ne pas favoriser les agents les plus visibles. Le management à distance repose sur la confiance, mais une confiance structurée."
+      "front": "Leviers d'attractivité mobilisés ?",
+      "back": "**Les leviers d'attractivité mobilisés sont l'apprentissage avec un objectif de 23 000 apprentis 2025-2026 dans la FPE, la protection sociale complémentaire, le télétravail, la qualité de vie au travail, la marque employeur, la mobilité et la formation continue.**\n\nApprentissage (objectif 23 000 apprentis 2025-2026 dans la FPE), protection sociale complémentaire, télétravail, qualité de vie au travail, marque employeur, mobilité, formation continue."
     }
   ]
 }

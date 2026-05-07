@@ -2,54 +2,39 @@
   "stack_number": 5,
   "cards": [
     {
-      "n": 86,
-      "front": "Quelles expériences démontrent que vous savez travailler en équipe ?",
-      "back": "**Mes projets territoriaux et la réorganisation du CD54 démontrent ma capacité à coordonner direction, agents, représentants du personnel et partenaires externes, car travailler en équipe consiste à rendre le collectif plus efficace, et non à être simplement sympathique.**\n\nJe peux citer les projets territoriaux menés avec des collectivités, des partenaires internes et des acteurs externes. Dans ces dossiers, aucun résultat ne dépend d'une seule personne : il faut partager l'information, coordonner les calendriers, comprendre les contraintes de chacun et tenir un cap commun. Mon expérience de réorganisation au CD54 montre aussi ma capacité à travailler avec la direction, les agents et les représentants du personnel. Pour moi, travailler en équipe, ce n'est pas seulement être sympathique ; c'est rendre le collectif plus efficace."
+      "n": 78,
+      "front": "Qu'est-ce qui caractérise un cadre A ?",
+      "back": "**Un cadre A se caractérise par sa capacité à concevoir, piloter, décider, encadrer, représenter l'institution, prendre du recul stratégique, arbitrer et rendre compte, dans une posture d'autonomie et de responsabilité.**\n\nCapacité à concevoir, piloter, décider, encadrer, représenter l'institution, prendre du recul stratégique, arbitrer, rendre compte. Posture d'autonomie et de responsabilité."
     },
     {
-      "n": 87,
-      "front": "Avez-vous déjà eu à gérer des conflits ?",
-      "back": "**Oui, dans des contextes de réorganisation ou de charge différenciée : je reviens aux faits, j'écoute les parties, je clarifie le cadre et je distingue le désaccord normal du conflit installé, en associant les ressources humaines ou la hiérarchie quand le sujet dépasse mon niveau.**\n\nOui, dans des contextes de réorganisation ou de charge de travail différenciée, des tensions peuvent apparaître. Ma méthode est de revenir aux faits, d'écouter les parties, de clarifier le cadre et de rechercher une solution opérationnelle. Je distingue le désaccord normal, qui peut être utile, du conflit installé, qui abîme le collectif. Quand le conflit dépasse mon niveau, j'associe les RH ou la hiérarchie."
+      "n": 79,
+      "front": "Management bienveillant et exigeant ?",
+      "back": "**Le management bienveillant et exigeant combine écoute, reconnaissance et soutien des équipes avec clarté des objectifs, fermeté sur les résultats et capacité à arbitrer, étant entendu que la bienveillance n'est pas la complaisance.**\n\nCombine écoute, reconnaissance et soutien des équipes avec clarté des objectifs, fermeté sur les résultats et capacité à arbitrer. Bienveillance ≠ complaisance."
     },
     {
-      "n": 88,
-      "front": "Vous avez souvent changé de poste, en faites-vous vite le tour ?",
-      "back": "**Non, mes changements traduisent une progression et une volonté d'élargir mes compétences en culture territoriale, gestion de projet et management : je ne cherche pas à partir dès que je maîtrise mais à continuer à apporter de la valeur là où je suis utile.**\n\nNon. Mes changements de poste traduisent plutôt une progression et une volonté d'élargir mes compétences. Chaque poste m'a apporté une brique : culture territoriale, gestion de projet, relation partenariale, organisation, management. Je ne cherche pas à partir dès que je maîtrise ; je cherche à continuer à être utile là où mon expérience peut produire de la valeur."
+      "n": 80,
+      "front": "Réagir face à un conflit dans une équipe ?",
+      "back": "**Face à un conflit, le manager ne doit pas éviter mais recevoir chaque partie séparément, objectiver les faits, identifier la cause réelle, proposer une médiation, recadrer si besoin, formaliser une solution, tracer et suivre dans le temps, en mobilisant pairs et hiérarchie.**\n\nNe pas éviter, recevoir chaque partie séparément, objectiver les faits, identifier la cause réelle, proposer une médiation, recadrer si besoin, formaliser une solution, tracer, suivre dans le temps."
     },
     {
-      "n": 89,
-      "front": "Peut-on être adaptable tout en restant dix ans sur le même poste ?",
-      "back": "**Oui, car l'adaptabilité se mesure à la capacité d'apprendre et d'ajuster sa manière de travailler face aux évolutions de missions, de réglementation, d'outils ou d'équipe, et elle peut donc s'exprimer aussi bien dans la mobilité que dans la durée.**\n\nOui, car l'adaptabilité ne se mesure pas seulement au nombre de postes occupés. On peut rester longtemps sur un poste et connaître des évolutions de missions, de réglementation, d'outils, d'équipe ou de partenaires. L'adaptabilité, c'est la capacité à apprendre et à ajuster sa manière de travailler. Elle peut donc s'exprimer dans la mobilité comme dans la durée."
+      "n": 81,
+      "front": "Gérer un collaborateur en difficulté ?",
+      "back": "**Pour gérer un collaborateur en difficulté, il faut identifier la cause qu'elle soit de compétence, de motivation ou personnelle, organiser un échange en face à face, fixer des objectifs clairs avec accompagnement, mobiliser RH ou formation si besoin et suivre régulièrement.**\n\nIdentifier la cause (compétence, motivation, personnel), poser un échange en face-à-face, fixer des objectifs clairs avec accompagnement, mobiliser RH/formation si besoin, suivre régulièrement."
     },
     {
-      "n": 90,
-      "front": "Vous avez beaucoup d'activités et responsabilités extraprofessionnelles. Seront-elles compatibles avec les exigences du poste que vous visez ?",
-      "back": "**Oui, à condition d'avoir une organisation claire et de respecter la priorité professionnelle : ces activités développent en plus des compétences utiles comme l'organisation, l'engagement et l'écoute, la compatibilité se mesurant aux résultats et à la disponibilité réelle.**\n\nOui, à condition d'avoir une organisation claire et de respecter la priorité professionnelle. Ces activités peuvent aussi développer des compétences utiles : organisation, engagement, écoute, gestion du temps. Je suis consciente des exigences d'un poste de cadre A ; si je candidate, c'est que j'estime pouvoir les assumer. La compatibilité se mesure aux résultats, à la disponibilité réelle et au respect des engagements."
+      "n": 82,
+      "front": "Conduite du changement ?",
+      "back": "**La conduite du changement repose sur un diagnostic partagé, une vision claire, une communication transparente, l'association des équipes, la formation, le pilotage des résistances, des étapes lisibles et l'évaluation.**\n\nDiagnostic partagé, vision claire, communication transparente, association des équipes, formation, pilotage des résistances, étapes lisibles, évaluation."
     },
     {
-      "n": 91,
-      "front": "Vous affirmez avoir de grandes qualités humaines. Suffisent-elles à être compétent ?",
-      "back": "**Non, les qualités humaines sont nécessaires mais elles doivent être complétées par des compétences techniques, juridiques, financières et rédactionnelles, car un cadre public doit être humain mais aussi rigoureux et capable de décider.**\n\nNon, elles ne suffisent pas. Les qualités humaines sont nécessaires pour manager, écouter et créer de la confiance, mais elles doivent être complétées par des compétences techniques, juridiques, financières, organisationnelles et rédactionnelles. Un cadre public doit être humain, mais aussi rigoureux et capable de décider. Je ne mets donc pas l'humain à la place de la compétence ; je le mets au service de la compétence."
+      "n": 83,
+      "front": "CODIR ?",
+      "back": "**Le CODIR est le comité de direction, instance de pilotage stratégique réunissant les responsables d'une entité, et une intervention en CODIR doit être structurée autour des enjeux, des options, d'une recommandation et de la décision attendue.**\n\nComité de direction. Instance de pilotage stratégique réunissant les responsables d'une entité. Une intervention en CODIR doit être structurée : enjeux, options, recommandation, décision attendue."
     },
     {
-      "n": 92,
-      "front": "Qu'entendez-vous par aptitude à la communication ? Que recouvre ce terme ?",
-      "back": "**Communiquer, ce n'est pas seulement bien parler : c'est adapter son message à l'interlocuteur, écouter, reformuler, transmettre une information fiable et choisir le bon canal, dans une logique qui protège les projets et les relations de travail.**\n\nPour moi, communiquer, ce n'est pas seulement bien parler. C'est adapter son message à l'interlocuteur, écouter, reformuler, transmettre une information fiable et choisir le bon canal. C'est aussi savoir dire une difficulté sans dramatiser, rendre une décision compréhensible et éviter les malentendus. Une bonne communication protège les projets et les relations de travail."
-    },
-    {
-      "n": 93,
-      "front": "Vous avez suivi des formations en conduite de projet. Quel chef de projet êtes-vous ?",
-      "back": "**Je suis un chef de projet structurant et partenarial : je clarifie l'objectif, les acteurs, les risques, les jalons et les livrables, tout en sachant qu'un projet public avance par coopération et qu'il faut faire converger les intérêts et sécuriser les décisions.**\n\nJe suis un chef de projet structurant et partenarial. Je commence par clarifier l'objectif, les acteurs, les risques, le calendrier et les livrables. J'aime objectiver les choses, poser des jalons et garder une vision d'ensemble. Mais je sais aussi qu'un projet public avance par coopération : il faut écouter les contraintes, faire converger les intérêts et sécuriser les décisions."
-    },
-    {
-      "n": 94,
-      "front": "Vous dites attacher une grande importance à la qualité de vie au travail concrètement.",
-      "back": "**Concrètement, la qualité de vie au travail passe par la clarté des objectifs, une charge réaliste, des règles équitables, un droit à l'erreur encadré et la reconnaissance du travail, l'enjeu n'étant pas d'organiser des moments conviviaux mais de créer un environnement où chacun peut bien travailler.**\n\nConcrètement, la QVT passe par la clarté des objectifs, une charge réaliste, des règles équitables, un droit à l'erreur encadré, la reconnaissance du travail et la prévention des tensions. Ce n'est pas seulement organiser des moments conviviaux. C'est créer un environnement dans lequel les agents savent ce qu'on attend d'eux, peuvent alerter et disposent des moyens pour bien travailler."
-    },
-    {
-      "n": 95,
-      "front": "Dans votre dossier, vous faites référence à une réorganisation que vous avez initiée. Avez-vous travaillé seul ?",
-      "back": "**Non, et il est important de le dire : une réorganisation est collective avec la direction, les agents, les représentants du personnel et les services support, mon rôle ayant été de contribuer au diagnostic, à l'objectivation des critères et à la coordination, sans présenter une réussite collective comme isolée.**\n\nNon, et c'est important de le dire. Une réorganisation est toujours collective : direction, agents, représentants du personnel, services support. Mon rôle a été de contribuer au diagnostic, à l'objectivation des critères, à la coordination et à la mise en œuvre. Je revendique ma part de responsabilité, mais je ne présente pas une réussite collective comme une réussite individuelle isolée."
+      "n": 84,
+      "front": "Management fonctionnel (sans lien hiérarchique) ?",
+      "back": "**Le management fonctionnel sans lien hiérarchique repose sur la légitimité par la compétence et la qualité du dialogue, la clarté des objectifs et livrables, le sens donné à l'action, la remontée d'information à la hiérarchie et l'animation collective : pas de pouvoir formel mais de l'influence.**\n\nLégitimité par la compétence et la qualité du dialogue, clarté des objectifs et livrables, sens donné à l'action, remontée d'information à la hiérarchie, animation collective. Pas de pouvoir formel mais influence."
     }
   ]
 }

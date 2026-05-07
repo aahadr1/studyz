@@ -1,93 +1,97 @@
 {
-  "deck_name": "Flashcards Oral CDC / Attaché",
-  "deck_description": "244 flashcards classées en 12 stacks pour préparer l'oral CDC / Attaché.",
+  "deck_name": "Flashcards Oral Examen Pro Attaché CDC 2026",
+  "deck_description": "154 flashcards consolidées pour préparer l'oral de l'examen professionnel d'accès au corps des attachés d'administration de l'État à la Caisse des Dépôts.",
   "language": "fr",
-  "version": "3.0.0",
-  "total_cards": 244,
+  "version": "4.0.0",
+  "total_cards": 154,
   "stacks": [
     {
       "number": 1,
-      "title": "Mises en situation managériales du quotidien",
-      "card_range": "001-010",
-      "card_count": 10,
+      "title": "La Caisse des Dépôts — identité, statut, textes",
+      "description": "Les 24 fondamentaux à savoir sur la CDC : création, statut juridique, textes structurants, gouvernance, missions historiques et investisseur de long terme.",
+      "card_range": "001-024",
+      "card_count": 24,
       "file": "stack-01.json"
     },
     {
       "number": 2,
-      "title": "Posture personnelle, qualités managériales et rapport au travail",
-      "card_range": "011-038",
-      "card_count": 28,
+      "title": "Plans stratégiques, axes, mesures phares, chiffres",
+      "description": "13 cartes sur le plan Groupe 100 Md€, le plan BDT 2024-2028 (90 Md€, 16 mesures), le bilan logement record et les programmes territoriaux emblématiques.",
+      "card_range": "025-037",
+      "card_count": 13,
       "file": "stack-02.json"
     },
     {
       "number": 3,
-      "title": "Questions d'opinion, société, actualité et argumentation",
-      "card_range": "039-074",
-      "card_count": 36,
+      "title": "La CDC face aux grands défis (IA, santé, retraites, climat)",
+      "description": "20 cartes sur Horizon Numérique 2030, Mistral AI, IA Factory, Campus IA, la feuille de route santé/grand âge, la transition écologique et les sujets transverses.",
+      "card_range": "038-057",
+      "card_count": 20,
       "file": "stack-03.json"
     },
     {
       "number": 4,
-      "title": "Mises en situation complexes et prise de poste",
-      "card_range": "075-085",
-      "card_count": 11,
+      "title": "Vie administrative et institutionnelle",
+      "description": "20 cartes sur les versants de la fonction publique, le CIGEM des attachés, le statut, la déontologie, les collectivités, la LOLF, la haute FP et le plan DGAFP 2030.",
+      "card_range": "058-077",
+      "card_count": 20,
       "file": "stack-04.json"
     },
     {
       "number": 5,
-      "title": "Parcours, RHP et compétences comportementales",
-      "card_range": "086-095",
-      "card_count": 10,
+      "title": "Posture de cadre A et management",
+      "description": "7 cartes sur la posture cadre A : management bienveillant et exigeant, gestion de conflit, conduite du changement, CODIR et management fonctionnel.",
+      "card_range": "078-084",
+      "card_count": 7,
       "file": "stack-05.json"
     },
     {
       "number": 6,
-      "title": "Connaissances administratives générales et institutions",
-      "card_range": "096-106",
+      "title": "Actualité gouvernementale et institutionnelle",
+      "description": "11 cartes sur le gouvernement Lecornu II, France 2030, la planification écologique, le Pacte vert européen, l'IA Act, la CSRD et le ZAN.",
+      "card_range": "085-095",
       "card_count": 11,
       "file": "stack-06.json"
     },
     {
       "number": 7,
-      "title": "Groupe Caisse des Dépôts, Banque des Territoires, métiers, gouvernance et histoire",
-      "card_range": "107-134",
-      "card_count": 28,
+      "title": "Dette, budget, finances publiques",
+      "description": "12 cartes sur la dette publique 2025, le déficit, la trajectoire budgétaire, la Cour des comptes, le 49.3, la LFI 2026 et la loi spéciale.",
+      "card_range": "096-107",
+      "card_count": 12,
       "file": "stack-07.json"
     },
     {
       "number": 8,
-      "title": "Statut, fonction publique, obligations, dialogue social et RH",
-      "card_range": "135-165",
-      "card_count": 31,
+      "title": "Retraites, inflation, pouvoir d'achat",
+      "description": "12 cartes sur la suspension de la réforme des retraites (LFSS 2026), l'inflation 2026, le prix du gaz, la CRE et la souveraineté énergétique.",
+      "card_range": "108-119",
+      "card_count": 12,
       "file": "stack-08.json"
     },
     {
       "number": 9,
-      "title": "Actualité gouvernementale, transition écologique, industrie, numérique et souveraineté",
-      "card_range": "166-193",
-      "card_count": 28,
+      "title": "Démocratie, décentralisation, services publics",
+      "description": "15 cartes sur la crise parlementaire, les municipales 2026, le projet de loi décentralisation, le statut de l'élu local, France Services et VIGINUM.",
+      "card_range": "120-134",
+      "card_count": 15,
       "file": "stack-09.json"
     },
     {
       "number": 10,
-      "title": "Élections, collectivités, finances locales, Grand Est et politiques territoriales",
-      "card_range": "194-209",
-      "card_count": 16,
+      "title": "Mises en situation managériales",
+      "description": "5 mises en situation extraites du rapport jury Principalat 2025 : absentéisme, conflit, désobéissance hiérarchique, RPS, réorganisation.",
+      "card_range": "135-139",
+      "card_count": 5,
       "file": "stack-10.json"
     },
     {
       "number": 11,
-      "title": "Déontologie, aides publiques, intérêt général et sécurité juridique",
-      "card_range": "210-221",
-      "card_count": 12,
+      "title": "Questions d'avis — réponses courtes prêtes à dire",
+      "description": "15 réponses orales calibrées (60-80 mots, ~45 secondes) aux questions ouvertes du jury : retraites, 49.3, décentralisation, écologie, logement, IA, attractivité.",
+      "card_range": "140-154",
+      "card_count": 15,
       "file": "stack-11.json"
-    },
-    {
-      "number": 12,
-      "title": "Réorganisation CD54, motivation personnelle, lignes de défense et phrases pivots",
-      "card_range": "222-244",
-      "card_count": 23,
-      "file": "stack-12.json"
     }
   ]
 }

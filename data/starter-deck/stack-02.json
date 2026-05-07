@@ -2,144 +2,69 @@
   "stack_number": 2,
   "cards": [
     {
-      "n": 11,
-      "front": "Est-ce que cela vous flatterait d'être « exceptionnel » ?",
-      "back": "**Cela ferait évidemment plaisir, mais ce n'est pas ma priorité : dans le service public, je préfère être perçue comme solide, loyale et utile au collectif plutôt que rechercher une posture d'exception qui relèverait de l'ego.**\n\nCela ferait évidemment plaisir, mais ce n'est pas ce que je recherche en priorité. Dans un cadre public, l'enjeu n'est pas d'être exceptionnel pour soi-même, mais d'être utile, fiable et capable de faire progresser un collectif. Je préfère qu'on dise de moi que je suis solide, loyale, claire et efficace. L'exceptionnel peut être un résultat, mais il ne doit pas devenir une posture d'ego."
-    },
-    {
-      "n": 12,
-      "front": "Préférez-vous travailler seul dans un bureau ou à plusieurs ?",
-      "back": "**Je préfère un équilibre entre les deux : des temps seule pour analyser et préparer une décision, et des temps collectifs structurés pour confronter les points de vue et coordonner l'action, car un service public efficace se construit dans l'articulation des deux.**\n\nLes deux ont leur utilité. J'ai besoin de temps seule pour analyser, rédiger, préparer une décision ou traiter un dossier complexe. Mais je suis convaincue qu'un service public efficace se construit en collectif : confrontation des points de vue, entraide, transmission et coordination. Je dirais donc que je préfère un équilibre : des temps de concentration et des temps de travail collectif structurés."
-    },
-    {
-      "n": 13,
-      "front": "Avant vos congés, vous aviez organisé la continuité de vos dossiers avec votre manager. Votre manager vous contacte sur votre portable professionnel pour discuter d'un dossier. Comment réagissez-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
-      "back": "**Je réponds si l'urgence est réelle, mais je rappelle calmement que la continuité avait été organisée et je réoriente vers la personne identifiée pour le relais ; après le congé, je propose si nécessaire d'améliorer la transmission pour éviter que cela se reproduise.**\n\nJe réponds si je comprends qu'il y a une urgence réelle ou un risque pour la continuité du service. En revanche, je rappelle calmement que l'organisation avait été préparée, et je réoriente vers la personne identifiée pour assurer le relais si le sujet peut attendre. Je ne fais pas de mon congé une zone totalement inaccessible en cas de crise, mais je protège aussi le droit à la déconnexion. Après le congé, je peux proposer d'améliorer la transmission pour éviter que cela se reproduise."
-    },
-    {
-      "n": 14,
-      "front": "Le droit à la déconnexion est-il compatible avec une fonction d'encadrement ?",
-      "back": "**Oui, à condition d'avoir une organisation claire : être cadre n'est pas être disponible en permanence mais savoir anticiper, déléguer et organiser les relais, en restant exemplaire pour ne pas créer une norme implicite d'hyperdisponibilité dans l'équipe.**\n\nOui, il est compatible, à condition d'avoir une organisation claire. Être cadre ne signifie pas être disponible en permanence. Cela signifie anticiper, déléguer, organiser les relais et distinguer l'urgence réelle de l'urgence ressentie. Le cadre doit aussi être exemplaire : s'il envoie des mails tardifs en permanence, il crée une norme implicite dangereuse pour l'équipe."
-    },
-    {
-      "n": 15,
-      "front": "Les réponses tardives aux mails (minuit) de vos collaborateurs vous alertent-elles ?",
-      "back": "**Oui, surtout si cela se répète, car cela peut révéler une surcharge, une mauvaise organisation ou une culture d'hyperdisponibilité : j'en parle avec l'agent pour comprendre, je rappelle le cadre de déconnexion et je réajuste si besoin la charge ou les priorités.**\n\nOui, surtout si cela se répète. Cela peut révéler une surcharge, une mauvaise organisation, une anxiété professionnelle ou une culture d'hyperdisponibilité. Je ne sanctionne pas immédiatement, mais j'en parle avec l'agent : pourquoi répond-il à cette heure-là, est-ce nécessaire, se sent-il obligé ? Ensuite, je rappelle le cadre de déconnexion et je regarde si la charge ou les priorités doivent être ajustées."
-    },
-    {
-      "n": 16,
-      "front": "La disponibilité est-elle une qualité ?",
-      "back": "**Oui, mais seulement si elle est maîtrisée : être présent dans les moments importants est une qualité, alors qu'une disponibilité excessive devient un défaut qui empêche de prioriser et conduit à l'épuisement, raison pour laquelle un cadre doit être disponible avec discernement.**\n\nOui, mais seulement si elle est maîtrisée. Une disponibilité utile, c'est être accessible, fiable et présent dans les moments importants. Une disponibilité excessive devient un défaut : elle peut empêcher de prioriser, créer de la dépendance et conduire à l'épuisement. Pour un cadre, la vraie qualité est d'être disponible avec discernement."
-    },
-    {
-      "n": 17,
-      "front": "Peut-on demander à tous ses collaborateurs d'être audacieux, créatifs … ?",
-      "back": "**On peut encourager l'audace et la créativité, mais on ne peut pas les imposer comme une norme uniforme : le rôle du manager est de créer un cadre où les idées émergent sans peur, tout en respectant les profils qui apportent rigueur, continuité et sécurité.**\n\nOn peut encourager l'audace et la créativité, mais on ne peut pas les imposer comme une norme uniforme. Tous les agents n'ont pas le même poste, la même personnalité ni le même rapport au risque. Le rôle du manager est de créer un cadre dans lequel les idées peuvent émerger sans peur, tout en respectant ceux qui apportent de la rigueur, de la continuité et de la sécurité. Une équipe a besoin de profils complémentaires."
-    },
-    {
-      "n": 18,
-      "front": "Les compétences techniques de 2 collaborateurs indispensables sur un dossier peuvent-elles suffire à gommer leurs divergences personnelles ?",
-      "back": "**Non, les compétences techniques ne suffisent pas si la relation est dégradée : je clarifie les rôles, les règles d'échange et les objectifs communs, et je les reçois séparément puis ensemble afin qu'ils coopèrent professionnellement, sans devoir devenir amis.**\n\nNon. Les compétences techniques sont essentielles, mais elles ne suffisent pas si la relation de travail est trop dégradée. Je clarifie les rôles, les règles d'échange et les objectifs communs. Si nécessaire, je les reçois séparément puis ensemble pour repartir des faits et du besoin de service. L'enjeu n'est pas qu'ils deviennent amis, mais qu'ils puissent coopérer professionnellement."
-    },
-    {
-      "n": 19,
-      "front": "Que faites-vous pour développer l'implication d'une équipe ?",
-      "back": "**Je travaille d'abord sur le sens en expliquant pourquoi et pour qui l'on travaille, puis je clarifie les objectifs, je donne de l'autonomie, je reconnais le travail accompli et je veille à la justice interne, car l'implication chute dès qu'il y a un sentiment de passe-droit ou d'absence de reconnaissance.**\n\nJe travaille d'abord sur le sens : pourquoi fait-on ce travail et pour qui ? Ensuite, je clarifie les objectifs, je donne de l'autonomie, je reconnais le travail accompli et je donne des retours réguliers. L'implication se développe aussi quand les agents se sentent écoutés et utiles. Enfin, je veille à la justice interne : une équipe s'implique moins si elle perçoit des passe-droits ou une absence de reconnaissance."
-    },
-    {
-      "n": 20,
-      "front": "Quels sont les risques et impacts d'une équipe stressée ?",
-      "back": "**Une équipe stressée durablement perd en qualité, en cohésion et en efficacité, avec des risques humains comme l'épuisement et l'absentéisme, et des risques opérationnels comme les erreurs et la baisse de qualité du service ; le rôle du manager est de détecter les signaux faibles, de réguler la charge et d'alerter si les moyens ne sont plus cohérents avec les objectifs.**\n\nUne équipe stressée durablement perd en qualité, en cohésion et en efficacité. Les risques sont humains : épuisement, conflits, absentéisme, troubles psychosociaux. Ils sont aussi opérationnels : erreurs, retards, baisse de qualité de service, perte de confiance des partenaires. Le rôle du manager est de détecter les signaux faibles, de prioriser, de réguler la charge et d'alerter si les moyens ne sont plus cohérents avec les objectifs."
-    },
-    {
-      "n": 21,
-      "front": "Aimez-vous travailler dans l'urgence ?",
-      "back": "**Je sais travailler dans l'urgence quand la situation l'exige, mais je ne considère pas l'urgence permanente comme un mode de management : un cadre doit transformer l'urgence en organisation en anticipant, en priorisant et en tirant un retour d'expérience.**\n\nJe sais travailler dans l'urgence quand la situation l'exige. L'urgence peut mobiliser, obliger à prioriser et révéler la capacité d'une équipe à se coordonner. Mais je ne considère pas l'urgence permanente comme un bon mode de management. Un cadre doit justement transformer l'urgence en organisation : anticiper, prioriser, sécuriser et tirer un retour d'expérience."
-    },
-    {
-      "n": 22,
-      "front": "L'empathie est-elle la qualité principale du manager ?",
-      "back": "**C'est une qualité essentielle, mais elle ne suffit pas seule : un manager doit aussi décider, arbitrer et savoir dire non, ce qui suppose d'associer l'empathie à la clarté du cadre et au courage managérial.**\n\nC'est une qualité très importante, mais elle ne suffit pas. L'empathie permet de comprendre les situations individuelles, de prévenir les tensions et d'accompagner les agents. Mais un manager doit aussi décider, arbitrer, rappeler le cadre et parfois dire non. Je dirais donc que l'empathie doit être associée à la clarté et au courage managérial."
-    },
-    {
-      "n": 23,
-      "front": "Quels sont les aspects des métiers liés au grade d'attaché qui vous font peur ?",
-      "back": "**Ce qui peut impressionner, c'est l'exposition de la décision au croisement d'attentes politiques, administratives, financières et humaines, mais cette exigence m'attire aussi car elle oblige à la rigueur, et ma réponse est la méthode : objectiver, demander conseil, tracer et assumer.**\n\nCe qui peut impressionner, c'est l'exposition de la décision : un attaché prépare, sécurise, coordonne et rend compte. Il peut être au croisement d'attentes politiques, administratives, financières et humaines. Mais cette exigence m'attire aussi, car elle oblige à être rigoureux et à ne pas décider seul. Ma réponse, c'est la méthode : objectiver, demander conseil, tracer et assumer."
-    },
-    {
-      "n": 24,
-      "front": "Comment travailler dans des délais contraints ?",
-      "back": "**Je clarifie d'abord l'échéance réelle et le livrable attendu, puis je priorise entre l'indispensable et le reportable, je répartis les tâches avec des points de suivi courts, et j'alerte rapidement si le délai devient incompatible avec la qualité ou la sécurité juridique.**\n\nJe commence par clarifier l'échéance réelle, le livrable attendu et le niveau de qualité nécessaire. Ensuite, je priorise : ce qui est indispensable, ce qui est utile, ce qui peut être reporté. Je répartis les tâches, je fixe des points courts de suivi et j'alerte rapidement si le délai devient incompatible avec la qualité ou la sécurité juridique. Travailler vite ne veut pas dire travailler dans le flou."
-    },
-    {
       "n": 25,
-      "front": "« Trouver du sens à son travail ». Est-ce fondamental pour vous ?",
-      "back": "**Oui, surtout dans le service public : pour moi le sens vient de l'utilité concrète, comme améliorer un service ou accompagner un territoire, et il doit se traduire par des objectifs clairs et des résultats visibles plutôt que rester un discours.**\n\nOui, surtout dans le service public. Le sens permet de tenir dans les périodes difficiles et de comprendre pourquoi les contraintes existent. Pour moi, le sens vient de l'utilité concrète : améliorer un service, sécuriser une décision, accompagner un territoire, rendre une action publique plus efficace. Mais le sens ne doit pas rester un discours : il doit se traduire par des objectifs clairs et des résultats visibles."
+      "front": "Engagement financier transformation écologique 2024-2028 ?",
+      "back": "**Le Groupe Caisse des Dépôts s'engage à mobiliser 100 milliards d'euros sur 2024-2028 pour accélérer la transformation écologique du pays, succédant au plan 60 milliards d'euros 2020-2024 qui avait déjà été dépassé dès 2023.**\n\n100 milliards d'euros pour accélérer la transformation écologique du pays. Succède au plan 60 Md€ (2020-2024), dépassé dès 2023."
     },
     {
       "n": 26,
-      "front": "La curiosité est-elle une qualité ? Que dit-elle de nous ?",
-      "back": "**Oui, la curiosité est une qualité quand elle est orientée vers l'apprentissage et l'amélioration du service, à condition de rester professionnelle et respectueuse, en particulier sur les données et les situations individuelles.**\n\nOui, la curiosité est une qualité si elle est orientée vers l'apprentissage et l'amélioration du service. Elle montre qu'on ne se contente pas de ses habitudes, qu'on veut comprendre les enjeux et anticiper les évolutions. Pour un attaché, c'est essentiel : les sujets changent, les dispositifs évoluent, les partenaires aussi. Mais la curiosité doit rester professionnelle et respectueuse, notamment sur les données et les situations individuelles."
+      "front": "Avancement de cet objectif ?",
+      "back": "**Près de 40 milliards d'euros ont déjà été mobilisés en 18 mois entre janvier 2024 et juin 2025, et la trajectoire pourrait atteindre 130 milliards d'euros d'ici 2028, dépassant la cible initiale.**\n\nPrès de 40 Md€ déjà mobilisés en 18 mois (janvier 2024 - juin 2025). Pourrait atteindre 130 Md€ d'ici 2028, dépassant la cible."
     },
     {
       "n": 27,
-      "front": "Trop de créativité peut-elle nuire à un manager ?",
-      "back": "**Oui, si la créativité devient agitation ou remise en cause permanente du cadre : la bonne créativité améliore concrètement le fonctionnement sans perdre la continuité du service, car un manager doit innover tout en stabilisant et en donnant des repères.**\n\nOui, si la créativité devient agitation ou remise en cause permanente du cadre. Un manager doit innover, mais aussi stabiliser, sécuriser et donner des repères. Trop de créativité peut fatiguer une équipe si les priorités changent sans cesse. La bonne créativité est celle qui améliore concrètement le fonctionnement, sans perdre la continuité du service."
+      "front": "Secteurs prioritaires de ce plan ?",
+      "back": "**Les deux secteurs prioritaires du plan 100 milliards d'euros sont le logement et le transport, dans le cadre de la feuille de route France Nation Verte.**\n\nLogement et transport en priorité, dans le cadre de la feuille de route France Nation Verte."
     },
     {
       "n": 28,
-      "front": "Comment développer le sens du collectif ?",
-      "back": "**Je développe le collectif en clarifiant ce qui dépend de chacun et ce qui dépend de l'équipe, en favorisant la transmission et l'entraide, et en reconnaissant les réussites collectives autant que les performances individuelles.**\n\nJe développe le collectif en clarifiant ce qui dépend de chacun et ce qui dépend de l'équipe. Je favorise les temps d'échange utiles, la transmission des compétences, l'entraide et les retours d'expérience. Je veille aussi à reconnaître les réussites collectives, pas seulement les performances individuelles. Le collectif naît quand chacun comprend qu'il contribue à un résultat commun."
+      "front": "Objectif climat de la CDC ?",
+      "back": "**La Caisse des Dépôts vise une réduction de 55% de l'empreinte carbone de ses portefeuilles d'actions cotées et d'obligations d'entreprises entre 2020 et 2030, sur les scopes 1 et 2.**\n\nRéduction de 55% de l'empreinte carbone des portefeuilles d'actions cotées et obligations d'entreprises entre 2020 et 2030 (scopes 1 et 2)."
     },
     {
       "n": 29,
-      "front": "Homme ou Femme à la tête d'une équipe : est-ce que cela a une incidence pour vous ?",
-      "back": "**Non, ce qui compte ce sont les compétences, la posture et la capacité à faire grandir l'équipe : je suis attachée à l'égalité professionnelle et je pense qu'il faut dépasser les stéréotypes de leadership en gardant la même exigence pour toutes et tous.**\n\nNon, ce qui compte, ce sont les compétences, la posture, la capacité à décider et à faire grandir l'équipe. Je suis attachée à l'égalité professionnelle et je pense qu'il faut dépasser les stéréotypes de leadership. Les styles de management peuvent varier d'une personne à l'autre, mais ils ne doivent pas être expliqués par le genre. L'exigence doit être la même : compétence, loyauté, respect et efficacité."
+      "front": "Plan stratégique BDT 2024-2028 ?",
+      "back": "**Le plan de la Banque des Territoires 2024-2028 mobilise 90 milliards d'euros sur cinq ans déployés à travers 16 mesures phares, pour passer de la transition à la transformation effective des territoires plus verts et plus solidaires.**\n\n90 Md€ sur 5 ans, déployés à travers 16 mesures phares pour passer de la transition à la transformation effective des territoires. Slogan : « des territoires plus verts et plus solidaires »."
     },
     {
       "n": 30,
-      "front": "Êtes-vous ambitieux ? Est-ce une qualité ou un défaut ?",
-      "back": "**Oui, je suis ambitieuse au sens où je veux progresser et être utile sur des dossiers plus complexes : c'est une qualité tant que cela reste tournée vers le service et l'intérêt général, et un défaut si cela se transforme en compétition personnelle.**\n\nOui, je suis ambitieuse au sens où je veux progresser, prendre davantage de responsabilités et être utile sur des dossiers plus complexes. C'est une qualité si elle reste tournée vers le service, le collectif et l'intérêt général. Elle devient un défaut si elle se transforme en compétition personnelle ou en recherche de reconnaissance à tout prix. Mon ambition est une ambition de responsabilité."
+      "front": "Les 8 mesures « territoires plus verts » ?",
+      "back": "**Les huit mesures vertes regroupent 1,2 milliard pour l'adaptation climatique, 16,8 milliards pour la réhabilitation du parc public, 1,5 milliard pour le mix énergétique décarboné, 1,3 milliard pour la mobilité décarbonée, 1,8 milliard pour la ressource en eau, 180 millions pour la transition alimentaire, 350 millions pour les déchets et 900 millions pour la sobriété foncière.**\n\n1,2 Md€ adaptation climatique • 16,8 Md€ réhabilitation parc public • 1,5 Md€ mix énergétique décarboné • 1,3 Md€ mobilité décarbonée • 1,8 Md€ ressource en eau • 180 M€ transition alimentaire • 350 M€ déchets • 900 M€ sobriété foncière."
     },
     {
       "n": 31,
-      "front": "Savez vous déléguer ? Et faire confiance ?",
-      "back": "**Oui, mais déléguer ne veut pas dire abandonner : je clarifie le résultat attendu, le délai, les marges de manœuvre et les points de contrôle, et je reste en appui pour responsabiliser l'agent tout en sécurisant le service.**\n\nOui, mais déléguer ne veut pas dire abandonner. Je délègue en clarifiant le résultat attendu, le délai, les marges de manœuvre et les points de contrôle. La confiance se construit : elle suppose de laisser de l'autonomie, mais aussi de rester disponible en appui. Pour moi, une bonne délégation responsabilise l'agent et sécurise le service."
+      "front": "Les 8 mesures « cohésion sociale » ?",
+      "back": "**Les huit mesures de cohésion sociale comprennent 240 millions pour France Services, la lutte contre les déserts médicaux, 3,8 milliards pour l'accès au droit numérique, 56,5 milliards pour le logement social et abordable, 2,1 milliards pour le développement économique local, 900 millions pour la réindustrialisation, 3,3 milliards pour l'habitat seniors et 400 millions pour la donnée publique souveraine.**\n\n240 M€ France Services • lutte déserts médicaux • 3,8 Md€ accès au droit numérique • 56,5 Md€ logement social et abordable • 2,1 Md€ développement économique local • 900 M€ réindustrialisation • 3,3 Md€ habitat seniors • 400 M€ donnée publique souveraine."
     },
     {
       "n": 32,
-      "front": "Est-ce un défaut d'être perfectionniste ?",
-      "back": "**Le perfectionnisme est une qualité quand il traduit l'exigence du travail bien fait, mais il devient un défaut s'il empêche de prioriser ou de respecter les délais : dans l'administration, il faut rechercher la qualité utile et non la perfection paralysante.**\n\nLe perfectionnisme peut être une qualité quand il traduit l'exigence et le souci du travail bien fait. Mais il devient un défaut s'il empêche de prioriser, de déléguer ou de respecter les délais. Dans l'administration, il faut savoir adapter le niveau de précision à l'enjeu du dossier. Le cadre doit rechercher la qualité utile, pas la perfection paralysante."
+      "front": "Part du logement dans le plan BDT ?",
+      "back": "**Le logement représente plus de 80% du plan Banque des Territoires, avec 56,5 milliards pour le logement social et 16,8 milliards pour la réhabilitation du parc public, soit 73,3 milliards d'euros au total.**\n\nPlus de 80% : 56,5 Md€ logement social + 16,8 Md€ réhabilitation parc public = 73,3 Md€."
     },
     {
       "n": 33,
-      "front": "Comment gérez-vous un conflit ?",
-      "back": "**Je sors des impressions pour revenir aux faits, j'écoute séparément si nécessaire, je réunis les personnes autour d'un objectif professionnel commun en rappelant les règles de respect, et j'associe la hiérarchie ou les ressources humaines si le conflit dépasse le simple désaccord.**\n\nJe commence par sortir des impressions et revenir aux faits : qui, quoi, quand, quels impacts sur le travail ? J'écoute séparément si nécessaire, puis je cherche à réunir les personnes autour d'un objectif professionnel commun. Je rappelle les règles de respect et de fonctionnement. Si le conflit dépasse le simple désaccord, j'associe la hiérarchie, les RH ou les acteurs de prévention. L'important est de ne pas laisser un conflit s'installer en silence."
+      "front": "Bilan logement BDT 2024 (record) ?",
+      "back": "**La Banque des Territoires a accordé 28,5 milliards d'euros de prêts en 2024, en hausse de 74% par rapport à 2023, dont 20,9 milliards pour le logement social et 7,6 milliards pour le secteur public local, ce qui a permis de financer 115 000 logements abordables soit plus de 40% de la production neuve française.**\n\n28,5 Md€ de prêts (+74% vs 2023). 20,9 Md€ logement social, 7,6 Md€ secteur public local. **115 000 logements abordables financés, soit plus de 40% de la production neuve française**."
     },
     {
       "n": 34,
-      "front": "Quelles sont vos valeurs ?",
-      "back": "**Mes valeurs principales sont l'intérêt général, la loyauté, l'équité, la confiance et la responsabilité, qui ensemble fixent le cap, permettent de travailler avec la hiérarchie, évitent l'arbitraire et imposent d'assumer ses décisions et leurs conséquences.**\n\nMes valeurs principales sont l'intérêt général, la loyauté, l'équité, la confiance et la responsabilité. L'intérêt général donne le cap. La loyauté permet de travailler avec la hiérarchie tout en alertant quand c'est nécessaire. L'équité évite les décisions arbitraires. La confiance permet de faire fonctionner un collectif. Et la responsabilité impose d'assumer ses décisions et leurs conséquences."
+      "front": "Logement intermédiaire 2024 ?",
+      "back": "**Le logement intermédiaire a bénéficié de 4,5 milliards d'euros de prêts en 2024 contre 600 millions en 2023, pour 30 000 logements, en soutien à Action Logement et CDC Habitat, illustration concrète du rôle contracyclique du Groupe.**\n\n4,5 Md€ de prêts (vs 600 M€ en 2023), pour 30 000 logements. Soutien à Action Logement et CDC Habitat. Illustration concrète du rôle contracyclique."
     },
     {
       "n": 35,
-      "front": "La confiance, est-ce important pour exercer ses fonctions ? Pouvez-vous développer ?",
-      "back": "**Oui, la confiance est centrale car sans elle les agents n'osent pas alerter et les partenaires hésitent à s'engager : elle ne se décrète pas mais se construit par la fiabilité, la transparence et la cohérence entre les paroles et les actes, dans une logique de probité publique.**\n\nOui, elle est centrale. Sans confiance, les agents n'osent pas alerter, les partenaires hésitent à s'engager et la hiérarchie doute de la qualité des informations transmises. La confiance ne se décrète pas : elle se construit par la fiabilité, la transparence, la cohérence entre les paroles et les actes, et la capacité à reconnaître une difficulté. Pour un cadre public, la confiance est aussi liée à la probité et à la traçabilité."
+      "front": "Capillarité territoriale BDT ?",
+      "back": "**La Banque des Territoires a accompagné 8 547 communes entre 2019 et 2024, soit 25% des communes françaises, en s'appuyant sur 16 directions régionales et 37 implantations locales.**\n\n8 547 communes accompagnées entre 2019 et 2024, soit 25% des communes françaises. 16 directions régionales, 37 implantations locales."
     },
     {
       "n": 36,
-      "front": "Est-il facile de prendre une décision ?",
-      "back": "**Ce n'est pas toujours facile, mais décider fait partie du rôle d'un cadre : je m'appuie sur les faits, les options, les risques, le cadre juridique et les impacts humains, puis j'assume, car une décision imparfaite mais expliquée vaut mieux qu'un blocage.**\n\nCe n'est pas toujours facile, surtout quand les intérêts sont divergents. Mais décider fait partie du rôle d'un cadre. Pour décider correctement, je cherche les faits, les options, les risques, le cadre juridique et les impacts humains. Ensuite, il faut assumer : une décision imparfaite mais expliquée et suivie vaut mieux qu'une absence de décision qui bloque le service."
+      "front": "Programmes territoriaux emblématiques ?",
+      "back": "**Les programmes territoriaux emblématiques sont Action Cœur de Ville pour 234 villes moyennes, Petites Villes de Demain pour 1 600 communes, Territoires d'Industrie, France Services avec environ 2 800 maisons, et Quartiers 2030 pour 1 300 quartiers prioritaires en partenariat avec Bpifrance.**\n\n**Action Cœur de Ville** (234 villes moyennes), **Petites Villes de Demain** (1 600 communes), **Territoires d'Industrie**, **France Services** (~2 800 maisons), **Quartiers 2030** (1 300 QPV avec Bpifrance)."
     },
     {
       "n": 37,
-      "front": "Dites-nous un mot pour nous convaincre de vous prendre ?",
-      "back": "**Fiabilité : ce mot résume ma posture, qu'il s'agisse d'analyse, de relation avec les collègues et la hiérarchie, du respect du cadre public ou de la conduite des dossiers, parce qu'un attaché doit inspirer confiance et sécuriser l'action.**\n\nFiabilité. C'est le mot qui résume le mieux ma posture : fiable dans l'analyse, fiable dans la relation avec les collègues et la hiérarchie, fiable dans le respect du cadre public, et fiable dans la conduite des dossiers. Un attaché doit inspirer confiance parce qu'il sécurise l'action et fait avancer les projets. À l'oral, la bonne réponse doit rester personnelle sans paraître égocentrée. Il faut montrer une posture de cadre : capacité à décider, respect du collectif, lucidité sur ses limites, envie de progresser et sens de l'intérêt général. La réponse gagne en crédibilité si elle tient en trois temps : position personnelle, exemple concret, limite ou point de vigilance."
-    },
-    {
-      "n": 38,
-      "front": "Quel serait le métier de vos rêves ?",
-      "back": "**Un métier au croisement de l'action publique, des territoires et de la transformation concrète, qui permette de comprendre un besoin, de mobiliser des partenaires, de monter une solution et d'en mesurer les effets, et qui combine à terme expertise territoriale, conduite de projet et encadrement.**\n\nUn métier où je peux être au croisement de l'action publique, des territoires et de la transformation concrète. J'aime les fonctions qui permettent de comprendre un besoin, de mobiliser des partenaires, de monter une solution et d'en mesurer les effets. À terme, j'aimerais exercer des responsabilités qui combinent expertise territoriale, conduite de projet et encadrement."
+      "front": "Plan Climat de Bpifrance ?",
+      "back": "**Le Plan Climat de Bpifrance a engagé 4,2 milliards d'euros sur 2020-2024 pour l'innovation greentech et la transition des entreprises, avec notamment le programme Diag Décarbon'Action destiné aux PME et ETI.**\n\n4,2 Md€ engagés 2020-2024. Innovation greentech, transition des entreprises. Programme « Diag Décarbon'Action » pour PME et ETI."
     }
   ]
 }
