@@ -844,27 +844,27 @@ Your task is PHASE 2 — produce one detailed flashcard per question.
 
 ## ABSOLUTE RULES
 
-1. **Front = the user's question, lightly improved**:
-   - Use the rewritten_question as a starting point.
-   - Stay as close to the original wording as possible. Do not transform it into a generic concept prompt.
-   - Improve clarity and memorability only — fix ambiguity, sharpen phrasing, normalise formatting.
+1. **Front = the user's question, VERBATIM whenever possible**:
+   - Default to the original_question text. Use it word-for-word.
+   - Only adjust if the original is genuinely broken (typo, missing word, line-break artifact). Even then, make MINIMAL edits.
+   - DO NOT rephrase, simplify, generalise, or "improve" the question. The user wants their question, not your version of it.
    - Never replace the question with a different question.
 
-2. **Back = a complete, accurate answer**:
-   - First, search the source text for the answer. Use it verbatim or paraphrased when it is correct and complete.
-   - If the source text does not contain the answer (or contains an incomplete answer), use reliable general/domain knowledge to answer it. Add the tag "external-knowledge" to that card.
-   - **Never oversimplify.** Answers can be as long as needed: include details, nuances, mechanisms, formulas, examples, distinctions, edge cases.
-   - Use Markdown freely: **bold** key terms, bullet lists for steps, > blockquotes for definitions, tables when comparing things, \`code\` for code, $LaTeX$ for math.
-   - For formulas, always include the meaning of every variable.
-   - For multi-part questions, structure the answer with clear subsections.
+2. **Back = the answer that already exists in the source, COPIED VERBATIM**:
+   - **First, look in the source text for an answer that immediately follows the question** (e.g. "Réponse:", "Answer:", "Sol:", a paragraph below the question, etc.). If you find one, COPY IT VERBATIM into the back. Do not rewrite, summarise, or "improve" it.
+   - Light cleanup is fine: fix obvious typos, repair broken line breaks, remove footers/headers like "Page 12/30".
+   - Only if there is genuinely NO answer in the source for that question, use reliable general/domain knowledge. In that case, tag the card with "external-knowledge".
+   - **Never oversimplify.** Provide the full depth of the source answer. If the source has a long answer, keep it long.
+   - Use Markdown when the source already does (bullet lists, bold, etc.). Otherwise preserve plain prose.
+   - Use $LaTeX$ for math expressions when present in the source.
 
-3. **No fabrication**: if you genuinely do not know an answer, say so explicitly on the back ("Information not present in the source and unverified general knowledge — please verify.") and tag the card with "needs-verification".
+3. **No invention**: if you genuinely do not know an answer and none is in the source, say so explicitly on the back ("Information not present in the source — please verify.") and tag the card with "needs-verification".
 
 4. **Source attribution tags**:
-   - "from-source": the answer was found in the source text.
+   - "from-source": the answer was copied/lightly cleaned from the source text. (Use this whenever possible.)
    - "external-knowledge": the answer comes from general/domain knowledge outside the source.
    - "needs-verification": you are uncertain about the answer.
-   - Plus a short topic tag (the theme) and any other relevant subject tag.
+   - Plus a short topic tag (the theme).
 
 5. **Card type**: 
    - Use "basic" for question-answer pairs (the default for this flow).
@@ -873,9 +873,12 @@ Your task is PHASE 2 — produce one detailed flashcard per question.
 
 6. **Theme**: keep the theme assigned in phase 1. Use it as the first tag.
 
-7. **Language**: match the language of the user's question.
+7. **Language**: match the language of the user's question — never translate.
 
-8. **Hint**: provide a hint when the question is hard, otherwise null.
+8. **Hint**: null unless the question is genuinely hard.
+
+## YOUR DEFAULT BEHAVIOUR
+Treat yourself as a faithful TRANSCRIBER, not a writer. The source is the truth. The user wants their cards, not yours.
 
 ## OUTPUT FORMAT
 
@@ -909,16 +912,16 @@ export function createAnswerGenerationPrompt(
     ? `\n\n## ADDITIONAL USER INSTRUCTIONS (FOLLOW STRICTLY)\n${customInstructions.trim()}\n`
     : ''
 
-  return `Create one detailed flashcard per question below.
+  return `Create one flashcard per question below.
 
 Strict requirements:
-1. The front must use the user's original question, only lightly modified for clarity. Do not replace it with a different question.
-2. Each question has been pre-numbered (clean_number). Preserve that number — return one card per question, in the same order, and add the number as the first tag (e.g. "Q12") so the user can correlate cards with the original list.
-3. The back must answer the question completely. First search the source text. If the answer is not in the source, use reliable general knowledge and tag the card with "external-knowledge".
-4. Never oversimplify. Provide the depth and detail the question deserves.
-5. Use Markdown and LaTeX where useful.
-6. Keep the theme assigned to each question.
-7. Match the language of the question.${customBlock}
+1. The front must reuse the user's ORIGINAL question (the "original_question" field) verbatim. Do NOT rephrase, simplify, or generalise.
+2. Each question has a clean_number. Preserve that number — return one card per question, in the same order, and add the number as the first tag (e.g. "Q12").
+3. The back: FIRST search the source text for an answer to that exact question (often the answer appears right after the question in the source, marked "Réponse:", "Answer:", "Sol:", etc., or as the next paragraph). If you find it, COPY IT VERBATIM into the back. Only fix typos / broken line breaks. Tag with "from-source".
+4. If and only if the source does NOT contain an answer for the question, use reliable general knowledge to answer it, and tag with "external-knowledge".
+5. NEVER oversimplify. Preserve the full depth of the source answer.
+6. Match the language of the question — do not translate.
+7. Keep the theme assigned to each question.${customBlock}
 
 ## QUESTIONS TO ANSWER (BATCH OF ${questions.length})
 

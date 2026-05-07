@@ -1,0 +1,1934 @@
+-- ============================================================
+-- Backfill v2: CDC / Attaché starter deck (244 cards, 12 stacks)
+-- Run in the Supabase SQL Editor.
+-- For each user: deletes any v1 or v2 starter decks, then inserts fresh v2.
+-- ============================================================
+
+DO $$
+DECLARE
+  target_user_id UUID;
+  v_deck_id UUID;
+  v_done INT := 0;
+BEGIN
+  FOR target_user_id IN SELECT id FROM auth.users LOOP
+
+    -- Delete all previous starter deck versions for this user
+    DELETE FROM public.flashcard_cards
+      WHERE deck_id IN (
+        SELECT id FROM public.flashcard_decks
+        WHERE user_id = target_user_id
+          AND source_pdf_name LIKE '__starter:cdc-attache-v%%'
+      );
+    DELETE FROM public.flashcard_decks
+      WHERE user_id = target_user_id
+        AND source_pdf_name LIKE '__starter:cdc-attache-v%%';
+
+    -- Stack 1: Mises en situation managériales du quotidien
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 01. Mises en situation managériales du quotidien',
+      'Mises en situation managériales du quotidien',
+      '__starter:cdc-attache-v2__:stack-01',
+      10,
+      10,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous êtes chef de bureau à la Caisse des Dépôts. Vous avez dans votre équipe plusieurs agents de catégories B et un agent de catégorie C. Ce dernier est particulièrement performant mais ne respecte pas les horaires du service. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.',
+      'Je ne laisse pas la performance justifier un passe-droit. Je commence par objectiver les faits : horaires constatés, fréquence, impact sur l''équipe et sur la continuité du service. Ensuite, je reçois l''agent en entretien individuel, de manière calme, pour comprendre la cause : contrainte personnelle, problème d''organisation, perte de repère, ou simple relâchement. Je rappelle ensuite le cadre collectif : les horaires s''appliquent à tous, quelle que soit la catégorie ou le niveau de performance. Si une difficulté personnelle existe, je cherche une solution compatible avec le service, par exemple un aménagement formalisé, mais jamais une tolérance informelle. Je trace l''échange, fixe un objectif clair de régularisation et prévois un point de suivi. Si le comportement persiste, j''en informe ma hiérarchie et les RH pour appliquer une réponse graduée. équité, fermeté proportionnée, absence de favoritisme.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Des collaborateurs se prêtent leurs cartes de pointage. Que faites-vous ?',
+      'C''est un sujet grave, parce qu''il touche à la probité, au temps de travail et à la confiance. Je ne lance pas d''accusation publique : je vérifie les faits, je rassemble des éléments objectifs et j''alerte rapidement ma hiérarchie et les RH, car cela peut relever d''une procédure disciplinaire. Je rappelle immédiatement que le pointage est personnel et qu''il engage la responsabilité de chacun. Ensuite, je reçois les agents concernés séparément, pour comprendre sans banaliser. Si les faits sont avérés, il faut mettre fin à la pratique, régulariser la situation si besoin et appliquer la procédure adaptée. Je veille aussi à prévenir la répétition : rappel écrit des règles, sensibilisation de l''équipe et contrôle renforcé temporaire. probité, traçabilité, refus de la fraude, pas de règlement de comptes.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Un de vos agents sort 10 fois par jour pour une pause cigarette, que faites-vous ?',
+      'Je traite le sujet non comme une question morale, mais comme une question d''organisation du travail et d''égalité entre agents. Je commence par observer les faits : fréquence, durée, impact sur les collègues et sur les délais. Je reçois l''agent en entretien individuel, car il peut y avoir une dépendance, un stress ou un problème de charge. Je rappelle le cadre : les pauses doivent rester compatibles avec le fonctionnement du service et ne pas créer de déséquilibre avec les autres agents. Je peux proposer un cadre plus clair, par exemple regrouper les pauses à des moments définis, et orienter vers le médecin du travail ou les dispositifs de prévention si l''agent exprime une difficulté. Si malgré le rappel le comportement se poursuit, je passe à une réponse managériale graduée. équilibre entre bienveillance, santé au travail et continuité du service.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous devez présider une réunion sur un sujet que vous ne maîtrisez pas et vous avez une semaine pour vous préparer. Comment procédez-vous ?',
+      'Je ne cherche pas à donner l''illusion de maîtriser ce que je ne maîtrise pas. Je clarifie d''abord l''objectif de la réunion : informer, arbitrer, décider ou coordonner. Je récupère les documents existants, j''identifie les points sensibles et je rencontre rapidement les personnes expertes du sujet. Ensuite, je prépare un ordre du jour simple, une fiche de synthèse, les décisions attendues et les questions probables. Pendant la réunion, j''assume mon rôle de présidence : faire avancer les échanges, distribuer la parole, reformuler, faire préciser les points techniques par les experts et conclure sur des décisions claires. Après la réunion, je diffuse un relevé de décisions et les suites à donner. humilité, méthode, capacité à mobiliser l''expertise.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Un bureau se libère à côté de celui des agents (ils sont 4). Ils veulent tous le bureau, comment allez-vous procéder ?',
+      'Je ne transforme pas l''attribution du bureau en récompense personnelle. Je commence par définir des critères objectifs liés au service : confidentialité des missions, accueil du public, besoin de concentration, contraintes médicales éventuelles, ancienneté seulement si elle est pertinente, et organisation collective. Je peux demander aux agents d''exprimer leurs besoins, mais je rappelle que la décision relève de l''intérêt du service. Si aucun critère ne départage clairement, je peux envisager une rotation ou une affectation temporaire réévaluable. L''important est d''expliquer la méthode avant la décision, pour éviter le sentiment d''arbitraire. transparence, critères objectifs, décision assumée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Un agent arrive tous les matins de bonne heure et vous constatez que ce matin il n''est pas là, que faites- vous ?',
+      'Je ne dramatise pas immédiatement, mais je réagis avec vigilance, car un changement brutal d''habitude peut signaler un problème. Je vérifie d''abord les informations simples : congé posé, rendez-vous, télétravail, message éventuel, erreur de planning. Si aucune information n''apparaît, je tente de le joindre par les moyens professionnels habituels. En l''absence de réponse et selon la situation, j''informe ma hiérarchie ou les RH, notamment si un risque de sécurité ou de santé est possible. Quand l''agent revient, je fais un point factuel et bienveillant : soit il y a une explication simple, soit il faut régulariser l''absence et comprendre si une difficulté existe. attention aux signaux faibles, ni soupçon excessif ni indifférence.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous constatez un vol de matériel dans votre service. Que faites-vous ?',
+      'Je sécurise d''abord la situation : identifier précisément le matériel manquant, vérifier qu''il ne s''agit pas d''une erreur de rangement ou de prêt non enregistré, et éviter les accusations hâtives. J''informe immédiatement ma hiérarchie et, selon les procédures internes, les services compétents : moyens généraux, sécurité, RH, voire service juridique. Je dresse un état factuel : date, lieu, matériel, personnes éventuellement concernées, circonstances. Si un vol est confirmé, la décision d''une plainte ou d''une procédure disciplinaire se prend avec la hiérarchie et les services compétents. Je rappelle ensuite les règles de gestion du matériel et je renforce si besoin les procédures d''inventaire. prudence, faits, protection du collectif, procédure.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Un agent refuse de porter son masque, prétextant des problèmes d''allergies. Comment réagissez-vous ?',
+      'Je commence par écouter l''agent et je ne nie pas sa difficulté. Mais si le port du masque est obligatoire dans le contexte, je dois protéger l''ensemble du collectif et appliquer les règles sanitaires. Je demande à l''agent de formaliser sa difficulté et j''oriente vers le médecin du travail ou la médecine de prévention pour rechercher une solution adaptée : type de masque différent, aménagement de poste, télétravail temporaire si possible, ou organisation évitant l''exposition. En attendant, l''agent ne peut pas décider seul de s''exonérer d''une règle collective. Je trace l''échange et j''associe les RH si nécessaire. bienveillance sans renoncer à la sécurité collective.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous allez assister à une réunion avec les directions. Vous avez préparé cette réunion avec votre manager. Vous vous rendez-compte que ce dernier se trompe sur un point pendant la réunion. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.',
+      'Je distingue deux cas. Si l''erreur a un impact important sur la décision, le risque juridique, financier ou l''image du service, j''interviens avec tact : ''Sauf erreur de ma part, il me semble que le point avait été cadré autrement ; je propose qu''on le reprécise.'' L''objectif est de sécuriser l''information, pas de mettre mon manager en difficulté. Si l''erreur est mineure ou sans effet immédiat, je prends note et je lui en parle après la réunion. Dans tous les cas, je reste loyal : la loyauté n''est pas le silence face à une erreur, c''est la capacité à alerter de façon professionnelle. loyauté intelligente, courage mesuré, sécurité de la décision.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'La période du planning des congés annuels arrive. Un nouvel arrivant dans l''équipe (famille monoparentale) souhaite impérativement la semaine de Noël. Vous devez assurer la continuité de votre service. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.',
+      'Je commence par poser le cadre : les congés doivent concilier situations personnelles, équité entre agents et continuité du service. Je recueille l''ensemble des souhaits de l''équipe, je regarde les contraintes de service et les précédents : qui a eu Noël les années passées, quelles compétences doivent être présentes, quelles permanences sont indispensables. La situation de famille monoparentale est un élément à prendre en compte au titre de l''équité, mais elle ne crée pas automatiquement un droit absolu. Je recherche une solution : rotation, partage de la période, présence allégée, télétravail si possible, ou échange volontaire. J''explique la décision et je la formalise, pour éviter le sentiment de favoritisme. équité, continuité, attention aux situations individuelles sans arbitraire.
+
+STACK 2 — Posture personnelle, qualités managériales et rapport au travail'
+    );
+
+    -- Stack 2: Posture personnelle, qualités managériales et rapport au travail
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 02. Posture personnelle, qualités managériales et rapport au travail',
+      'Posture personnelle, qualités managériales et rapport au travail',
+      '__starter:cdc-attache-v2__:stack-02',
+      28,
+      28,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Est-ce que cela vous flatterait d''être « exceptionnel » ?',
+      'Cela ferait évidemment plaisir, mais ce n''est pas ce que je recherche en priorité. Dans un cadre public, l''enjeu n''est pas d''être exceptionnel pour soi-même, mais d''être utile, fiable et capable de faire progresser un collectif. Je préfère qu''on dise de moi que je suis solide, loyale, claire et efficace. L''exceptionnel peut être un résultat, mais il ne doit pas devenir une posture d''ego.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Préférez-vous travailler seul dans un bureau ou à plusieurs ?',
+      'Les deux ont leur utilité. J''ai besoin de temps seule pour analyser, rédiger, préparer une décision ou traiter un dossier complexe. Mais je suis convaincue qu''un service public efficace se construit en collectif : confrontation des points de vue, entraide, transmission et coordination. Je dirais donc que je préfère un équilibre : des temps de concentration et des temps de travail collectif structurés.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Avant vos congés, vous aviez organisé la continuité de vos dossiers avec votre manager. Votre manager vous contacte sur votre portable professionnel pour discuter d''un dossier. Comment réagissez-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.',
+      'Je réponds si je comprends qu''il y a une urgence réelle ou un risque pour la continuité du service. En revanche, je rappelle calmement que l''organisation avait été préparée, et je réoriente vers la personne identifiée pour assurer le relais si le sujet peut attendre. Je ne fais pas de mon congé une zone totalement inaccessible en cas de crise, mais je protège aussi le droit à la déconnexion. Après le congé, je peux proposer d''améliorer la transmission pour éviter que cela se reproduise.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Le droit à la déconnexion est-il compatible avec une fonction d''encadrement ?',
+      'Oui, il est compatible, à condition d''avoir une organisation claire. Être cadre ne signifie pas être disponible en permanence. Cela signifie anticiper, déléguer, organiser les relais et distinguer l''urgence réelle de l''urgence ressentie. Le cadre doit aussi être exemplaire : s''il envoie des mails tardifs en permanence, il crée une norme implicite dangereuse pour l''équipe.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Les réponses tardives aux mails (minuit) de vos collaborateurs vous alertent-elles ?',
+      'Oui, surtout si cela se répète. Cela peut révéler une surcharge, une mauvaise organisation, une anxiété professionnelle ou une culture d''hyperdisponibilité. Je ne sanctionne pas immédiatement, mais j''en parle avec l''agent : pourquoi répond-il à cette heure-là, est-ce nécessaire, se sent-il obligé ? Ensuite, je rappelle le cadre de déconnexion et je regarde si la charge ou les priorités doivent être ajustées.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'La disponibilité est-elle une qualité ?',
+      'Oui, mais seulement si elle est maîtrisée. Une disponibilité utile, c''est être accessible, fiable et présent dans les moments importants. Une disponibilité excessive devient un défaut : elle peut empêcher de prioriser, créer de la dépendance et conduire à l''épuisement. Pour un cadre, la vraie qualité est d''être disponible avec discernement.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Peut-on demander à tous ses collaborateurs d''être audacieux, créatifs … ?',
+      'On peut encourager l''audace et la créativité, mais on ne peut pas les imposer comme une norme uniforme. Tous les agents n''ont pas le même poste, la même personnalité ni le même rapport au risque. Le rôle du manager est de créer un cadre dans lequel les idées peuvent émerger sans peur, tout en respectant ceux qui apportent de la rigueur, de la continuité et de la sécurité. Une équipe a besoin de profils complémentaires.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Les compétences techniques de 2 collaborateurs indispensables sur un dossier peuvent-elles suffire à gommer leurs divergences personnelles ?',
+      'Non. Les compétences techniques sont essentielles, mais elles ne suffisent pas si la relation de travail est trop dégradée. Je clarifie les rôles, les règles d''échange et les objectifs communs. Si nécessaire, je les reçois séparément puis ensemble pour repartir des faits et du besoin de service. L''enjeu n''est pas qu''ils deviennent amis, mais qu''ils puissent coopérer professionnellement.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que faites-vous pour développer l''implication d''une équipe ?',
+      'Je travaille d''abord sur le sens : pourquoi fait-on ce travail et pour qui ? Ensuite, je clarifie les objectifs, je donne de l''autonomie, je reconnais le travail accompli et je donne des retours réguliers. L''implication se développe aussi quand les agents se sentent écoutés et utiles. Enfin, je veille à la justice interne : une équipe s''implique moins si elle perçoit des passe-droits ou une absence de reconnaissance.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quels sont les risques et impacts d''une équipe stressée ?',
+      'Une équipe stressée durablement perd en qualité, en cohésion et en efficacité. Les risques sont humains : épuisement, conflits, absentéisme, troubles psychosociaux. Ils sont aussi opérationnels : erreurs, retards, baisse de qualité de service, perte de confiance des partenaires. Le rôle du manager est de détecter les signaux faibles, de prioriser, de réguler la charge et d''alerter si les moyens ne sont plus cohérents avec les objectifs.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Aimez-vous travailler dans l''urgence ?',
+      'Je sais travailler dans l''urgence quand la situation l''exige. L''urgence peut mobiliser, obliger à prioriser et révéler la capacité d''une équipe à se coordonner. Mais je ne considère pas l''urgence permanente comme un bon mode de management. Un cadre doit justement transformer l''urgence en organisation : anticiper, prioriser, sécuriser et tirer un retour d''expérience.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'L''empathie est-elle la qualité principale du manager ?',
+      'C''est une qualité très importante, mais elle ne suffit pas. L''empathie permet de comprendre les situations individuelles, de prévenir les tensions et d''accompagner les agents. Mais un manager doit aussi décider, arbitrer, rappeler le cadre et parfois dire non. Je dirais donc que l''empathie doit être associée à la clarté et au courage managérial.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quels sont les aspects des métiers liés au grade d''attaché qui vous font peur ?',
+      'Ce qui peut impressionner, c''est l''exposition de la décision : un attaché prépare, sécurise, coordonne et rend compte. Il peut être au croisement d''attentes politiques, administratives, financières et humaines. Mais cette exigence m''attire aussi, car elle oblige à être rigoureux et à ne pas décider seul. Ma réponse, c''est la méthode : objectiver, demander conseil, tracer et assumer.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment travailler dans des délais contraints ?',
+      'Je commence par clarifier l''échéance réelle, le livrable attendu et le niveau de qualité nécessaire. Ensuite, je priorise : ce qui est indispensable, ce qui est utile, ce qui peut être reporté. Je répartis les tâches, je fixe des points courts de suivi et j''alerte rapidement si le délai devient incompatible avec la qualité ou la sécurité juridique. Travailler vite ne veut pas dire travailler dans le flou.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      '« Trouver du sens à son travail ». Est-ce fondamental pour vous ?',
+      'Oui, surtout dans le service public. Le sens permet de tenir dans les périodes difficiles et de comprendre pourquoi les contraintes existent. Pour moi, le sens vient de l''utilité concrète : améliorer un service, sécuriser une décision, accompagner un territoire, rendre une action publique plus efficace. Mais le sens ne doit pas rester un discours : il doit se traduire par des objectifs clairs et des résultats visibles.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'La curiosité est-elle une qualité ? Que dit-elle de nous ?',
+      'Oui, la curiosité est une qualité si elle est orientée vers l''apprentissage et l''amélioration du service. Elle montre qu''on ne se contente pas de ses habitudes, qu''on veut comprendre les enjeux et anticiper les évolutions. Pour un attaché, c''est essentiel : les sujets changent, les dispositifs évoluent, les partenaires aussi. Mais la curiosité doit rester professionnelle et respectueuse, notamment sur les données et les situations individuelles.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Trop de créativité peut-elle nuire à un manager ?',
+      'Oui, si la créativité devient agitation ou remise en cause permanente du cadre. Un manager doit innover, mais aussi stabiliser, sécuriser et donner des repères. Trop de créativité peut fatiguer une équipe si les priorités changent sans cesse. La bonne créativité est celle qui améliore concrètement le fonctionnement, sans perdre la continuité du service.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment développer le sens du collectif ?',
+      'Je développe le collectif en clarifiant ce qui dépend de chacun et ce qui dépend de l''équipe. Je favorise les temps d''échange utiles, la transmission des compétences, l''entraide et les retours d''expérience. Je veille aussi à reconnaître les réussites collectives, pas seulement les performances individuelles. Le collectif naît quand chacun comprend qu''il contribue à un résultat commun.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Homme ou Femme à la tête d''une équipe : est-ce que cela a une incidence pour vous ?',
+      'Non, ce qui compte, ce sont les compétences, la posture, la capacité à décider et à faire grandir l''équipe. Je suis attachée à l''égalité professionnelle et je pense qu''il faut dépasser les stéréotypes de leadership. Les styles de management peuvent varier d''une personne à l''autre, mais ils ne doivent pas être expliqués par le genre. L''exigence doit être la même : compétence, loyauté, respect et efficacité.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Êtes-vous ambitieux ? Est-ce une qualité ou un défaut ?',
+      'Oui, je suis ambitieuse au sens où je veux progresser, prendre davantage de responsabilités et être utile sur des dossiers plus complexes. C''est une qualité si elle reste tournée vers le service, le collectif et l''intérêt général. Elle devient un défaut si elle se transforme en compétition personnelle ou en recherche de reconnaissance à tout prix. Mon ambition est une ambition de responsabilité.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Savez vous déléguer ? Et faire confiance ?',
+      'Oui, mais déléguer ne veut pas dire abandonner. Je délègue en clarifiant le résultat attendu, le délai, les marges de manœuvre et les points de contrôle. La confiance se construit : elle suppose de laisser de l''autonomie, mais aussi de rester disponible en appui. Pour moi, une bonne délégation responsabilise l''agent et sécurise le service.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Est-ce un défaut d''être perfectionniste ?',
+      'Le perfectionnisme peut être une qualité quand il traduit l''exigence et le souci du travail bien fait. Mais il devient un défaut s''il empêche de prioriser, de déléguer ou de respecter les délais. Dans l''administration, il faut savoir adapter le niveau de précision à l''enjeu du dossier. Le cadre doit rechercher la qualité utile, pas la perfection paralysante.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment gérez-vous un conflit ?',
+      'Je commence par sortir des impressions et revenir aux faits : qui, quoi, quand, quels impacts sur le travail ? J''écoute séparément si nécessaire, puis je cherche à réunir les personnes autour d''un objectif professionnel commun. Je rappelle les règles de respect et de fonctionnement. Si le conflit dépasse le simple désaccord, j''associe la hiérarchie, les RH ou les acteurs de prévention. L''important est de ne pas laisser un conflit s''installer en silence.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles sont vos valeurs ?',
+      'Mes valeurs principales sont l''intérêt général, la loyauté, l''équité, la confiance et la responsabilité. L''intérêt général donne le cap. La loyauté permet de travailler avec la hiérarchie tout en alertant quand c''est nécessaire. L''équité évite les décisions arbitraires. La confiance permet de faire fonctionner un collectif. Et la responsabilité impose d''assumer ses décisions et leurs conséquences.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'La confiance, est-ce important pour exercer ses fonctions ? Pouvez-vous développer ?',
+      'Oui, elle est centrale. Sans confiance, les agents n''osent pas alerter, les partenaires hésitent à s''engager et la hiérarchie doute de la qualité des informations transmises. La confiance ne se décrète pas : elle se construit par la fiabilité, la transparence, la cohérence entre les paroles et les actes, et la capacité à reconnaître une difficulté. Pour un cadre public, la confiance est aussi liée à la probité et à la traçabilité.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Est-il facile de prendre une décision ?',
+      'Ce n''est pas toujours facile, surtout quand les intérêts sont divergents. Mais décider fait partie du rôle d''un cadre. Pour décider correctement, je cherche les faits, les options, les risques, le cadre juridique et les impacts humains. Ensuite, il faut assumer : une décision imparfaite mais expliquée et suivie vaut mieux qu''une absence de décision qui bloque le service.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Dites-nous un mot pour nous convaincre de vous prendre ?',
+      'Fiabilité. C''est le mot qui résume le mieux ma posture : fiable dans l''analyse, fiable dans la relation avec les collègues et la hiérarchie, fiable dans le respect du cadre public, et fiable dans la conduite des dossiers. Un attaché doit inspirer confiance parce qu''il sécurise l''action et fait avancer les projets. À l''oral, la bonne réponse doit rester personnelle sans paraître égocentrée. Il faut montrer une posture de cadre : capacité à décider, respect du collectif, lucidité sur ses limites, envie de progresser et sens de l''intérêt général. La réponse gagne en crédibilité si elle tient en trois temps : position personnelle, exemple concret, limite ou point de vigilance.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel serait le métier de vos rêves ?',
+      'Un métier où je peux être au croisement de l''action publique, des territoires et de la transformation concrète. J''aime les fonctions qui permettent de comprendre un besoin, de mobiliser des partenaires, de monter une solution et d''en mesurer les effets. À terme, j''aimerais exercer des responsabilités qui combinent expertise territoriale, conduite de projet et encadrement.
+
+STACK 3 — Questions d''opinion, société, actualité et argumentation'
+    );
+
+    -- Stack 3: Questions d'opinion, société, actualité et argumentation
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 03. Questions d''opinion, société, actualité et argumentation',
+      'Questions d''opinion, société, actualité et argumentation',
+      '__starter:cdc-attache-v2__:stack-03',
+      36,
+      36,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'L''écologie est-elle compatible avec le développement économique ?',
+      'Oui, mais à condition de ne pas réduire le développement économique à la croissance quantitative de court terme. L''écologie impose de transformer les modèles : efficacité énergétique, économie circulaire, sobriété foncière, décarbonation industrielle, adaptation au changement climatique. Cette transformation peut créer de l''activité, de l''innovation et des emplois. Mais elle demande aussi des arbitrages, car certains secteurs devront évoluer profondément. Ma position est donc nuancée : l''écologie est compatible avec un développement économique durable, pas avec une logique de consommation illimitée des ressources. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que pensez-vous de parcoursup ?',
+      'Parcoursup a permis de centraliser et de rendre plus lisible une partie de l''accès à l''enseignement supérieur. Mais le dispositif reste anxiogène pour beaucoup de familles, car les critères peuvent sembler opaques et les délais d''attente sont difficiles à vivre. Je pense que l''enjeu est d''améliorer l''information en amont, l''accompagnement des élèves et la transparence des attendus. L''outil n''est pas en soi le problème ; c''est la capacité du système à orienter équitablement qui est déterminante. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Les objectifs sont-ils toujours atteignables ?',
+      'Non, pas toujours. Un objectif peut devenir irréaliste si les moyens, les délais ou le contexte changent. En revanche, un cadre doit alerter tôt, proposer des priorisations et adapter la trajectoire. Un bon objectif doit être clair, mesurable, partagé et relié aux moyens disponibles. Si l''objectif n''est plus atteignable, le rôle du cadre n''est pas de masquer la difficulté, mais de la documenter et de proposer une solution. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Les entreprises paient-elles trop d''impôts ?',
+      'La réponse dépend de ce que l''on regarde : compétitivité, justice fiscale, financement des services publics, attractivité du territoire. Les prélèvements peuvent peser sur l''investissement, mais ils financent aussi les infrastructures, la formation, la santé, la sécurité juridique et l''environnement économique dont les entreprises bénéficient. L''enjeu n''est pas seulement le niveau d''impôt, mais la lisibilité, la stabilité et l''efficacité de la dépense publique. Je privilégierais une approche équilibrée : ne pas fragiliser l''activité, mais garantir la contribution au bien commun. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'L''examen professionnel est-il un bon mode de recrutement ou d''avancement ?',
+      'Oui, c''est un mode utile car il permet de reconnaître l''expérience, la capacité d''analyse et la projection dans un grade supérieur. Il est plus complet qu''une simple ancienneté. Ses limites existent : un oral reste un exercice ponctuel et parfois impressionnant. Mais s''il est bien conduit, il permet d''évaluer la posture, la compréhension du cadre public et la capacité à prendre des responsabilités. Il doit être complété par l''évaluation du parcours professionnel. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Est-il important de toujours rappeler les règles aux agents ?',
+      'Oui, mais pas de manière infantilisante. Les règles protègent les agents, les usagers et l''institution. Les rappeler permet de prévenir les malentendus et de garantir l''équité. Mais un manager doit aussi expliquer le sens des règles : continuité du service, neutralité, sécurité, confidentialité, égalité de traitement. Une règle comprise est mieux acceptée qu''une règle seulement imposée. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Cette épreuve de l''oral est-elle juste ?',
+      'Elle n''est pas parfaite, car elle favorise les candidats à l''aise à l''oral et peut être sensible au stress. Mais elle est utile pour un grade d''encadrement, car un attaché doit savoir exposer, argumenter, prendre position et réagir à des situations imprévues. La justice de l''épreuve dépend surtout de critères clairs et d''un jury attentif au fond autant qu''à la forme. Je la vois comme un exercice exigeant, mais cohérent avec les responsabilités visées. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi vous et pas un/une autre ?',
+      'Parce que mon parcours combine une expérience de terrain, une culture des collectivités, une connaissance de la Banque des Territoires et une capacité à conduire des projets. Je sais travailler avec des partenaires différents, objectiver une situation, sécuriser une décision et expliquer les choix. Je ne prétends pas tout savoir, mais je sais apprendre, mobiliser les expertises et assumer une posture de cadre. C''est cette maturité professionnelle que je souhaite mettre au service du grade d''attaché. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que pensez-vous des applications de géolocalisation ?',
+      'Elles peuvent être utiles : sécurité, orientation, transport, services de proximité. Mais elles posent une question importante de protection des données et de liberté individuelle. Le bon équilibre repose sur la finalité, le consentement, la proportionnalité et la durée de conservation des données. Dans le secteur public, l''exigence doit être encore plus forte : on ne collecte que ce qui est nécessaire, et on explique pourquoi. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'L''enseignement à distance est-il performant pour les jeunes enfants ?',
+      'Pour les jeunes enfants, il ne peut pas remplacer pleinement la présence. Ils ont besoin d''interactions, de cadre, de manipulation, de langage et de socialisation. Le distanciel peut être un outil ponctuel, par exemple en cas de crise ou pour maintenir un lien, mais il accentue souvent les inégalités familiales et numériques. Il est plus adapté à des élèves plus autonomes, avec un accompagnement clair. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'La décroissance est-elle la solution face au changement climatique ?',
+      'La décroissance pose une question utile : peut-on continuer à consommer autant de ressources ? Mais comme politique générale, elle est difficile à accepter socialement si elle se traduit par une baisse brutale du niveau de vie ou de l''emploi. Je préfère parler de sobriété choisie, d''efficacité, de transformation des modes de production et de consommation. Il faut réduire les impacts environnementaux, mais en construisant une transition juste et accompagnée. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'L''intelligence artificielle peut-elle asservir l''Homme ?',
+      'Elle peut créer des risques si elle est utilisée sans cadre : dépendance, surveillance, manipulation de l''information, perte de compétences, décisions automatisées opaques. Mais elle peut aussi être un outil puissant pour améliorer les services, analyser des données, assister les agents et gagner du temps. Tout dépend de la gouvernance : transparence, contrôle humain, protection des données, souveraineté numérique et formation des utilisateurs. L''IA ne doit pas remplacer la responsabilité humaine. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que pensez-vous de l''intelligence artificielle ?',
+      'Je la vois comme un levier de transformation, mais pas comme une solution magique. Elle peut améliorer la productivité, l''accès à l''information et l''aide à la décision. Dans le secteur public, les priorités doivent être la sécurité des données, l''explicabilité, la souveraineté et le maintien d''une décision humaine. L''enjeu est d''accompagner les agents : former, fixer des règles d''usage et éviter que l''IA devienne un outil d''inégalités ou de dépendance. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pensez-vous que la création du réseau France services puisse résoudre la fracture numérique ?',
+      'France services ne peut pas résoudre seule la fracture numérique, mais c''est une réponse importante. Le réseau recrée de la proximité humaine pour des démarches devenues très dématérialisées. Il aide les usagers qui ne maîtrisent pas les outils numériques ou qui n''ont pas accès à un équipement. Mais il faut aussi agir sur la formation, l''accès aux infrastructures, la simplification des démarches et le maintien de solutions alternatives pour les publics fragiles. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'La consultation de son portable personnel pendant les heures de travail nuit-elle à l''efficacité des agents ?',
+      'Cela dépend de la fréquence et de l''usage. Un usage ponctuel et raisonnable peut être toléré, comme dans beaucoup d''environnements de travail. En revanche, si cela devient fréquent, visible ou perturbant, cela nuit à la concentration, à l''image du service et à l''équité entre agents. Le manager doit rappeler le cadre, sans excès, mais en veillant à la qualité du travail et au respect du collectif. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Le groupe Caisse des Dépôts est-il moderne ? Si oui, en quoi ?',
+      'Oui, il est moderne par sa capacité à traiter des enjeux très actuels tout en conservant une mission historique : protéger, financer et investir dans le long terme. Ses priorités - transformation écologique, souveraineté, cohésion sociale et territoriale - sont au cœur des défis contemporains. La modernité se voit aussi dans les outils : financement de projets territoriaux, accompagnement des collectivités, investissements numériques, IA, transition énergétique. Sa spécificité est de moderniser sans perdre le temps long ni l''intérêt général. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que pensez-vous de la suppression de la taxe d''habitation ?',
+      'Elle a amélioré le pouvoir d''achat de nombreux ménages, mais elle a aussi posé une question de lien fiscal local et d''autonomie financière des collectivités. Une réforme fiscale ne doit pas seulement être appréciée du point de vue du contribuable ; il faut aussi regarder la capacité des collectivités à financer les services publics locaux. Le sujet central est donc la compensation, la lisibilité et la responsabilité fiscale locale. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Doit-on suivre aveuglément les ordres de son responsable ?',
+      'Non. Le principe est l''obéissance hiérarchique, mais elle n''est pas aveugle. Un agent public doit exécuter les instructions, sauf si l''ordre est manifestement illégal et de nature à compromettre gravement un intérêt public. Avant d''en arriver là, il faut alerter, expliquer le risque, demander confirmation écrite si nécessaire et mobiliser les bons interlocuteurs. La loyauté inclut le devoir d''alerte. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que pensez-vous de la réforme du bac ?',
+      'La réforme cherchait à individualiser les parcours et à réduire le poids d''un examen final unique. Cela peut être positif, car les élèves peuvent choisir des spécialités plus adaptées à leur projet. Mais elle a aussi rendu les parcours plus complexes et parfois plus inégalitaires selon l''information dont disposent les familles. Comme souvent, l''enjeu n''est pas seulement la réforme, mais son accompagnement et sa lisibilité. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Faut-il supprimer le Sénat ?',
+      'Je ne le pense pas. Le Sénat représente les collectivités territoriales et apporte une stabilité dans le processus législatif. On peut discuter de sa représentativité, de son mode d''élection ou de son rythme, mais il joue un rôle utile de relecture et d''équilibre institutionnel. Dans un pays très centralisé, conserver une chambre attentive aux territoires a du sens. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'L''État doit-il s''endetter ?',
+      'Oui, dans certaines conditions. L''endettement peut être justifié pour investir, faire face à une crise ou financer des infrastructures utiles aux générations futures. Mais il devient problématique s''il finance durablement des dépenses courantes sans stratégie de retour à l''équilibre. La bonne question est donc : pour quoi s''endette-t-on, à quel coût, avec quelle soutenabilité et quel effet sur l''avenir ?. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'En quoi les mails sont-ils des voleurs de temps ?',
+      'Les mails peuvent fragmenter l''attention, créer une impression d''urgence permanente et multiplier les échanges inutiles. Un mail mal ciblé peut faire perdre du temps à dix personnes. Pour y remédier, il faut clarifier les destinataires, limiter les copies, utiliser des objets précis, distinguer information et action, et ne pas remplacer systématiquement une décision par une chaîne de mails. Le mail est utile s''il est maîtrisé. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que pensez-vous du soutien apporté par le ministre de l''Intérieur aux policiers alors même que ceux-ci avaient annoncé leur intention de manifester devant l''Assemblée nationale ?',
+      'C''est une question d''équilibre institutionnel. Le ministre de l''Intérieur peut exprimer un soutien aux forces de l''ordre, surtout dans un contexte de tension, car elles exercent une mission difficile. Mais il doit aussi veiller au respect de l''indépendance de la justice, du Parlement et des règles républicaines. Un membre du gouvernement doit éviter toute parole pouvant laisser penser qu''une catégorie d''agents serait au-dessus du cadre commun. La légitimité de l''État repose sur le soutien aux agents, mais aussi sur l''exemplarité institutionnelle. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quand on est attaché, est-on moins sur le terrain ?',
+      'Pas nécessairement. On est peut-être moins dans l''exécution quotidienne, mais on doit rester connecté au terrain pour décider correctement. Un attaché analyse, pilote, sécurise et coordonne ; s''il perd le contact avec les réalités opérationnelles, ses décisions deviennent abstraites. Le terrain nourrit l''expertise et évite les solutions purement théoriques. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pensez-vous que la convivialité a déserté l''administration avec la crise pandémique ?',
+      'Elle a été fragilisée, notamment avec le télétravail, les réunions à distance et la réduction des moments informels. Mais elle n''a pas disparu. Il faut désormais la reconstruire de façon plus volontaire : temps d''équipe, intégration des nouveaux, rituels collectifs, réunions utiles en présentiel. La convivialité n''est pas un gadget ; elle contribue à la confiance et à la qualité du travail. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que pensez-vous de la loi du 6 août 2019 de transformation de la fonction publique ?',
+      'C''est une réforme structurante : elle a modifié le dialogue social, renforcé les lignes directrices de gestion, élargi certains recours aux contractuels, créé la rupture conventionnelle et transformé les instances avec les comités sociaux. Elle vise à donner plus de souplesse à la gestion publique. Mais cette souplesse doit rester compatible avec les garanties statutaires, l''égalité de traitement et la qualité du dialogue social. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel regard critique portez-vous sur la question de l''égalité hommes-femmes dans l''emploi ?',
+      'Des progrès ont été réalisés, mais les écarts restent visibles : rémunération, accès aux postes de direction, temps partiel, charge familiale, interruptions de carrière. L''égalité ne se limite pas à l''absence de discrimination directe ; elle suppose de regarder les effets concrets des organisations. Il faut des indicateurs, des objectifs, de la transparence et une attention aux biais dans les recrutements et promotions. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pensez-vous que le télétravail soit efficient ?',
+      'Oui, s''il est organisé. Il peut améliorer la concentration, réduire les déplacements et favoriser l''autonomie. Mais il peut aussi isoler, complexifier le management et rendre les signaux faibles moins visibles. Il faut donc un cadre : missions télétravaillables, objectifs clairs, temps collectifs, droit à la déconnexion et suivi de la charge. Le télétravail efficace n''est pas du travail à distance abandonné. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel regard portez-vous sur l''argument de l''augmentation des RPS et des TMS avec la généralisation du télétravail ?',
+      'L''argument est crédible si le télétravail est mal encadré. Les RPS peuvent augmenter avec l''isolement, l''hyperconnexion ou la confusion entre vie professionnelle et personnelle. Les TMS peuvent apparaître si le poste de travail à domicile est inadapté. Mais ce n''est pas une fatalité : formation, équipement, prévention, management régulier et droit à la déconnexion permettent de réduire ces risques. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Les politiques sont-ils exemplaires face à la crise sanitaire de la Covid-19 ?',
+      'L''exemplarité a été variable selon les périodes et les responsables. Dans une crise inédite, il y a eu des décisions difficiles, parfois prises avec des informations incomplètes. Mais l''exemplarité politique exige aussi cohérence, transparence et capacité à reconnaître les erreurs. La confiance publique dépend beaucoup de la perception de justice et de cohérence dans les règles appliquées. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Les addictions aux réseaux sociaux sont-elles un problème ?',
+      'Oui, particulièrement chez les jeunes, mais pas uniquement. Elles peuvent affecter l''attention, le sommeil, l''image de soi, la santé mentale et la qualité des relations. Le problème n''est pas seulement individuel : les plateformes sont conçues pour capter l''attention. La réponse doit combiner éducation au numérique, responsabilité des plateformes, régulation et accompagnement des usages. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que pensez-vous du développement des lignes LGV et plus généralement de la politique d''aménagement du territoire ?',
+      'Les LGV peuvent renforcer l''attractivité et réduire certains déplacements aériens, mais elles ne doivent pas concentrer tous les investissements sur les grandes métropoles. L''aménagement du territoire doit aussi financer les lignes du quotidien, les mobilités rurales, les transports régionaux et les infrastructures de proximité. La question est l''équilibre entre vitesse, cohésion territoriale et transition écologique. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Bon et mauvais managers, cela existe-t-il vraiment ?',
+      'Oui, même si les situations sont parfois plus complexes qu''une étiquette. Un bon manager donne un cadre clair, écoute, décide, protège et fait progresser. Un mauvais manager peut créer de l''arbitraire, de la peur, de la confusion ou de l''injustice. Mais un manager peut aussi s''améliorer par la formation, le feedback et l''expérience. Le management est une compétence, pas seulement une personnalité. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Total s''appelle TotalEnergies : cela change-t-il quelque chose ?',
+      'Un changement de nom peut traduire une volonté stratégique, ici l''idée d''élargir l''activité vers plusieurs formes d''énergie. Mais un nom ne suffit pas. Ce qui compte, ce sont les investissements réels, la trajectoire carbone, la part des énergies renouvelables, la transparence et la cohérence entre communication et action. Il faut donc regarder les faits plus que l''affichage. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Accepteriez-vous que votre supérieur vous prête un costume pour une réunion particulière ?',
+      'Je serais prudente. Si c''est une aide ponctuelle sans enjeu et sans contrepartie, cela peut sembler humain. Mais dans un cadre professionnel, il faut éviter les situations ambiguës qui créent une dépendance ou une gêne. Je préférerais trouver une solution personnelle ou institutionnelle. Un cadre doit rester attentif aux apparences et à la juste distance professionnelle. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Parlez-nous du dernier roman que vous avez lu.',
+      'Je répondrais avec sincérité, sans inventer. L''important est de montrer une capacité de recul : présenter brièvement l''auteur, l''intrigue, puis ce que le livre m''a apporté. Par exemple : ''Ce qui m''a intéressée, c''est la façon dont le roman traite la responsabilité individuelle face au collectif.'' Le jury cherche souvent moins le titre que la capacité à structurer une réponse personnelle. Phrase de sécurité : « Je serais prudente avec les positions trop tranchées : dans l''action publique, l''enjeu est souvent de concilier des objectifs qui peuvent sembler contradictoires. »
+
+STACK 4 — Mises en situation complexes et prise de poste
+Cas difficiles à traiter avec méthode : refus d''exécuter une tâche, réorganisation, fusion de services, harcèlement, conduite addictive, télétravail, accident grave et management multisites.'
+    );
+
+    -- Stack 4: Mises en situation complexes et prise de poste
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 04. Mises en situation complexes et prise de poste',
+      'Mises en situation complexes et prise de poste',
+      '__starter:cdc-attache-v2__:stack-04',
+      11,
+      11,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Un de vos collaborateurs refuse de faire le travail que vous lui demandez. Comment réagissez-vous ?',
+      'Je commence par comprendre la raison du refus : incompréhension, surcharge, désaccord, manque de compétence, problème personnel ou opposition au cadre. Je rappelle ensuite que l''agent a une obligation d''exécuter les missions qui relèvent de son poste, sauf ordre manifestement illégal ou dangereux. Si le refus vient d''une difficulté réelle, j''accompagne : priorisation, formation, appui. Si le refus est injustifié, je formalise la demande, fixe un délai et informe ma hiérarchie/RH si nécessaire. La réponse doit être graduée, mais le refus d''exécuter une mission ne peut pas devenir une pratique acceptée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Suite à l''obtention de l''examen, on vous nomme sur un poste en pleine réorganisation. Comment le vivez-vous ?',
+      'Je le vivrais comme un défi exigeant, mais cohérent avec une fonction de cadre. Une réorganisation peut créer de l''incertitude, donc je chercherais d''abord à comprendre le contexte, les objectifs, le calendrier et les marges de manœuvre. Je prendrais le temps d''écouter les équipes, de repérer les risques et d''identifier les priorités. Je ne chercherais pas à tout changer immédiatement : dans une période de réorganisation, il faut à la fois donner un cap et sécuriser les agents.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Si vous aviez su qu''il était en pleine réorganisation, l''auriez-vous tout de même accepté ? Pourquoi ?',
+      'Oui, si le poste correspond à mes compétences et si le cadre de mission est clair. Une réorganisation n''est pas forcément un signal négatif ; elle peut être une opportunité de reconstruire un fonctionnement plus efficace. En revanche, j''aurais posé des questions sur les objectifs, les moyens, le dialogue social et l''accompagnement prévu. Accepter un poste difficile suppose de ne pas être naïf, mais aussi de ne pas fuir les responsabilités.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous êtes chargé d''un projet de réorganisation, la fusion de deux services. Comment procédez-vous ?',
+      'Je commence par un diagnostic : missions, effectifs, charges, compétences, processus, irritants et risques. Ensuite, je définis les objectifs de la fusion : meilleure continuité, simplification, mutualisation, lisibilité pour les usagers ou partenaires. J''associe les agents et les représentants du personnel selon le cadre applicable, avec un calendrier clair. Je construis des scénarios, j''évalue les impacts humains et organisationnels, puis je propose une décision argumentée. Après la mise en œuvre, je prévois un suivi : indicateurs, points d''équipe, ajustements et retour d''expérience.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Un de vos collaborateurs vous relate une suspicion de harcèlement moral au sein de son bureau. Comment réagissez-vous ? Comment procédez-vous ?',
+      'Je prends la parole très au sérieux, sans conclure trop vite. J''écoute, je recueille des faits précis, je protège la confidentialité et j''explique les suites possibles. Je ne mène pas seul une enquête informelle : j''alerte la hiérarchie et les RH selon les procédures internes, et j''oriente vers les acteurs compétents : prévention, médecine du travail, cellule d''écoute, référent ou dispositif de signalement. Je veille à protéger l''agent contre toute mesure de représailles et à préserver le collectif. L''enjeu est de traiter rapidement, objectivement et humainement.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous prenez vos fonctions dans un nouveau service où l''ancien manager était très apprécié. L''équipe ne tarit pas d''éloges à son égard. Comment comptez-vous vous positionner et asseoir votre légitimité ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.',
+      'Je ne cherche pas à rivaliser avec l''ancien manager ni à effacer son héritage. Je reconnais ce qui a bien fonctionné et je prends le temps d''écouter. Ensuite, j''installe progressivement ma propre légitimité par la fiabilité : présence, clarté, décisions cohérentes, respect des engagements. Je peux dire à l''équipe : ''Je ne viens pas remplacer une personne dans son style, je viens exercer une responsabilité avec ma méthode, dans la continuité de ce qui fonctionne et avec les ajustements nécessaires.'''
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Deux nouveaux collaborateurs intègrent votre collectif de travail composé essentiellement de seniors. Ils sont jeunes et débordent d''idées nouvelles. Quelle sera votre stratégie pour créer et maintenir la cohésion de cette équipe recomposée ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.',
+      'Je valorise les deux apports : l''expérience des seniors et l''énergie d''innovation des nouveaux. Je mets en place une intégration structurée : tutorat, partage des pratiques, temps d''échange sur les méthodes. Je veille à ce que les idées nouvelles ne soient pas perçues comme une critique du travail existant, et à ce que l''expérience ne devienne pas un frein automatique. L''objectif est de créer une complémentarité : transmettre, tester, ajuster, et reconnaître chacun.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous avez une suspicion de conduite addictive, alcool et psychotropes, chez un de vos collaborateurs. Comment agissez-vous ? Quels sont vos interlocuteurs au sein de votre établissement ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.',
+      'Je ne pose pas de diagnostic médical. Je pars des faits observables : retards, comportement inhabituel, erreurs, odeur d''alcool, mise en danger, difficultés relationnelles. S''il y a un danger immédiat pour l''agent ou les autres, je retire l''agent de la situation à risque et j''alerte la hiérarchie selon la procédure. Ensuite, j''associe les RH, la médecine du travail, l''assistant de prévention ou le service social selon l''organisation. L''objectif est double : protéger le service et accompagner l''agent, sans stigmatisation.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Des collaborateurs refusent de télétravailler, prétextant un environnement familial incompatible. Comment agissez-vous ? Quels sont vos recours ?',
+      'Le télétravail est un mode d''organisation qui suppose des conditions matérielles et personnelles adaptées. Si l''environnement familial est incompatible, je l''écoute et je vérifie le cadre interne : le télétravail est-il obligatoire, recommandé ou simplement possible ? Je recherche des solutions : jours réduits, horaires adaptés, bureau partagé, présence sur site, tiers-lieu si prévu. Si la présence est nécessaire au service et possible, elle peut être maintenue. Le recours principal est le dialogue, puis l''application du cadre RH. On ne force pas un télétravail inefficace ou dangereux pour la qualité du travail.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Un accident se produit dans votre service, chute d''une armoire et agent grièvement blessé. Êtes-vous responsable en tant que chef de service ?',
+      'Ma responsabilité peut être engagée si j''ai manqué à mes obligations de prévention, d''alerte ou de sécurité, notamment si le risque était connu et non traité. Dans l''immédiat, je fais porter secours, je sécurise la zone, j''alerte la hiérarchie, les RH, les services de prévention et je fais établir les déclarations nécessaires. Ensuite, il faut analyser les causes : matériel, fixation, signalement antérieur, document unique, consignes. Le chef de service n''est pas automatiquement coupable, mais il a une obligation forte de prévention et de réaction.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment gèrerez-vous un management à distance, multi-sites et télétravailleur ? Quels sont vos points de vigilance ?',
+      'Je poserais un cadre très clair : objectifs, rituels d''équipe, points individuels, outils partagés, règles de disponibilité et modalités de reporting. Le risque du multi-sites est l''inégalité d''information et le sentiment d''isolement. Je veillerais donc à circuler entre les sites, à organiser des temps collectifs, à repérer les signaux faibles et à ne pas favoriser les agents les plus visibles. Le management à distance repose sur la confiance, mais une confiance structurée.
+
+STACK 5 — Parcours, RHP et compétences comportementales'
+    );
+
+    -- Stack 5: Parcours, RHP et compétences comportementales
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 05. Parcours, RHP et compétences comportementales',
+      'Parcours, RHP et compétences comportementales',
+      '__starter:cdc-attache-v2__:stack-05',
+      10,
+      10,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles expériences démontrent que vous savez travailler en équipe ?',
+      'Je peux citer les projets territoriaux menés avec des collectivités, des partenaires internes et des acteurs externes. Dans ces dossiers, aucun résultat ne dépend d''une seule personne : il faut partager l''information, coordonner les calendriers, comprendre les contraintes de chacun et tenir un cap commun. Mon expérience de réorganisation au CD54 montre aussi ma capacité à travailler avec la direction, les agents et les représentants du personnel. Pour moi, travailler en équipe, ce n''est pas seulement être sympathique ; c''est rendre le collectif plus efficace.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Avez-vous déjà eu à gérer des conflits ?',
+      'Oui, dans des contextes de réorganisation ou de charge de travail différenciée, des tensions peuvent apparaître. Ma méthode est de revenir aux faits, d''écouter les parties, de clarifier le cadre et de rechercher une solution opérationnelle. Je distingue le désaccord normal, qui peut être utile, du conflit installé, qui abîme le collectif. Quand le conflit dépasse mon niveau, j''associe les RH ou la hiérarchie.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous avez souvent changé de poste, en faites-vous vite le tour ?',
+      'Non. Mes changements de poste traduisent plutôt une progression et une volonté d''élargir mes compétences. Chaque poste m''a apporté une brique : culture territoriale, gestion de projet, relation partenariale, organisation, management. Je ne cherche pas à partir dès que je maîtrise ; je cherche à continuer à être utile là où mon expérience peut produire de la valeur.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Peut-on être adaptable tout en restant dix ans sur le même poste ?',
+      'Oui, car l''adaptabilité ne se mesure pas seulement au nombre de postes occupés. On peut rester longtemps sur un poste et connaître des évolutions de missions, de réglementation, d''outils, d''équipe ou de partenaires. L''adaptabilité, c''est la capacité à apprendre et à ajuster sa manière de travailler. Elle peut donc s''exprimer dans la mobilité comme dans la durée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous avez beaucoup d''activités et responsabilités extraprofessionnelles. Seront-elles compatibles avec les exigences du poste que vous visez ?',
+      'Oui, à condition d''avoir une organisation claire et de respecter la priorité professionnelle. Ces activités peuvent aussi développer des compétences utiles : organisation, engagement, écoute, gestion du temps. Je suis consciente des exigences d''un poste de cadre A ; si je candidate, c''est que j''estime pouvoir les assumer. La compatibilité se mesure aux résultats, à la disponibilité réelle et au respect des engagements.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous affirmez avoir de grandes qualités humaines. Suffisent-elles à être compétent ?',
+      'Non, elles ne suffisent pas. Les qualités humaines sont nécessaires pour manager, écouter et créer de la confiance, mais elles doivent être complétées par des compétences techniques, juridiques, financières, organisationnelles et rédactionnelles. Un cadre public doit être humain, mais aussi rigoureux et capable de décider. Je ne mets donc pas l''humain à la place de la compétence ; je le mets au service de la compétence.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''entendez-vous par aptitude à la communication ? Que recouvre ce terme ?',
+      'Pour moi, communiquer, ce n''est pas seulement bien parler. C''est adapter son message à l''interlocuteur, écouter, reformuler, transmettre une information fiable et choisir le bon canal. C''est aussi savoir dire une difficulté sans dramatiser, rendre une décision compréhensible et éviter les malentendus. Une bonne communication protège les projets et les relations de travail.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous avez suivi des formations en conduite de projet. Quel chef de projet êtes-vous ?',
+      'Je suis un chef de projet structurant et partenarial. Je commence par clarifier l''objectif, les acteurs, les risques, le calendrier et les livrables. J''aime objectiver les choses, poser des jalons et garder une vision d''ensemble. Mais je sais aussi qu''un projet public avance par coopération : il faut écouter les contraintes, faire converger les intérêts et sécuriser les décisions.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Vous dites attacher une grande importance à la qualité de vie au travail concrètement.',
+      'Concrètement, la QVT passe par la clarté des objectifs, une charge réaliste, des règles équitables, un droit à l''erreur encadré, la reconnaissance du travail et la prévention des tensions. Ce n''est pas seulement organiser des moments conviviaux. C''est créer un environnement dans lequel les agents savent ce qu''on attend d''eux, peuvent alerter et disposent des moyens pour bien travailler.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Dans votre dossier, vous faites référence à une réorganisation que vous avez initiée. Avez-vous travaillé seul ?',
+      'Non, et c''est important de le dire. Une réorganisation est toujours collective : direction, agents, représentants du personnel, services support. Mon rôle a été de contribuer au diagnostic, à l''objectivation des critères, à la coordination et à la mise en œuvre. Je revendique ma part de responsabilité, mais je ne présente pas une réussite collective comme une réussite individuelle isolée.
+
+STACK 6 — Connaissances administratives générales et institutions
+Bases administratives attendues : directions de la CDC, établissement public financier, réformes, France Relance, élections présidentielles, Conseil d''État, politiques publiques et fonctions régaliennes.'
+    );
+
+    -- Stack 6: Connaissances administratives générales et institutions
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 06. Connaissances administratives générales et institutions',
+      'Connaissances administratives générales et institutions',
+      '__starter:cdc-attache-v2__:stack-06',
+      11,
+      11,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pouvez-vous nous citer l''ensemble des directions de la Caisse des dépôts ?',
+      'Les grands métiers à citer sont : la Banque des Territoires, qui accompagne les projets territoriaux ; les Politiques sociales, qui gèrent notamment des mandats et fonds liés aux retraites, à la formation, au handicap, au grand âge et à la santé ; la Gestion d''actifs, qui agit comme investisseur institutionnel de long terme ; et la Gestion des participations stratégiques, qui suit les grandes participations du Groupe. On peut aussi citer les filiales et partenaires stratégiques comme Bpifrance, La Poste Groupe ou CDC Habitat selon le niveau de détail demandé.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles sont les caractéristiques spécifiques d''un établissement public financier ?',
+      'La Caisse des Dépôts est un établissement public sui generis, créé en 1816, placé sous la surveillance du Parlement. Elle remplit des missions d''intérêt général en appui des politiques publiques et peut aussi exercer certaines activités concurrentielles. Sa spécificité tient au temps long, à la protection des fonds qui lui sont confiés et à son rôle d''investisseur public de long terme. Elle n''est ni une administration classique, ni une banque commerciale ordinaire.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Combien y a-t-il d''agents et de salariés qui travaillent au sein du groupe Caisse des dépôts ?',
+      'Le chiffre à retenir dans vos fiches est l''ordre de grandeur : environ 370 000 collaborateurs dans le Groupe, dont plusieurs milliers à l''Établissement public. Pour l''oral, il faut surtout montrer qu''on distingue le Groupe, très large en raison des filiales et participations, et l''Établissement public lui-même, beaucoup plus resserré. Les chiffres précis doivent être vérifiés dans les derniers documents institutionnels avant l''oral.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Citez-nous des réformes récentes dans la fonction publique.',
+      'Je citerais la loi du 6 août 2019 de transformation de la fonction publique : création ou renforcement des lignes directrices de gestion, évolution du dialogue social avec les comités sociaux, élargissement du recours aux contractuels, rupture conventionnelle, réforme des CAP. On peut aussi évoquer la codification dans le Code général de la fonction publique et les réformes liées à la protection sociale complémentaire ou à l''attractivité des métiers publics.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que savez-vous du programme France Relance ?',
+      'France Relance est un plan lancé après la crise sanitaire pour soutenir l''économie, l''investissement et la transformation. Il s''est structuré autour de trois grands axes : écologie, compétitivité et cohésion. Pour la Caisse des Dépôts et la Banque des Territoires, l''intérêt est de montrer le rôle des opérateurs publics dans la relance territoriale : rénovation, infrastructures, soutien aux projets locaux, transformation numérique et investissements utiles au long terme.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Les filiales du groupe Caisse des dépôts sont-elles concernées ? Lesquelles ?',
+      'Oui, plusieurs filiales ou participations sont directement liées à des politiques publiques. CDC Habitat intervient sur le logement et l''habitat d''intérêt public. Bpifrance soutient les entreprises, l''innovation et l''industrie. La Poste Groupe assure des missions de service public. La SCET accompagne les collectivités et EPL. La logique du Groupe est précisément de mobiliser des outils variés au service des territoires et de l''intérêt général.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles sont les dates des prochaines élections présidentielles ?',
+      'En principe, la prochaine élection présidentielle française est prévue en 2027, sauf événement institutionnel particulier. Le premier tour et le second tour sont fixés par décret à l''approche du scrutin. À l''oral, il faut rester prudent et donner l''année certaine plutôt qu''une date non vérifiée. À l''oral, il faut rester précis sans réciter un cours administratif. L''objectif est de montrer que vous connaissez les institutions, mais surtout que vous savez les relier à l''action concrète d''un cadre public : sécuriser une décision, comprendre une compétence, respecter une procédure, mobiliser le bon interlocuteur et rendre compte.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles sont les deux missions du Conseil d''État ?',
+      'Le Conseil d''État a une double mission. D''abord, il est conseiller du gouvernement : il examine notamment les projets de loi, d''ordonnance et certains décrets. Ensuite, il est juge administratif suprême : il tranche les litiges administratifs en cassation ou directement pour certains contentieux. Il joue donc un rôle à la fois consultatif et juridictionnel.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que recouvrent les politiques publiques ?',
+      'Les politiques publiques sont l''ensemble des actions conduites par les pouvoirs publics pour répondre à un problème collectif : logement, santé, éducation, transition écologique, sécurité, emploi, aménagement du territoire. Elles reposent sur des objectifs, des moyens juridiques et financiers, des opérateurs, des partenaires et une évaluation. Une politique publique ne se limite pas à une loi ; c''est une chaîne d''action.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pouvez-vous nous citer trois fonctions régaliennes de l''État et définir le terme régalien ?',
+      'Le terme régalien désigne les fonctions essentielles liées à la souveraineté de l''État. On peut citer la justice, la sécurité intérieure, la défense nationale, la diplomatie et la monnaie dans son acception historique. Ces fonctions expriment l''autorité de l''État et sa responsabilité fondamentale envers la collectivité. À l''oral, il faut rester précis sans réciter un cours administratif. L''objectif est de montrer que vous connaissez les institutions, mais surtout que vous savez les relier à l''action concrète d''un cadre public : sécuriser une décision, comprendre une compétence, respecter une procédure, mobiliser le bon interlocuteur et rendre compte.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'L''État est interventionniste en matière économique et sociale. Pouvez-vous nous citer des exemples ?',
+      'Oui. En matière économique, l''État intervient par l''investissement public, les aides aux entreprises, la régulation, la commande publique, la fiscalité ou le soutien à l''innovation. En matière sociale, il intervient par la protection sociale, les prestations, l''assurance chômage, la politique du logement, la santé ou l''inclusion. La Caisse des Dépôts illustre cette intervention par des financements de long terme et des mandats publics.
+
+STACK 7 — Groupe Caisse des Dépôts, Banque des Territoires, métiers, gouvernance et histoire
+Connaissance de l''institution : raison d''être, valeurs, chiffres clés, cadre juridique, gouvernance, contrôle, métiers, Banque des Territoires, Bpifrance, La Poste et histoire.'
+    );
+
+    -- Stack 7: Groupe Caisse des Dépôts, Banque des Territoires, métiers, gouvernance et histoire
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 07. Groupe Caisse des Dépôts, Banque des Territoires, métiers, gouvernance et histoire',
+      'Groupe Caisse des Dépôts, Banque des Territoires, métiers, gouvernance et histoire',
+      '__starter:cdc-attache-v2__:stack-07',
+      28,
+      28,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''est-ce que la Caisse des Dépôts en quatre points ?',
+      'C''est d''abord un établissement public financier spécial, créé en 1816, avec des filiales et participations stratégiques. C''est ensuite un investisseur et prêteur de long terme, qui intervient là où le temps long est indispensable. C''est aussi un gestionnaire de mandats publics, notamment dans les politiques sociales. Enfin, c''est un groupe au service de l''intérêt général et du développement économique du pays, avec une forte présence territoriale. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelle est la raison d''être du Groupe Caisse des Dépôts ?',
+      'La raison d''être à retenir est : le Groupe, alliance unique d''acteurs économiques publics et privés, s''engage au cœur des territoires pour accélérer la transformation écologique et contribuer à offrir une vie meilleure pour toutes et tous. À l''oral, il faut être capable de relier cette phrase à des exemples : logement social, rénovation, souveraineté numérique, décarbonation industrielle, cohésion territoriale. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles sont les trois valeurs du Groupe ?',
+      'Les trois valeurs à retenir sont l''intérêt général, la confiance et le long terme. L''intérêt général donne la finalité. La confiance renvoie à l''histoire de la Caisse des Dépôts et à la protection des fonds. Le long terme distingue la CDC d''une logique purement court-termiste : elle finance, investit et accompagne des transformations qui prennent du temps. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quels sont les trois objectifs stratégiques du Groupe ?',
+      'Les trois objectifs stratégiques sont la transformation écologique, le renforcement des souverainetés et la cohésion sociale et territoriale. Il faut les présenter comme un triptyque cohérent : transformer l''économie, réduire les dépendances critiques et veiller à ce que les territoires et les populations fragiles ne soient pas exclus de la transition. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Combien de collaborateurs compte le Groupe et combien à l''Établissement public ?',
+      'À retenir : environ 370 000 collaborateurs dans le Groupe, dont environ 7 452 à l''Établissement public. Le point important est la distinction entre Groupe et Établissement public : le Groupe inclut de grandes filiales et participations, ce qui explique l''ordre de grandeur très élevé. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel est le bilan agrégé du Groupe en 2024 ?',
+      'À retenir : 1 388 milliards d''euros de bilan agrégé en 2024, en hausse par rapport à 2023. À l''oral, il n''est pas nécessaire de réciter tous les décimales : l''important est de montrer que le Groupe a une puissance de bilan considérable, au service d''interventions de long terme et d''intérêt général. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Combien le Groupe a-t-il versé à l''État au titre de 2024 ?',
+      'À retenir : 2 147 millions d''euros. Ce chiffre illustre que la Caisse des Dépôts n''est pas seulement un opérateur de politiques publiques : elle a aussi une performance économique et financière qui contribue aux finances publiques. Si le jury insiste, préciser que ces chiffres doivent être rattachés au dernier rapport annuel disponible. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Combien de filiales et participations compte le Groupe ?',
+      'À retenir : 29 filiales et participations. Cela montre la diversité des instruments du Groupe : logement, financement des entreprises, services postaux, conseil aux collectivités, gestion d''actifs, etc. À l''oral, il faut surtout savoir citer quelques exemples utiles : Bpifrance, La Poste, CDC Habitat, SCET. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que dit la loi NRE de 2001 sur la Caisse des Dépôts ?',
+      'La loi NRE a consacré la CDC et ses filiales comme un groupe public au service de l''intérêt général et du développement économique du pays. Elle précise que le Groupe remplit des missions d''intérêt général en appui des politiques publiques de l''État et des collectivités, tout en pouvant exercer des activités concurrentielles. C''est une base juridique essentielle pour comprendre son modèle hybride. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles missions principales sont confiées à la CDC par la loi ?',
+      'On peut citer la protection de l''épargne populaire, le financement du logement social, la gestion de mandats publics et d''organismes ou fonds, notamment dans les retraites, et la contribution au développement économique local et national. La CDC agit donc à la fois comme gardienne de fonds, financeur, investisseur et opérateur de confiance. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''a apporté la loi PACTE de 2019 ?',
+      'La loi PACTE a modernisé la gouvernance de la Caisse des Dépôts, notamment sa surveillance et certains mécanismes de contrôle. Elle a cherché à renforcer l''efficacité et la lisibilité de l''institution, tout en conservant son ADN : un établissement public spécial, autonome, placé sous la surveillance du Parlement et au service de missions d''intérêt général. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment est nommé le Directeur général de la Caisse des Dépôts ?',
+      'Le Directeur général est nommé par décret du Président de la République pris en Conseil des ministres, après procédure d''audition parlementaire selon le cadre applicable. Son mandat est de cinq ans. Il prête un serment qui rappelle l''autonomie de l''établissement et l''inviolabilité des fonds confiés à la Caisse. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Sur quels deux principes repose la gouvernance ?',
+      'Elle repose sur l''indépendance de la Commission de surveillance et l''autonomie du Directeur général. La Commission de surveillance contrôle et rend compte au Parlement. Le Directeur général dirige l''établissement. Ce double principe traduit l''équilibre entre autonomie de gestion et contrôle public. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelle est la composition de la Commission de surveillance ?',
+      'La Commission de surveillance comprend 16 membres : des parlementaires, des représentants du personnel, un représentant de l''État et des personnalités qualifiées. L''idée à retenir est que la surveillance parlementaire est une spécificité historique forte de la Caisse des Dépôts. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelle est la spécificité de la CDC en matière de surveillance ?',
+      'Elle est historiquement placée sous la surveillance et la garantie de l''autorité législative. Cette protection parlementaire est liée à sa mission originelle : restaurer la confiance après les crises révolutionnaires et impériales, et garantir l''inviolabilité des dépôts. C''est un élément identitaire majeur. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quels sont les quatre dispositifs de contrôle interne et externe ?',
+      'On peut citer la surveillance de la Commission de surveillance, les dispositifs de contrôle interne, la supervision prudentielle de l''ACPR pour les aspects concernés, et le contrôle de la Cour des comptes. L''idée est de montrer que l''autonomie de la CDC ne signifie pas absence de contrôle : elle s''accompagne de mécanismes robustes. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quels sont les 4 métiers de la Caisse des Dépôts ?',
+      'Les quatre métiers sont : la Banque des Territoires, la Gestion d''actifs, les Politiques sociales et la Gestion des participations stratégiques. Cette présentation permet de montrer que la CDC intervient à la fois comme financeur territorial, investisseur, opérateur de mandats sociaux et actionnaire de long terme. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quels sont les deux partenaires stratégiques du Groupe ?',
+      'Les deux partenaires stratégiques à citer sont Bpifrance et La Poste Groupe. Bpifrance accompagne le financement, l''innovation et le développement des entreprises. La Poste Groupe porte des missions de service public et un maillage territorial important. Ces deux partenaires illustrent la capacité du Groupe à agir dans l''économie réelle. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles sont les 5 missions de la Banque des Territoires ?',
+      'Les cinq missions à retenir sont : bancaire, prêteur, investisseur, réseau et conseil/accompagnement. La Banque des Territoires n''est donc pas seulement un financeur ; elle accompagne les projets territoriaux, sécurise les montages et mobilise une ingénierie utile aux collectivités et acteurs locaux. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qui sont les clients de la Direction du réseau ?',
+      'Les principaux clients sont les collectivités territoriales, les entreprises publiques locales, les organismes de logement social, les professions juridiques et certains acteurs économiques sur des projets territoriaux. Le mot clé est ''territoires'' : la Banque des Territoires intervient quand un projet a une utilité collective locale. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Différence BdT / Bpifrance ?',
+      'Formulation simple : Bpifrance finance l''entreprise et son outil de production ; la Banque des Territoires finance plutôt le contenant territorial : foncier, immobilier, infrastructures, équipements, logement, réseaux, services aux territoires. Les deux peuvent être complémentaires sur un projet industriel ou de transition écologique. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment fonctionne le Livret A ?',
+      'Une partie importante de l''épargne réglementée, issue notamment du Livret A et du LDDS, est centralisée au Fonds d''épargne géré par la Caisse des Dépôts. Cette épargne sert à financer des projets d''intérêt général, en particulier le logement social, la rénovation, la transformation écologique et des équipements territoriaux. C''est une illustration très concrète de l''épargne privée mise au service de l''intérêt général. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel est le montant des actifs sous gestion fin 2024 ?',
+      'À retenir : 323 milliards d''euros fin 2024. À l''oral, l''enjeu n''est pas seulement le chiffre, mais la logique : la CDC est un investisseur institutionnel de long terme, avec une durée de détention longue et une stratégie alignée avec ses priorités publiques. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Dans quels 4 domaines intervient la Direction des politiques sociales ?',
+      'Elle intervient notamment dans les retraites, la formation professionnelle, le handicap, le grand âge et la santé. Elle gère de nombreux fonds et mandats, ce qui traduit son rôle de tiers de confiance pour des politiques sociales sensibles et massives. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''est-ce que Bpifrance ?',
+      'Bpifrance est la banque publique d''investissement. Elle finance les entreprises à toutes les étapes de leur développement, par le crédit, la garantie, les fonds propres, l''accompagnement, le conseil et la formation. Elle est stratégique pour l''innovation, la réindustrialisation, l''export et la souveraineté économique. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles sont les 4 missions de service public de La Poste Groupe ?',
+      'Les quatre missions généralement citées sont : le service universel postal, l''aménagement du territoire, l''accessibilité bancaire et le transport/distribution de la presse. La Poste illustre le lien entre service public, présence territoriale et adaptation des modèles économiques. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quand et pourquoi la Caisse des Dépôts a-t-elle été créée ?',
+      'Elle a été créée en 1816 pour restaurer la confiance après les troubles révolutionnaires et impériaux. Sa mission initiale est de garantir l''inviolabilité des dépôts confiés. Cette origine explique encore aujourd''hui les valeurs de confiance, de sécurité et de long terme. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés. « La spécificité de la Caisse des Dépôts est d''articuler puissance financière, sécurité institutionnelle et utilité publique, avec une logique de long terme qui correspond aux besoins des territoires. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Citez quelques dates clés du XIXᵉ siècle.',
+      '1816 : création de la CDC. 1818 : naissance du Livret A. 1837 : gestion des fonds du Livret A. 1850 : gestion de la Caisse nationale des retraites. 1894 : financement du logement social. Ces dates montrent comment la CDC s''est progressivement imposée comme institution de confiance et financeur de politiques publiques. À mémoriser : rattachez toujours la Caisse des Dépôts à quatre idées : intérêt général, temps long, confiance et territoires. Une réponse de jury doit montrer que vous ne connaissez pas seulement des chiffres, mais que vous comprenez le modèle : des fonds sécurisés, une intervention de long terme, un rôle d''appui aux politiques publiques et une capacité à agir avec des partenaires publics et privés.
+
+STACK 8 — Statut, fonction publique, obligations, dialogue social et RH
+Bloc DRH/statutaire : détachement, attaché territorial, obligations du fonctionnaire, neutralité, réserve, obéissance hiérarchique, CST, CAP, CCP, entretien professionnel, LDG, RPS et appui juridique.'
+    );
+
+    -- Stack 8: Statut, fonction publique, obligations, dialogue social et RH
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 08. Statut, fonction publique, obligations, dialogue social et RH',
+      'Statut, fonction publique, obligations, dialogue social et RH',
+      '__starter:cdc-attache-v2__:stack-08',
+      31,
+      31,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel est votre statut aujourd''hui ?',
+      'Je suis fonctionnaire territoriale, en détachement à la Caisse des Dépôts depuis 2018. Cette situation m''a permis de conserver mon ancrage statutaire tout en développant une expérience dans un établissement public financier au service des territoires. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''est-ce qu''un détachement ?',
+      'Le détachement est une position statutaire dans laquelle un fonctionnaire exerce temporairement hors de son cadre d''emplois ou de son administration d''origine, tout en conservant un lien avec elle. Il peut continuer à dérouler sa carrière selon les règles applicables. C''est une mobilité encadrée, différente d''une rupture avec l''administration d''origine. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Différence détachement / disponibilité ?',
+      'En détachement, l''agent reste dans une position de fonctionnaire et exerce une activité dans une autre structure ou un autre corps/cadre d''emplois. En disponibilité, l''agent est placé hors de son administration, en principe sans rémunération et sans déroulement normal de carrière, sauf exceptions. Le détachement maintient donc un lien professionnel beaucoup plus actif. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Différence détachement / mise à disposition ?',
+      'En mise à disposition, l''agent reste rattaché à son administration d''origine, qui continue généralement à gérer sa situation, mais il travaille pour une autre structure. En détachement, l''agent est accueilli dans un autre emploi, corps ou cadre d''emplois. La mise à disposition est plus proche d''un prêt de compétences ; le détachement est une position statutaire de mobilité plus structurée. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi avoir choisi le détachement ?',
+      'Pour valoriser ma connaissance des collectivités tout en découvrant un autre univers : celui du financement territorial, de la Banque des Territoires et des acteurs économiques. Ce choix m''a permis d''élargir ma culture professionnelle sans perdre mon identité de fonctionnaire territoriale. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''est-ce qu''un attaché territorial ?',
+      'Un attaché territorial est un cadre A chargé de missions de conception, d''expertise, d''aide à la décision, de conduite de projet, de pilotage et parfois d''encadrement. Il intervient sur des sujets administratifs, financiers, juridiques, RH, territoriaux ou stratégiques. On attend de lui de la hauteur de vue et une capacité à sécuriser l''action publique. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''attend-on d''un attaché ?',
+      'On attend une capacité à analyser, proposer, coordonner, sécuriser, décider ou préparer la décision, et rendre compte. L''attaché doit savoir travailler avec des élus, des directions, des partenaires, des agents et des services support. Il doit aussi comprendre les contraintes juridiques, financières et humaines d''un dossier. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelle différence avec vos fonctions actuelles ?',
+      'Mes fonctions actuelles m''ont déjà permis de piloter des projets complexes et de travailler en transversalité. Le grade d''attaché me permettrait d''assumer plus pleinement des responsabilités de cadre A, notamment sur le cycle complet d''un dossier : diagnostic, montage, arbitrage, mise en œuvre, suivi et évaluation. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi devenir attachée maintenant ?',
+      'Parce que mon parcours me donne aujourd''hui une double culture : management public local et conduite de projets territoriaux à la Banque des Territoires. J''ai aussi attendu un moment où mon expérience et ma disponibilité personnelle me permettent d''assumer sereinement cette étape. Ce n''est pas une envie de titre ; c''est une progression cohérente de responsabilités. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelles sont les obligations du fonctionnaire ?',
+      'Les obligations principales sont la dignité, l''impartialité, l''intégrité, la probité, la neutralité, la laïcité, le secret professionnel, la discrétion professionnelle, le devoir de réserve et l''obéissance hiérarchique. Elles garantissent la confiance des citoyens dans l''administration et protègent l''égalité de traitement. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Neutralité ?',
+      'La neutralité signifie que l''agent public traite les usagers, partenaires et collègues sans préférence politique, personnelle, religieuse, économique ou relationnelle. Elle protège l''égalité devant le service public. Pour un cadre, elle implique aussi d''organiser le service de manière impartiale. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Discrétion professionnelle ?',
+      'La discrétion professionnelle interdit de divulguer des informations connues dans l''exercice des fonctions, même lorsqu''elles ne relèvent pas du secret professionnel au sens strict. Elle protège le bon fonctionnement de l''administration, les dossiers, les agents et les partenaires. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Secret professionnel ?',
+      'Le secret professionnel protège certaines informations légalement couvertes par le secret, par exemple des informations personnelles, sociales, médicales ou sensibles selon les missions. Sa violation peut avoir des conséquences disciplinaires et pénales. Il impose une vigilance particulière dans les échanges, les mails, les réunions et le stockage des documents. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Devoir de réserve ?',
+      'Le devoir de réserve impose à l''agent public de s''exprimer avec mesure, notamment sur les sujets politiques ou sensibles. Il est plus exigeant pour les cadres ou les fonctions exposées. Il ne supprime pas la liberté d''opinion, mais encadre son expression publique pour préserver la neutralité et l''image du service. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Obéissance hiérarchique ?',
+      'L''agent public doit exécuter les instructions de sa hiérarchie. Mais cette obligation a une limite : il ne doit pas exécuter un ordre manifestement illégal et de nature à compromettre gravement un intérêt public. Dans les situations sensibles, il faut alerter, demander confirmation et tracer. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel est le rôle du CST ?',
+      'Le comité social territorial est consulté sur l''organisation des services, les conditions de travail, les orientations RH et les sujets collectifs relevant du dialogue social. Il a remplacé, dans la fonction publique territoriale, l''ancien comité technique et le CHSCT dans une logique de simplification des instances. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Avant le CST, quelle instance existait ?',
+      'Avant le CST, on parlait notamment du comité technique pour les questions d''organisation des services. Les questions de santé, sécurité et conditions de travail relevaient du CHSCT. La réforme a rapproché ces sujets dans les comités sociaux et leurs formations spécialisées. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'L''avis du CST est-il contraignant ?',
+      'Non, l''avis est consultatif. Mais il est essentiel, car il sécurise le dialogue social et la procédure. Même lorsqu''il n''est pas conforme, il permet d''entendre les représentants du personnel, d''ajuster le projet et de rendre la décision plus transparente. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi associer les syndicats en amont ?',
+      'Pour éviter l''effet de surprise et construire un dialogue social loyal. Associer en amont permet d''expliquer les critères, d''entendre les inquiétudes et parfois d''améliorer le projet. Cela ne signifie pas renoncer à décider, mais décider dans un cadre plus robuste et plus acceptable. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Rôle de la CAP ?',
+      'La commission administrative paritaire traite certaines situations individuelles des fonctionnaires, selon le cadre juridique applicable. Son rôle a évolué avec les réformes récentes, mais elle reste une instance importante pour les questions individuelles statutaires. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Rôle de la CCP ?',
+      'La commission consultative paritaire concerne les situations individuelles des contractuels. Elle répond à la même logique de représentation et de garantie que la CAP, mais pour les agents contractuels. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'À quoi sert l''entretien professionnel ?',
+      'Il sert à évaluer la valeur professionnelle, faire le bilan de l''année, fixer les objectifs, identifier les besoins de formation et préparer l''évolution professionnelle. C''est un acte de management, pas une formalité administrative. Il doit être préparé, argumenté et suivi. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que sont les lignes directrices de gestion ?',
+      'Les lignes directrices de gestion fixent les orientations générales en matière de mobilité, promotion, valorisation des parcours et pilotage RH. Elles donnent de la visibilité aux agents et encadrent les décisions de gestion. Elles sont un outil de transparence et de cohérence. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que change la loi de transformation de la fonction publique de 2019 ?',
+      'Elle réforme le dialogue social, crée ou renforce les lignes directrices de gestion, élargit certains recours aux contractuels, transforme les CAP, crée la rupture conventionnelle à titre expérimental puis pérennisée, et fusionne certaines instances en comités sociaux. C''est une réforme majeure de la gestion publique. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment gérer un agent en difficulté ?',
+      'Je commence par écouter et objectiver. Je cherche les causes : charge, compétences, santé, organisation, conflit, problème personnel. Ensuite, je propose un accompagnement : priorisation, formation, tutorat, adaptation temporaire, suivi. Si la difficulté persiste, j''associe les RH ou la médecine du travail selon le sujet. L''important est d''agir tôt et de tracer. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment recadrer un agent ?',
+      'Un recadrage doit être factuel, individuel et proportionné. Je rappelle les faits, l''écart au cadre attendu, les conséquences pour le service et les attentes pour la suite. Je laisse l''agent s''exprimer, puis je fixe un délai de régularisation. Si nécessaire, je formalise l''échange par écrit. Un recadrage réussi est clair sans être humiliant. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment prévenir les risques psychosociaux ?',
+      'Par la clarté des objectifs, le suivi de la charge, l''écoute des signaux faibles, la prévention des conflits, le droit à la déconnexion et la reconnaissance du travail. Il faut aussi savoir alerter quand les moyens ne correspondent plus aux objectifs. La prévention des RPS n''est pas seulement une affaire individuelle : elle dépend de l''organisation du travail. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi sécuriser juridiquement une réorganisation ?',
+      'Il faut objectiver le diagnostic, définir les objectifs, identifier les impacts sur les missions, les postes et les conditions de travail, respecter les consultations obligatoires, associer le dialogue social, formaliser les critères et tracer les décisions. La sécurité juridique repose autant sur la procédure que sur la transparence des motifs. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que faites-vous face à un conflit d''intérêts ?',
+      'Je signale immédiatement la situation, je demande conseil à la hiérarchie ou au référent déontologue, et je me déporte si nécessaire. L''objectif est d''éviter toute suspicion de favoritisme ou de décision biaisée. Même l''apparence de conflit d''intérêts peut fragiliser une décision publique. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée. dans les questions RH, utilisez souvent les mots : objectiver, écouter, formaliser, accompagner, alerter, tracer, évaluer. Ce vocabulaire donne immédiatement une posture de cadre fiable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelle différence entre droit à l''erreur et faute ?',
+      'Le droit à l''erreur suppose la bonne foi et l''absence de manquement grave. Une erreur peut être corrigée et permettre d''apprendre. La faute, elle, implique un manquement aux obligations, une négligence caractérisée ou un comportement contraire au cadre. Un cadre doit distinguer l''erreur utile de la faute qui appelle une réponse. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Travaillez-vous avec la DOT ?',
+      'Pas directement dans mes missions actuelles. Je ne prétends donc pas connaître finement son organisation. En revanche, j''identifie les fonctions support comme essentielles pour sécuriser l''action opérationnelle : procédures, outils, qualité, organisation et continuité de service. Si je devais travailler avec elle, je commencerais par clarifier son rôle, ses contraintes, ses délais et ses points de vigilance. le jury RH attend une réponse juridiquement sûre et humainement équilibrée. Il faut donc articuler trois réflexes : connaître le statut, appliquer les procédures, et préserver la qualité du dialogue avec les agents. La posture attendue n''est pas punitive ; elle est sécurisante, transparente et proportionnée.
+
+STACK 9 — Actualité gouvernementale, transition écologique, industrie, numérique et souveraineté
+Actualité et politiques publiques : gouvernement, CDC/BdT, cathédrales industrielles, Horizon numérique 2030, Mistral AI, souveraineté, terres rares, Territoires d''industrie, ZAN, France 2030, ZIBaC, CBAM et eau.'
+    );
+
+    -- Stack 9: Actualité gouvernementale, transition écologique, industrie, numérique et souveraineté
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 09. Actualité gouvernementale, transition écologique, industrie, numérique et souveraineté',
+      'Actualité gouvernementale, transition écologique, industrie, numérique et souveraineté',
+      '__starter:cdc-attache-v2__:stack-09',
+      28,
+      28,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qui est le Premier ministre ?',
+      'Sébastien Lecornu. Pour l''oral, je donne le nom puis je montre que je sais replacer cette information dans le cadre institutionnel : le Premier ministre dirige l''action du Gouvernement, coordonne les ministères et porte la responsabilité politique de la mise en œuvre des politiques publiques. Je précise aussi que cette information doit être vérifiée la veille de l''oral, car la composition gouvernementale est une donnée très mouvante. Réponse courte possible : « Le Premier ministre est Sébastien Lecornu ; pour moi, l''essentiel est surtout de comprendre le lien entre l''action gouvernementale, les finances publiques, la transition écologique, les collectivités et les missions de la Caisse des Dépôts. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qui est le ministre de la Transition écologique ?',
+      'À retenir : Monique Barbut. À citer avec prudence et à vérifier la veille de l''oral. Il faut surtout relier ce ministère aux sujets territoriaux : adaptation au changement climatique, eau, biodiversité, décarbonation, ZAN, transition énergétique. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qui est le ministre de l''Économie ?',
+      'À retenir : Roland Lescure comme ministre chargé de l''Économie, des Finances et de la Souveraineté industrielle, énergétique et numérique. À l''oral, cela permet de faire le lien entre économie, industrie, énergie, numérique et souveraineté, exactement dans le champ des priorités CDC/Banque des Territoires. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qui est le Directeur général de la Caisse des Dépôts ?',
+      'Olivier Sichel est le directeur général du groupe Caisse des Dépôts. À l''oral, il ne faut pas seulement citer le nom : il faut montrer que l''on comprend le rôle du directeur général dans une institution particulière, autonome, placée sous la surveillance du Parlement. Le directeur général conduit l''établissement, met en œuvre la stratégie, arbitre les priorités et porte une ligne d''intérêt général : transformation écologique, souverainetés, cohésion sociale et territoriale.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qui dirige la Banque des Territoires ?',
+      'Antoine Saintoyant est directeur général adjoint et directeur de la Banque des Territoires. La réponse utile consiste à ajouter que la Banque des Territoires est le métier de la Caisse des Dépôts tourné vers les territoires : collectivités, logement social, professions juridiques, entreprises publiques locales, infrastructures, foncier, transition écologique, revitalisation et développement territorial.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Les 150 cathédrales industrielles ?',
+      'Il s''agit d''une annonce présidentielle d''avril 2026 autour de grands projets industriels stratégiques, avec une logique d''accélération inspirée de la méthode Notre-Dame. L''idée est d''identifier des projets clés, de clarifier la chaîne de commandement, de suivre régulièrement l''avancement et de réduire les délais administratifs. Pour un oral CDC, l''intérêt est de relier cette actualité à la souveraineté industrielle, au foncier économique, aux infrastructures et à la transition écologique.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quels secteurs concernés ?',
+      'Les secteurs cités dans les fiches sont notamment l''agroalimentaire, les centres de données, les biocarburants, les batteries, la santé, l''aéronautique et la défense. Ce sont des secteurs stratégiques car ils touchent à l''autonomie productive, aux technologies critiques et à la résilience nationale. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Méthode Notre-Dame ?',
+      'C''est une méthode d''accélération : projet identifié, chaîne de décision claire, comptes rendus réguliers, délais non négociables. Elle vise à éviter l''enlisement administratif. Mais il faut être nuancé : accélérer ne doit pas signifier supprimer les garanties environnementales, sociales ou juridiques ; cela doit signifier mieux coordonner et sécuriser.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Mine d''Échassières / projet EMILI ?',
+      'Le projet EMILI concerne un gisement de lithium dans l''Allier porté par Imerys. Le lithium est stratégique pour les batteries et donc pour la mobilité électrique. À l''oral, le lien à faire est clair : transition énergétique, souveraineté industrielle, acceptabilité locale, impacts environnementaux et besoin de sécurisation des approvisionnements.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Plan Horizon numérique 2030 ?',
+      'À retenir : un plan stratégique numérique à horizon 2030, avec un objectif de souveraineté numérique européenne. Les priorités sont la chaîne numérique, les solutions souveraines, l''accompagnement des collectivités et l''inclusion numérique. L''idée à défendre : la transition numérique n''est pas seulement technique, elle est aussi territoriale, sociale et stratégique.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Accord CDC / Mistral AI ?',
+      'L''accord annoncé en mai 2026 vise à doter le Groupe d''outils d''IA générative souverains, avec un déploiement important de licences et une IA Factory interne. Trois enjeux sont à citer : souveraineté numérique, maîtrise des données sensibles et transformation des services publics. C''est un bon exemple de modernisation de la CDC sans dépendance totale à des acteurs étrangers.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''est-ce que l''IA Factory ?',
+      'C''est un accélérateur interne du déploiement de l''IA au sein du Groupe. Elle doit aider à identifier les usages, sécuriser les pratiques, accompagner les métiers et diffuser des outils adaptés. À l''oral, il faut insister sur la gouvernance : l''IA doit rester au service des agents, de la qualité du service et de la maîtrise des données.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Souveraineté industrielle ?',
+      'C''est la capacité à maîtriser les filières, technologies, approvisionnements et compétences critiques. Elle ne signifie pas l''autarcie, mais la réduction des dépendances excessives. Elle concerne l''industrie, l''énergie, le numérique, les métaux critiques, la santé ou encore la défense. Pour la Banque des Territoires, elle se traduit souvent par des projets de foncier, d''immobilier, d''infrastructures et de réseaux.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      '3 piliers de souveraineté ?',
+      'On peut retenir souveraineté industrielle, souveraineté numérique et souveraineté énergétique ou monétaire selon l''angle. Dans vos fiches : industrielle, numérique, monétaire. Le plus important est de savoir expliquer : produire, maîtriser les données et infrastructures critiques, et conserver une capacité de décision autonome. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Rapport Varin ?',
+      'Le rapport Varin de 2022 porte sur la sécurisation des approvisionnements en métaux critiques. Il est important car il montre que la transition écologique dépend elle-même de ressources stratégiques : lithium, terres rares, nickel, cobalt, etc. Il relie transition énergétique et souveraineté industrielle. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Plan national terres rares et aimants permanents ?',
+      'Le plan annoncé en mai 2026 vise à structurer une filière française et européenne autour des terres rares et des aimants permanents. Ces matériaux sont indispensables pour les véhicules électriques, les éoliennes, certains équipements électroniques et la défense. L''enjeu est de réduire la dépendance à la Chine, très dominante dans l''extraction et surtout le raffinage.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Usine Caremag ?',
+      'Caremag est un projet de raffinage et recyclage de terres rares à Lacq. Dans la fiche, il est présenté comme stratégique avec un soutien public important. C''est un exemple intéressant car il combine industrie, recyclage, souveraineté, transition écologique et revitalisation territoriale. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Lancement ?',
+      'Le programme Territoires d''industrie a été lancé en 2018 pour soutenir la réindustrialisation dans des bassins industriels identifiés. Il repose sur une gouvernance locale associant élus et industriels, avec l''appui d''opérateurs comme la Banque des Territoires, Bpifrance, Business France et France Travail. L''objectif est d''agir sur le foncier, les compétences, l''innovation et la transition écologique.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi France Travail dans le programme ?',
+      'Parce que la réindustrialisation ne dépend pas seulement du foncier ou des financements. Le recrutement, les compétences et l''attractivité des métiers sont des freins majeurs. Associer France Travail permet de relier projet industriel, emploi local, formation et besoins des entreprises. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que signifie le ZAN et quel est son objectif ?',
+      'Le ZAN signifie Zéro Artificialisation Nette. L''objectif est de réduire puis compenser l''artificialisation des sols, avec une trajectoire vers 2050. Pour l''industrie, le ZAN n''interdit pas le développement, mais il oblige à mieux utiliser le foncier existant, recycler les friches, densifier et justifier les besoins. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Fonds friches existe-t-il toujours ?',
+      'Le Fonds friches a été intégré au Fonds vert. L''enjeu reste le même : aider les collectivités et porteurs de projets à recycler des sites déjà artificialisés, souvent pollués ou complexes, pour éviter de consommer de nouveaux espaces naturels ou agricoles. C''est un levier majeur du lien ZAN-industrie. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Loi Industrie verte ?',
+      'La loi Industrie verte vise à accélérer les implantations industrielles, mobiliser du foncier, simplifier les procédures et soutenir les technologies vertes. La bonne réponse doit être équilibrée : elle répond à un besoin de compétitivité et de souveraineté, mais doit rester compatible avec les exigences environnementales et la concertation locale.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Leviers de décarbonation industrielle ?',
+      'Les leviers principaux sont la sobriété énergétique, l''efficacité, l''électrification, la récupération de chaleur fatale, l''hydrogène bas carbone, le captage-stockage ou utilisation du carbone, et l''adaptation des réseaux. Le foncier, l''eau et l''énergie sont également centraux. La décarbonation est donc un sujet industriel, énergétique et territorial.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'France 2030 ?',
+      'France 2030 est un plan d''investissement destiné à soutenir l''innovation, l''industrie, la transition écologique et la souveraineté. Il finance des secteurs stratégiques comme l''énergie, les batteries, la santé, l''hydrogène, l''agriculture, le numérique ou l''espace. À l''oral, le lien est la transformation à long terme de l''économie française.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'ZIBaC ?',
+      'ZIBaC signifie Zones Industrielles Bas Carbone. Ce sont des démarches territorialisées pour décarboner de grands bassins industriels, en travaillant sur l''énergie, les réseaux, les procédés, la chaleur, l''hydrogène ou le carbone. Les exemples classiques sont Dunkerque et Fos-sur-Mer, avec aussi des zones en Grand Est comme Chemesis et COB30 dans vos fiches.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'CBAM ?',
+      'Le CBAM est le mécanisme européen d''ajustement carbone aux frontières : il vise à éviter les fuites de carbone en appliquant un coût carbone à certaines importations. Fit for 55 est le paquet européen visant à réduire les émissions de gaz à effet de serre de 55 % d''ici 2030. Ces outils montrent que la décarbonation est aussi un enjeu de concurrence et de souveraineté européenne.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi l''eau devient un sujet industriel ?',
+      'Parce que certaines industries consomment beaucoup d''eau : agroalimentaire, chimie, papeterie, semi-conducteurs, énergie. Avec le changement climatique, la disponibilité devient plus incertaine et les conflits d''usage peuvent augmenter. L''industrie doit donc travailler sur la sobriété, le recyclage, la réutilisation des eaux usées traitées et le dialogue territorial.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Plan Eau ?',
+      'Le Plan Eau vise notamment à réduire les prélèvements et à mieux gérer la ressource. Aquagir est un programme de la Banque des Territoires pour accompagner les collectivités dans la gestion durable de l''eau. Le lien à faire : l''eau est à la fois un sujet écologique, économique et de cohésion territoriale. À l''oral, l''actualité doit rester un appui, pas une récitation. Donnez le fait clé, puis expliquez son lien avec la Caisse des Dépôts, la Banque des Territoires, les collectivités ou les politiques publiques. C''est cette mise en perspective qui donne de la valeur à la réponse.
+
+STACK 10 — Élections, collectivités, finances locales, Grand Est et politiques territoriales
+Repères territoriaux : élections, compétences départementales, lois territoriales, EPCI, EPF, DGF, finances départementales, DMTO, AIS, CNRACL, rapport Woerth, Grand Est et industrie.'
+    );
+
+    -- Stack 10: Élections, collectivités, finances locales, Grand Est et politiques territoriales
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 10. Élections, collectivités, finances locales, Grand Est et politiques territoriales',
+      'Élections, collectivités, finances locales, Grand Est et politiques territoriales',
+      '__starter:cdc-attache-v2__:stack-10',
+      16,
+      16,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quand les municipales ?',
+      'Les élections municipales ont eu lieu les 15 et 22 mars 2026. La nouveauté importante à retenir dans les fiches est la généralisation du scrutin de liste paritaire aux communes de moins de 1 000 habitants, à la suite de la loi de mai 2025. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quand les sénatoriales ?',
+      'À retenir : le 27 septembre 2026. Les sénatoriales renouvellent une partie du Sénat, institution qui représente les collectivités territoriales. C''est utile à relier aux enjeux de décentralisation et de représentation des territoires. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quand les élections professionnelles FP ?',
+      'À retenir : le 10 décembre 2026. Elles servent à renouveler les représentants du personnel dans les instances de dialogue social : comités sociaux, CAP, CCP selon les versants et organisations. C''est important pour un jury RH ou dialogue social. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Compétences du département ?',
+      'Le département intervient surtout dans les solidarités : RSA, aide sociale à l''enfance, autonomie, handicap, PMI. Il gère aussi les collèges, les routes départementales et participe au SDIS. C''est l''échelon de la solidarité humaine et territoriale, même si ses finances sont sous tension. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Lois clés sur les collectivités ?',
+      'On peut citer MAPTAM 2014, qui renforce les métropoles, et NOTRe 2015, qui redéfinit les compétences, renforce les régions et supprime la clause de compétence générale des départements et régions. Ces lois illustrent la recherche d''une meilleure répartition des compétences, même si la lisibilité reste discutée. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Clause de compétence générale ?',
+      'C''est la capacité pour une collectivité d''intervenir dans tout domaine présentant un intérêt local, même sans compétence explicitement attribuée. Elle a été supprimée pour les départements et régions par la loi NOTRe, mais conservée pour les communes. L''objectif était de clarifier les compétences, mais cela a aussi réduit la souplesse d''intervention. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''est-ce qu''un EPCI ?',
+      'Un EPCI est un établissement public de coopération intercommunale. Il regroupe plusieurs communes pour exercer des compétences en commun : développement économique, déchets, eau, urbanisme, mobilité selon les cas. Les formes principales sont les communautés de communes, d''agglomération, urbaines et les métropoles. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''est-ce qu''un EPF ?',
+      'Un établissement public foncier accompagne les collectivités dans le portage et la maîtrise du foncier. Il peut acheter, porter, dépolluer ou préparer des terrains en vue de projets publics ou d''aménagement. Dans les politiques de friches, de logement ou d''industrie, les EPF sont des partenaires très importants. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que signifie la DGF ?',
+      'La DGF est la Dotation globale de fonctionnement. La DSIL soutient l''investissement local, notamment des communes et EPCI. La DETR aide l''équipement des territoires ruraux. Le FNADT finance des actions d''aménagement et de développement du territoire, souvent dans des logiques contractualisées. Ces sigles montrent la diversité des financements territoriaux. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Effet ciseaux ?',
+      'L''effet ciseaux désigne une situation où les recettes baissent ou stagnent pendant que les dépenses obligatoires augmentent. Pour les départements, les DMTO ont fortement varié avec le marché immobilier, tandis que les dépenses sociales comme RSA, APA, PCH ou ASE restent contraintes. Cela crée une pression budgétaire forte. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que signifie DMTO et pourquoi est-ce important pour les départements ?',
+      'Les droits de mutation à titre onéreux correspondent à une partie des frais payés lors des transactions immobilières. Ils constituent une recette importante mais très volatile pour les départements. Quand le marché immobilier ralentit, les recettes départementales se contractent rapidement. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Que signifie AIS dans les finances départementales ?',
+      'Les allocations individuelles de solidarité regroupent notamment le RSA, l''APA et la PCH. Elles sont essentielles socialement, mais elles pèsent fortement sur les finances départementales. La question récurrente est le niveau de compensation par l''État et la soutenabilité pour les départements. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Qu''est-ce que la CNRACL ?',
+      'La CNRACL est la caisse de retraite des fonctionnaires territoriaux et hospitaliers. Son équilibre financier est un sujet important pour les collectivités, car les cotisations employeurs ont un impact direct sur les budgets locaux. Cela montre que les finances locales sont aussi touchées par des dynamiques nationales. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Rapport Woerth ?',
+      'Le rapport Woerth, remis en 2024, porte sur la décentralisation et la confiance. Il propose de clarifier les compétences, consolider les moyens et faciliter l''exercice des mandats. On peut retenir la logique : bloc communal pour la proximité, département pour les solidarités et la résilience, région pour l''économie et la planification écologique. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Président de la Région Grand Est ?',
+      'À retenir : Franck Leroy, président de la Région Grand Est depuis 2023. À relier à votre contexte territorial : région industrielle historique, transfrontalière, avec des enjeux de sidérurgie, métallurgie, friches, décarbonation et compétences. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Spécificité industrielle Grand Est ?',
+      'Le Grand Est est une région industrielle historique avec une forte présence de la métallurgie, de la chimie, de la sidérurgie et de bassins transfrontaliers. Elle concentre aussi des friches et des enjeux de reconversion. C''est donc un territoire très pertinent pour parler de réindustrialisation, décarbonation et souveraineté. Pour retenir ce bloc, pensez toujours au lien compétences / financement / territoire. Les collectivités ont des compétences, mais aussi des contraintes budgétaires, foncières, sociales et environnementales. Un attaché doit comprendre ces contraintes pour proposer une réponse réaliste, pas seulement juridiquement correcte. « La bonne décision publique est celle qui tient compte à la fois du cadre juridique, de la soutenabilité financière, de l''impact territorial et de l''acceptabilité par les acteurs locaux. »
+
+STACK 11 — Déontologie, aides publiques, intérêt général et sécurité juridique'
+    );
+
+    -- Stack 11: Déontologie, aides publiques, intérêt général et sécurité juridique
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 11. Déontologie, aides publiques, intérêt général et sécurité juridique',
+      'Déontologie, aides publiques, intérêt général et sécurité juridique',
+      '__starter:cdc-attache-v2__:stack-11',
+      12,
+      12,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Aider une entreprise privée avec de l''argent public ?',
+      'Oui, si l''aide répond à un intérêt général clairement identifié et respecte le cadre juridique. Il faut des critères objectifs, une proportionnalité, une traçabilité, des contreparties et une absence de favoritisme. Le soutien public à une entreprise privée peut être justifié lorsqu''il sert l''emploi, la transition écologique, l''innovation, la souveraineté ou l''aménagement du territoire.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Effet d''aubaine, comment l''éviter ?',
+      'Par trois principes : additionnalité, conditionnalité et évaluation. Additionnalité : l''argent public permet quelque chose qui ne se ferait pas autrement ou pas dans les mêmes conditions. Conditionnalité : l''aide est liée à des engagements vérifiables. Évaluation : on suit les résultats et on peut corriger si les engagements ne sont pas tenus.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Aides publiques aux entreprises : limite ?',
+      'Elles doivent respecter le droit des aides d''État, la concurrence, la transparence, la proportionnalité et l''intérêt général. Le cadre public ne doit pas financer sans condition un risque privé. Il doit soutenir un projet utile, avec des garanties et une analyse du risque. sur les questions sensibles, la bonne réponse commence souvent par « j''objective », « je trace », « j''alerte » et « je propose une option sécurisée ». Cela montre une posture de cadre public responsable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Conflit d''intérêts ?',
+      'C''est une situation dans laquelle un intérêt personnel, familial, financier ou relationnel peut influencer ou sembler influencer l''exercice impartial d''une mission publique. La bonne réaction est de signaler, tracer, demander conseil et se déporter si nécessaire. La transparence protège l''agent autant que l''institution. sur les questions sensibles, la bonne réponse commence souvent par « j''objective », « je trace », « j''alerte » et « je propose une option sécurisée ». Cela montre une posture de cadre public responsable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Neutralité du cadre public ?',
+      'C''est traiter les agents, usagers, partenaires et porteurs de projets selon des critères objectifs, sans favoritisme, pression ou préférence personnelle. La neutralité n''empêche pas d''accompagner activement un projet, mais elle impose de le faire dans le cadre applicable et avec des critères transparents. sur les questions sensibles, la bonne réponse commence souvent par « j''objective », « je trace », « j''alerte » et « je propose une option sécurisée ». Cela montre une posture de cadre public responsable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Intérêt général ?',
+      'L''intérêt général dépasse la somme des intérêts particuliers. Il est défini par la puissance publique au nom de la collectivité. Dans un dossier territorial, il peut se traduire par l''emploi, la cohésion sociale, la transition écologique, la revitalisation, l''accès aux services ou la souveraineté. Mais il doit être argumenté, pas simplement invoqué.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Élu + projet fragile ?',
+      'Je ne bloque pas par principe, mais je ne maquille pas le risque. J''objective le dossier, j''identifie les fragilités, je propose des conditions, un phasage, des garanties ou des alternatives. J''alerte par écrit si nécessaire. Le rôle du cadre public est d''aider à décider, pas de transformer un dossier fragile en dossier artificiellement sécurisé.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Commande publique et industrie ?',
+      'Elle peut intégrer des critères environnementaux, sociaux, d''innovation, de qualité ou de performance, mais elle ne peut pas favoriser illégalement un acteur local. Il faut respecter les principes de liberté d''accès, égalité de traitement et transparence. La commande publique peut être stratégique sans devenir discriminatoire. sur les questions sensibles, la bonne réponse commence souvent par « j''objective », « je trace », « j''alerte » et « je propose une option sécurisée ». Cela montre une posture de cadre public responsable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Acceptabilité industrielle ?',
+      'C''est la capacité d''un projet industriel à être compris, discuté et accepté par son territoire. Elle suppose transparence, concertation, maîtrise des impacts, bénéfices locaux démontrés et réponse aux inquiétudes. Sans acceptabilité, même un projet stratégique peut être bloqué ou fragilisé. sur les questions sensibles, la bonne réponse commence souvent par « j''objective », « je trace », « j''alerte » et « je propose une option sécurisée ». Cela montre une posture de cadre public responsable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Simplification administrative ?',
+      'Simplifier ne doit pas vouloir dire supprimer les garanties. Une bonne simplification rend les procédures plus lisibles, les délais plus prévisibles et les responsabilités plus claires. Elle sécurise les porteurs de projets comme l''administration. La mauvaise simplification serait de réduire le contrôle ou la concertation au détriment de l''intérêt général.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Cycle complet d''un dossier ?',
+      'C''est l''ensemble des étapes : diagnostic, définition des objectifs, montage juridique et financier, arbitrage, décision, mise en œuvre, suivi et évaluation. Un attaché doit être capable de comprendre ce cycle, même s''il n''agit pas seul à chaque étape. sur les questions sensibles, la bonne réponse commence souvent par « j''objective », « je trace », « j''alerte » et « je propose une option sécurisée ». Cela montre une posture de cadre public responsable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Un échec ?',
+      'La bonne réponse est oui, car tous les projets n''aboutissent pas. L''important est de montrer ce qu''on en retire : meilleure analyse des risques, attention aux partenaires, besoin de calendrier réaliste, importance des critères ou des contreparties. Un échec assumé et analysé peut renforcer la maturité professionnelle. sur les questions sensibles, la bonne réponse commence souvent par « j''objective », « je trace », « j''alerte » et « je propose une option sécurisée ». Cela montre une posture de cadre public responsable.
+
+STACK 12 — Réorganisation CD54, motivation personnelle, lignes de défense et phrases pivots
+Cartes personnalisées pour défendre le parcours : réorganisation, critères, charge de travail, CT, syndicats, équité, management transversal, motivation, décarbonation, lignes de défense et phrases pivots.'
+    );
+
+    -- Stack 12: Réorganisation CD54, motivation personnelle, lignes de défense et phrases pivots
+    INSERT INTO public.flashcard_decks
+      (user_id, name, description, source_pdf_name, total_cards, new_count, due_count)
+    VALUES (
+      target_user_id,
+      'CDC 12. Réorganisation CD54, motivation personnelle, lignes de défense et phrases pivots',
+      'Réorganisation CD54, motivation personnelle, lignes de défense et phrases pivots',
+      '__starter:cdc-attache-v2__:stack-12',
+      23,
+      23,
+      0
+    ) RETURNING id INTO v_deck_id;
+
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi avez-vous lancé cette réorganisation ?',
+      'Le contexte était contraint : baisse des effectifs, départs non remplacés, nécessité de maintenir la continuité du service et écarts importants de charge entre agents. L''objectif n''était pas de réorganiser pour réorganiser, mais de rétablir un fonctionnement plus équitable, plus lisible et plus soutenable.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Combien d''agents encadrés ?',
+      'À retenir : une vingtaine d''agents, répartis sur plusieurs sites du territoire de Nancy-Couronne. Ce point est important pour montrer que votre expérience n''était pas seulement administrative : elle impliquait de la coordination, du management, des situations individuelles et du multi-sites.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Sur quels critères avez-vous bâti la réorganisation ?',
+      'Sur des critères objectivables : volumes d''activité, complexité des dossiers, situations individuelles, ancienneté quand elle éclairait l''expertise, contraintes de site et continuité de service. Les critères étaient pondérés et partagés, pour éviter que la décision soit perçue comme arbitraire.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment avez-vous objectivé la charge de travail ?',
+      'Par un diagnostic interne croisant les volumes traités, la nature des dossiers, les temps moyens, les contraintes de site et les situations individuelles. L''idée était de ne pas se fonder uniquement sur les ressentis. Une lecture quantitative seule aurait été insuffisante ; il fallait aussi une lecture qualitative.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel a été le rôle du CT ?',
+      'À l''époque, le Comité technique devait être saisi pour avis car le projet touchait à l''organisation du service. Aujourd''hui, un projet comparable relèverait du CST. Le rôle de l''instance est de permettre le dialogue social, d''entendre les représentants du personnel et de sécuriser la procédure.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment avez-vous associé les syndicats en amont ?',
+      'Par des échanges avant la séance, le partage des critères, l''explication de la pondération et l''attention aux situations individuelles sensibles. L''objectif était d''éviter l''effet de surprise et de permettre une discussion utile. Cette méthode a contribué à limiter l''opposition frontale.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Avez-vous rencontré une opposition ?',
+      'Il y a eu des questions et des inquiétudes, ce qui est normal dans une réorganisation. Mais l''opposition a été contenue car les critères étaient explicites, discutables et présentés en amont. La transparence ne supprime pas toutes les tensions, mais elle protège la décision.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Comment avez-vous géré les agents les plus impactés ?',
+      'Par des entretiens individuels, une écoute des contraintes, un accompagnement adapté et un calendrier suffisamment clair. Une réorganisation ne se réussit pas seulement sur un organigramme ; elle se réussit dans l''accompagnement réel des personnes qui voient leur quotidien changer.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel enseignement principal ?',
+      'La transparence des critères protège la décision. Sans critères explicites, une réorganisation est vite perçue comme arbitraire ou personnelle. J''en retiens aussi qu''il faut associer tôt, expliquer souvent et accepter d''ajuster sans perdre le cap.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Différence égalité / équité ?',
+      'L''égalité consiste à traiter tout le monde de la même manière. L''équité consiste à prendre en compte des situations différentes pour parvenir à une justice réelle. Dans une réorganisation, j''ai privilégié l''équité, mais en l''objectivant par des critères ; sinon, l''équité peut être perçue comme du favoritisme.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Coordination ≠ management ?',
+      'Ce n''est pas exactement la même chose, mais les compétences sont proches. La coordination suppose de donner un cap, faire converger, gérer les délais, arbitrer et mobiliser. Le management ajoute une responsabilité hiérarchique, d''évaluation et d''accompagnement individuel. Mon expérience transversale renforce donc ma légitimité managériale.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi attachée maintenant ?',
+      'J''ai attendu le bon moment. Mon parcours m''a donné une expérience solide des collectivités, du management, des projets territoriaux et de la Banque des Territoires. Aujourd''hui, j''ai la maturité professionnelle et la disponibilité personnelle pour assumer davantage de responsabilités. Je souhaite que le grade corresponde pleinement aux fonctions de conception, de pilotage et de sécurisation que j''exerce ou que je vise.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quel poste à terme ?',
+      'À terme, je souhaite exercer des fonctions couvrant l''ensemble du cycle d''un dossier : diagnostic, montage, décision, mise en œuvre, suivi et évaluation. Je m''intéresse particulièrement aux sujets de décarbonation industrielle, de foncier, d''énergie et de souveraineté territoriale. Je souhaite aussi retrouver progressivement de l''encadrement, car j''aime faire progresser un collectif.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Pourquoi la décarbonation industrielle ?',
+      'Parce qu''elle est au cœur de la transformation actuelle des territoires. Elle croise l''industrie, l''énergie, le foncier, l''eau, les compétences, les infrastructures et l''acceptabilité locale. C''est un sujet très concret où la Banque des Territoires peut jouer un rôle d''assemblier et de financeur du long terme.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      '« Vous racontez des réussites collectives, pas votre rôle perso ? »',
+      'C''est volontaire : un projet territorial est toujours collectif. Mais mon rôle est identifiable : repérer les leviers, coordonner les acteurs, sécuriser le montage, faire converger les positions et tenir les délais. Je ne m''attribue pas seule les résultats, mais j''assume ma contribution à leur réussite.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      '« Vous avez quitté le management, êtes-vous encore légitime ? »',
+      'Oui, car j''anime en permanence des collectifs de travail et des partenariats. Le management hiérarchique n''est pas la seule forme de leadership. Mon expérience actuelle m''a donné du recul, une maturité dans la coordination et une capacité à travailler avec des acteurs variés. Elle complète mon expérience antérieure d''encadrement.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      '« Vous êtes très orientée éco, prête pour d''autres politiques ? »',
+      'Oui. Mes compétences sont transversales : analyse d''écosystème, coordination, montage financier, relation partenariale, sécurisation et conduite de projet. Par ailleurs, mon parcours au CD54 m''a exposée à des politiques sociales, aux collèges, à la voirie et à l''organisation territoriale. Je ne suis pas enfermée dans un seul champ.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      '« La BdT prend-elle trop de risques ? »',
+      'Elle prend des risques mesurés, là où le marché ne va pas toujours seul. La différence est la méthode : analyse du risque, contreparties, traçabilité, cofinancements, suivi et utilité territoriale. Le rôle d''un acteur public de long terme n''est pas d''éviter tout risque, mais de prendre des risques justifiés et sécurisés au service de l''intérêt général.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      '« Le Coq Sportif n''est pas une vraie réussite ? »',
+      'Sur l''opération initiale, on peut défendre la réussite : site agrandi, projet industriel accompagné, emplois préservés à un moment donné. Mais la suite montre qu''un projet immobilier ou territorial ne règle pas à lui seul le modèle économique d''une entreprise. C''est une réponse lucide : l''action publique peut créer les conditions, mais elle ne remplace pas la viabilité économique.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      '« Vous mobilisez les bons leviers : ce n''est pas contourner les procédures ? »',
+      'Au contraire. Mobiliser les bons leviers, c''est connaître précisément les dispositifs, leurs conditions et leurs procédures pour orienter un dossier vers le bon outil au bon moment. Contourner serait ignorer le cadre ; sécuriser, c''est utiliser le cadre intelligemment.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelle phrase pivot utiliser pour présenter le fil rouge de votre parcours ?',
+      'Mon fil rouge, c''est la transformation des territoires : transition écologique, souveraineté industrielle et numérique, cohésion territoriale. La Banque des Territoires intervient précisément à l''intersection de ces enjeux.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelle phrase pivot utiliser pour présenter votre posture professionnelle ?',
+      'Mon rôle n''est pas de présenter des dossiers parfaits, mais de construire une réponse publique utile, sécurisée et partenariale.'
+    );
+    INSERT INTO public.flashcard_cards (deck_id, user_id, card_type, front, back) VALUES (
+      v_deck_id,
+      target_user_id,
+      'basic',
+      'Quelle réponse pivot utiliser face à ce jury pour résumer votre posture de cadre public ?',
+      'Mon parcours m''a appris qu''un cadre public doit être à la fois opérationnel et sécurisant : comprendre le terrain, respecter le statut, associer le dialogue social, tracer les décisions et mobiliser les expertises quand c''est nécessaire.'
+    );
+
+    v_done := v_done + 1;
+  END LOOP;
+  RAISE NOTICE 'Done: % users updated', v_done;
+END $$;

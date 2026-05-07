@@ -1,0 +1,55 @@
+{
+  "stack_number": 1,
+  "cards": [
+    {
+      "n": 1,
+      "front": "Vous êtes chef de bureau à la Caisse des Dépôts. Vous avez dans votre équipe plusieurs agents de catégories B et un agent de catégorie C. Ce dernier est particulièrement performant mais ne respecte pas les horaires du service. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
+      "back": "Je ne laisse pas la performance justifier un passe-droit. Je commence par objectiver les faits : horaires constatés, fréquence, impact sur l'équipe et sur la continuité du service. Ensuite, je reçois l'agent en entretien individuel, de manière calme, pour comprendre la cause : contrainte personnelle, problème d'organisation, perte de repère, ou simple relâchement. Je rappelle ensuite le cadre collectif : les horaires s'appliquent à tous, quelle que soit la catégorie ou le niveau de performance. Si une difficulté personnelle existe, je cherche une solution compatible avec le service, par exemple un aménagement formalisé, mais jamais une tolérance informelle. Je trace l'échange, fixe un objectif clair de régularisation et prévois un point de suivi. Si le comportement persiste, j'en informe ma hiérarchie et les RH pour appliquer une réponse graduée. équité, fermeté proportionnée, absence de favoritisme."
+    },
+    {
+      "n": 2,
+      "front": "Des collaborateurs se prêtent leurs cartes de pointage. Que faites-vous ?",
+      "back": "C'est un sujet grave, parce qu'il touche à la probité, au temps de travail et à la confiance. Je ne lance pas d'accusation publique : je vérifie les faits, je rassemble des éléments objectifs et j'alerte rapidement ma hiérarchie et les RH, car cela peut relever d'une procédure disciplinaire. Je rappelle immédiatement que le pointage est personnel et qu'il engage la responsabilité de chacun. Ensuite, je reçois les agents concernés séparément, pour comprendre sans banaliser. Si les faits sont avérés, il faut mettre fin à la pratique, régulariser la situation si besoin et appliquer la procédure adaptée. Je veille aussi à prévenir la répétition : rappel écrit des règles, sensibilisation de l'équipe et contrôle renforcé temporaire. probité, traçabilité, refus de la fraude, pas de règlement de comptes."
+    },
+    {
+      "n": 3,
+      "front": "Un de vos agents sort 10 fois par jour pour une pause cigarette, que faites-vous ?",
+      "back": "Je traite le sujet non comme une question morale, mais comme une question d'organisation du travail et d'égalité entre agents. Je commence par observer les faits : fréquence, durée, impact sur les collègues et sur les délais. Je reçois l'agent en entretien individuel, car il peut y avoir une dépendance, un stress ou un problème de charge. Je rappelle le cadre : les pauses doivent rester compatibles avec le fonctionnement du service et ne pas créer de déséquilibre avec les autres agents. Je peux proposer un cadre plus clair, par exemple regrouper les pauses à des moments définis, et orienter vers le médecin du travail ou les dispositifs de prévention si l'agent exprime une difficulté. Si malgré le rappel le comportement se poursuit, je passe à une réponse managériale graduée. équilibre entre bienveillance, santé au travail et continuité du service."
+    },
+    {
+      "n": 4,
+      "front": "Vous devez présider une réunion sur un sujet que vous ne maîtrisez pas et vous avez une semaine pour vous préparer. Comment procédez-vous ?",
+      "back": "Je ne cherche pas à donner l'illusion de maîtriser ce que je ne maîtrise pas. Je clarifie d'abord l'objectif de la réunion : informer, arbitrer, décider ou coordonner. Je récupère les documents existants, j'identifie les points sensibles et je rencontre rapidement les personnes expertes du sujet. Ensuite, je prépare un ordre du jour simple, une fiche de synthèse, les décisions attendues et les questions probables. Pendant la réunion, j'assume mon rôle de présidence : faire avancer les échanges, distribuer la parole, reformuler, faire préciser les points techniques par les experts et conclure sur des décisions claires. Après la réunion, je diffuse un relevé de décisions et les suites à donner. humilité, méthode, capacité à mobiliser l'expertise."
+    },
+    {
+      "n": 5,
+      "front": "Un bureau se libère à côté de celui des agents (ils sont 4). Ils veulent tous le bureau, comment allez-vous procéder ?",
+      "back": "Je ne transforme pas l'attribution du bureau en récompense personnelle. Je commence par définir des critères objectifs liés au service : confidentialité des missions, accueil du public, besoin de concentration, contraintes médicales éventuelles, ancienneté seulement si elle est pertinente, et organisation collective. Je peux demander aux agents d'exprimer leurs besoins, mais je rappelle que la décision relève de l'intérêt du service. Si aucun critère ne départage clairement, je peux envisager une rotation ou une affectation temporaire réévaluable. L'important est d'expliquer la méthode avant la décision, pour éviter le sentiment d'arbitraire. transparence, critères objectifs, décision assumée."
+    },
+    {
+      "n": 6,
+      "front": "Un agent arrive tous les matins de bonne heure et vous constatez que ce matin il n'est pas là, que faites- vous ?",
+      "back": "Je ne dramatise pas immédiatement, mais je réagis avec vigilance, car un changement brutal d'habitude peut signaler un problème. Je vérifie d'abord les informations simples : congé posé, rendez-vous, télétravail, message éventuel, erreur de planning. Si aucune information n'apparaît, je tente de le joindre par les moyens professionnels habituels. En l'absence de réponse et selon la situation, j'informe ma hiérarchie ou les RH, notamment si un risque de sécurité ou de santé est possible. Quand l'agent revient, je fais un point factuel et bienveillant : soit il y a une explication simple, soit il faut régulariser l'absence et comprendre si une difficulté existe. attention aux signaux faibles, ni soupçon excessif ni indifférence."
+    },
+    {
+      "n": 7,
+      "front": "Vous constatez un vol de matériel dans votre service. Que faites-vous ?",
+      "back": "Je sécurise d'abord la situation : identifier précisément le matériel manquant, vérifier qu'il ne s'agit pas d'une erreur de rangement ou de prêt non enregistré, et éviter les accusations hâtives. J'informe immédiatement ma hiérarchie et, selon les procédures internes, les services compétents : moyens généraux, sécurité, RH, voire service juridique. Je dresse un état factuel : date, lieu, matériel, personnes éventuellement concernées, circonstances. Si un vol est confirmé, la décision d'une plainte ou d'une procédure disciplinaire se prend avec la hiérarchie et les services compétents. Je rappelle ensuite les règles de gestion du matériel et je renforce si besoin les procédures d'inventaire. prudence, faits, protection du collectif, procédure."
+    },
+    {
+      "n": 8,
+      "front": "Un agent refuse de porter son masque, prétextant des problèmes d'allergies. Comment réagissez-vous ?",
+      "back": "Je commence par écouter l'agent et je ne nie pas sa difficulté. Mais si le port du masque est obligatoire dans le contexte, je dois protéger l'ensemble du collectif et appliquer les règles sanitaires. Je demande à l'agent de formaliser sa difficulté et j'oriente vers le médecin du travail ou la médecine de prévention pour rechercher une solution adaptée : type de masque différent, aménagement de poste, télétravail temporaire si possible, ou organisation évitant l'exposition. En attendant, l'agent ne peut pas décider seul de s'exonérer d'une règle collective. Je trace l'échange et j'associe les RH si nécessaire. bienveillance sans renoncer à la sécurité collective."
+    },
+    {
+      "n": 9,
+      "front": "Vous allez assister à une réunion avec les directions. Vous avez préparé cette réunion avec votre manager. Vous vous rendez-compte que ce dernier se trompe sur un point pendant la réunion. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
+      "back": "Je distingue deux cas. Si l'erreur a un impact important sur la décision, le risque juridique, financier ou l'image du service, j'interviens avec tact : 'Sauf erreur de ma part, il me semble que le point avait été cadré autrement ; je propose qu'on le reprécise.' L'objectif est de sécuriser l'information, pas de mettre mon manager en difficulté. Si l'erreur est mineure ou sans effet immédiat, je prends note et je lui en parle après la réunion. Dans tous les cas, je reste loyal : la loyauté n'est pas le silence face à une erreur, c'est la capacité à alerter de façon professionnelle. loyauté intelligente, courage mesuré, sécurité de la décision."
+    },
+    {
+      "n": 10,
+      "front": "La période du planning des congés annuels arrive. Un nouvel arrivant dans l'équipe (famille monoparentale) souhaite impérativement la semaine de Noël. Vous devez assurer la continuité de votre service. Que faites-vous ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
+      "back": "Je commence par poser le cadre : les congés doivent concilier situations personnelles, équité entre agents et continuité du service. Je recueille l'ensemble des souhaits de l'équipe, je regarde les contraintes de service et les précédents : qui a eu Noël les années passées, quelles compétences doivent être présentes, quelles permanences sont indispensables. La situation de famille monoparentale est un élément à prendre en compte au titre de l'équité, mais elle ne crée pas automatiquement un droit absolu. Je recherche une solution : rotation, partage de la période, présence allégée, télétravail si possible, ou échange volontaire. J'explique la décision et je la formalise, pour éviter le sentiment de favoritisme. équité, continuité, attention aux situations individuelles sans arbitraire.\n\nSTACK 2 — Posture personnelle, qualités managériales et rapport au travail"
+    }
+  ]
+}

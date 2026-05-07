@@ -6,6 +6,7 @@ import {
   createQuestionListingPrompt,
 } from '@/lib/prompts'
 import { countQuestions } from '@/lib/question-counter'
+import { parseStructuredCards } from '@/lib/structured-source-parser'
 
 export const runtime = 'nodejs'
 export const maxDuration = 180
@@ -99,12 +100,20 @@ export async function POST(request: NextRequest) {
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // Strategy A — deterministic multi-strategy parser (no LLM)
-    //   We run it on the FULL text (up to 1.5MB) so that very long numbered
-    //   pastes are still counted correctly. Truncating before this step is
-    //   what caused "244 cards → 105 detected" on long inputs.
+    // Strategy A0 — STRUCTURED parser (deterministic, no LLM).
+    //   This is the most reliable signal: if the source has explicit
+    //   "CARTE 001 / Question: ... / Réponse: ..." blocks, we know the
+    //   exact count down to the unit. This count will be the ground truth
+    //   for the generate step too — it will use the parser directly.
     // ────────────────────────────────────────────────────────────────────
     const detText = text.slice(0, DETERMINISTIC_MAX_CHARS)
+    const structuredCards = parseStructuredCards(detText)
+    console.log(`[Flashcards/Analyze] Structured parser found ${structuredCards.length} paired Q/A cards`)
+
+    // ────────────────────────────────────────────────────────────────────
+    // Strategy A — deterministic multi-strategy parser (no LLM)
+    //   Falls back to question-counter when no paired Q/A structure exists.
+    // ────────────────────────────────────────────────────────────────────
     const detected = countQuestions(detText)
     console.log(
       `[Flashcards/Analyze] Deterministic on ${detText.length} chars (full=${text.length}):`,
@@ -212,7 +221,12 @@ export async function POST(request: NextRequest) {
 
     let finalCount: number
     let countSource: string
-    if (bestStrategy && bestStrategy.confidence >= 0.6) {
+
+    if (structuredCards.length >= 5) {
+      // Highest confidence: paired Q/A structure detected.
+      finalCount = structuredCards.length
+      countSource = 'structured-parser'
+    } else if (bestStrategy && bestStrategy.confidence >= 0.6) {
       finalCount = Math.max(bestStrategy.count, llmCount)
       countSource = bestStrategy.count >= llmCount ? `det:${bestStrategy.name}` : 'det+llm:max'
     } else {
@@ -229,7 +243,11 @@ export async function POST(request: NextRequest) {
       .map(([t]) => t)
 
     let noiseSummary = ''
-    if (
+    if (countSource === 'structured-parser') {
+      const prefix = structuredCards[0]?.prefix?.toUpperCase()
+      const prefixLabel = prefix ? ` ("${prefix} N…")` : ''
+      noiseSummary = `Detected ${finalCount} ready-made cards${prefixLabel} with paired questions and answers. The cards will be created VERBATIM from the source — no AI rewriting.`
+    } else if (
       countSource.startsWith('det:line-prefix') ||
       countSource.startsWith('det:inline') ||
       countSource.startsWith('det:any-prefix')
@@ -257,6 +275,7 @@ export async function POST(request: NextRequest) {
         raw_listed: allListed.length,
         unique_listed: llmCount,
         deterministic: detected,
+        structured_cards: structuredCards.length,
         count_source: countSource,
         det_chars: detText.length,
         llm_chars: trimmed.length,

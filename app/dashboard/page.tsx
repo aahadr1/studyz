@@ -45,6 +45,19 @@ export default function DashboardPage() {
 
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
+        // Fire-and-forget: ensure every account has the default CDC starter deck.
+        // The API is idempotent server-side; the sessionStorage gate just
+        // avoids unnecessary calls within the same browser session.
+        try {
+          if (typeof window !== 'undefined' && !sessionStorage.getItem('starter_deck_checked')) {
+            sessionStorage.setItem('starter_deck_checked', '1')
+            fetch('/api/starter-deck/seed', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${session.access_token}` },
+            }).catch(() => { /* silent */ })
+          }
+        } catch { /* sessionStorage may be unavailable in private mode */ }
+
         const [interactiveRes, mcqRes, flashcardsRes] = await Promise.all([
           fetch('/api/interactive-lessons', { headers: { 'Authorization': `Bearer ${session.access_token}` }}),
           fetch('/api/mcq/list', { headers: { 'Authorization': `Bearer ${session.access_token}` }}),

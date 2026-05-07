@@ -1,0 +1,93 @@
+{
+  "deck_name": "Flashcards Oral CDC / Attaché",
+  "deck_description": "244 flashcards classées en 12 stacks pour préparer l'oral CDC / Attaché.",
+  "language": "fr",
+  "version": "2.0.0",
+  "total_cards": 244,
+  "stacks": [
+    {
+      "number": 1,
+      "title": "Mises en situation managériales du quotidien",
+      "card_range": "001-010",
+      "card_count": 10,
+      "file": "stack-01.json"
+    },
+    {
+      "number": 2,
+      "title": "Posture personnelle, qualités managériales et rapport au travail",
+      "card_range": "011-038",
+      "card_count": 28,
+      "file": "stack-02.json"
+    },
+    {
+      "number": 3,
+      "title": "Questions d'opinion, société, actualité et argumentation",
+      "card_range": "039-074",
+      "card_count": 36,
+      "file": "stack-03.json"
+    },
+    {
+      "number": 4,
+      "title": "Mises en situation complexes et prise de poste",
+      "card_range": "075-085",
+      "card_count": 11,
+      "file": "stack-04.json"
+    },
+    {
+      "number": 5,
+      "title": "Parcours, RHP et compétences comportementales",
+      "card_range": "086-095",
+      "card_count": 10,
+      "file": "stack-05.json"
+    },
+    {
+      "number": 6,
+      "title": "Connaissances administratives générales et institutions",
+      "card_range": "096-106",
+      "card_count": 11,
+      "file": "stack-06.json"
+    },
+    {
+      "number": 7,
+      "title": "Groupe Caisse des Dépôts, Banque des Territoires, métiers, gouvernance et histoire",
+      "card_range": "107-134",
+      "card_count": 28,
+      "file": "stack-07.json"
+    },
+    {
+      "number": 8,
+      "title": "Statut, fonction publique, obligations, dialogue social et RH",
+      "card_range": "135-165",
+      "card_count": 31,
+      "file": "stack-08.json"
+    },
+    {
+      "number": 9,
+      "title": "Actualité gouvernementale, transition écologique, industrie, numérique et souveraineté",
+      "card_range": "166-193",
+      "card_count": 28,
+      "file": "stack-09.json"
+    },
+    {
+      "number": 10,
+      "title": "Élections, collectivités, finances locales, Grand Est et politiques territoriales",
+      "card_range": "194-209",
+      "card_count": 16,
+      "file": "stack-10.json"
+    },
+    {
+      "number": 11,
+      "title": "Déontologie, aides publiques, intérêt général et sécurité juridique",
+      "card_range": "210-221",
+      "card_count": 12,
+      "file": "stack-11.json"
+    },
+    {
+      "number": 12,
+      "title": "Réorganisation CD54, motivation personnelle, lignes de défense et phrases pivots",
+      "card_range": "222-244",
+      "card_count": 23,
+      "file": "stack-12.json"
+    }
+  ]
+}

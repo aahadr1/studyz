@@ -9,6 +9,8 @@ import {
   ANSWER_GENERATION_SYSTEM_PROMPT,
   createAnswerGenerationPrompt,
 } from '@/lib/prompts'
+import { parseStructuredCards } from '@/lib/structured-source-parser'
+import { consolidateThemes, type CardForGrouping } from '@/lib/theme-consolidator'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -24,8 +26,8 @@ const EXTRACTION_CHUNK_OVERLAP = 700    // overlap between consecutive chunks (a
 // Phase 2 — answers
 const ANSWER_BATCH_SIZE = 12            // number of questions per answer-generation call (smaller = more accurate)
 const ANSWER_SOURCE_BUDGET = 30_000     // max source-text chars sent to phase-2 calls (truncated if larger)
-// Hard input cap (server-side safety)
-const MAX_INPUT_CHARS = 200_000
+// Hard input cap (server-side safety) — generous enough for ~500 cards × ~3KB each
+const MAX_INPUT_CHARS = 1_500_000
 
 // ────────────────────────────────────────────────────────────────────────────
 // Supabase admin client + OpenAI lazy init
@@ -183,16 +185,33 @@ async function extractQuestionsFromText(
     }
   }
 
-  // Dedupe + clamp at MAX_QUESTIONS, then assign GLOBAL clean numbering
-  const seen = new Set<string>()
+  // Dedupe with multiple keys to handle overlap-induced duplicates:
+  //   1. original_number  (the source's own numbering — most trustworthy)
+  //   2. first ~80 chars of the original_question (defends against rewrite drift)
+  //   3. full rewritten question
+  // Then clamp at MAX_QUESTIONS and assign GLOBAL clean numbering.
+  const seenNumbers = new Set<string>()
+  const seenOriginalPrefixes = new Set<string>()
+  const seenRewritten = new Set<string>()
   const deduped: ExtractedQuestion[] = []
   for (const q of all) {
     const original = String(q.original_question || '').trim()
     const rewritten = String(q.rewritten_question || original).trim()
     if (!rewritten || rewritten.length < 5) continue
-    const key = normaliseForDedup(rewritten)
-    if (seen.has(key)) continue
-    seen.add(key)
+
+    const numKey = (q.original_number || '').toString().trim()
+    if (numKey && seenNumbers.has(numKey)) continue
+
+    const originalPrefix = normaliseForDedup(original).slice(0, 80)
+    if (originalPrefix.length >= 20 && seenOriginalPrefixes.has(originalPrefix)) continue
+
+    const rewrittenKey = normaliseForDedup(rewritten)
+    if (seenRewritten.has(rewrittenKey)) continue
+
+    if (numKey) seenNumbers.add(numKey)
+    if (originalPrefix.length >= 20) seenOriginalPrefixes.add(originalPrefix)
+    seenRewritten.add(rewrittenKey)
+
     deduped.push({
       original_question: original || rewritten,
       rewritten_question: rewritten,
@@ -203,13 +222,25 @@ async function extractQuestionsFromText(
     if (deduped.length >= MAX_QUESTIONS) break
   }
 
+  // If phase 0 told us how many to expect, enforce it as a hard cap on the
+  // output of phase 1. We never want to produce MORE cards than the user's
+  // detected count — that's where "244 → 449" came from.
+  const expected = context?.expectedCount ?? null
+  let final = deduped
+  if (typeof expected === 'number' && expected > 0 && deduped.length > expected) {
+    console.log(
+      `[Flashcards/Phase1] Trimming ${deduped.length} → ${expected} to match phase-0 expected count`
+    )
+    final = deduped.slice(0, expected)
+  }
+
   // Global clean numbering 1..N (overrides anything the model produced)
-  deduped.forEach((q, idx) => {
+  final.forEach((q, idx) => {
     q.clean_number = idx + 1
   })
 
-  console.log(`[Flashcards/Phase1] Total unique questions kept: ${deduped.length}`)
-  return deduped
+  console.log(`[Flashcards/Phase1] Total unique questions kept: ${final.length}`)
+  return final
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -256,7 +287,12 @@ async function generateAnswersForQuestions(
 
       const raw = response.choices[0]?.message?.content || ''
       const parsed = safeJsonParse<{ cards: RawCard[] }>(raw, { cards: [] })
-      const list = Array.isArray(parsed.cards) ? parsed.cards : []
+      const rawList = Array.isArray(parsed.cards) ? parsed.cards : []
+
+      // SAFETY: never accept more cards than questions in the batch. If the
+      // model returns extras (or fewer), trim/pad accordingly. This is the
+      // hard guarantee that "N questions → at most N cards" per batch.
+      const list = rawList.slice(0, batch.length)
 
       // Re-attach theme + clean_number from phase 1, and prepend a Q-tag
       list.forEach((c, idx) => {
@@ -345,40 +381,105 @@ export async function POST(
     const openai = getOpenAI()
 
     // ──────────────────────────────────────────────────────────────────────
-    // PATH A — Raw text input (2-phase flow with optional theme grouping)
+    // PATH A — Raw text input
+    //
+    //   Step 1: Try the structured-source parser. If the text contains a
+    //   recognisable list of cards (CARTE 001, FICHE 12, Card 5, ...) with
+    //   paired Q/A, we use them VERBATIM and skip the LLM entirely. This
+    //   is what the user wants when they paste pre-formatted cards.
+    //
+    //   Step 2: Fallback to the 2-phase LLM flow only when no structure is
+    //   detected.
+    //
+    //   Step 3: After all cards exist, optionally consolidate them into
+    //   3-10 themed sub-decks.
     // ──────────────────────────────────────────────────────────────────────
     if (text && text.trim()) {
       const sourceText = text.trim().slice(0, MAX_INPUT_CHARS)
 
-      // Phase 1: extract questions (informed by phase 0 hints if provided)
-      const questions = await extractQuestionsFromText(sourceText, customInstructions, {
-        expectedCount: typeof expectedCount === 'number' ? expectedCount : null,
-        themes: Array.isArray(themesHint) ? themesHint : [],
-      })
+      let cards: RawCard[] = []
+      let questionsExtractedCount = 0
+      let pipelineMode: 'structured' | 'llm-2phase' = 'structured'
 
-      if (questions.length === 0) {
-        return NextResponse.json(
-          {
-            error: 'No real study questions could be identified in the text. Try pasting a clearer list of questions or a richer source document.',
-            phase: 1,
-          },
-          { status: 422 }
-        )
+      // ── Step 1: Try the deterministic structured parser ────────────
+      const structured = parseStructuredCards(sourceText)
+      console.log(`[Flashcards] Structured parser found ${structured.length} cards`)
+
+      if (structured.length >= 5) {
+        // Use the source verbatim — no LLM rewriting whatsoever.
+        questionsExtractedCount = structured.length
+        cards = structured.map((s, idx) => ({
+          card_type: 'basic' as const,
+          front: s.question,
+          back: s.answer,
+          hint: null,
+          tags: [`Q${idx + 1}`, 'from-source'],
+          theme: 'Misc', // no theme yet — will be assigned during consolidation if requested
+          source_page: 1,
+        }))
+      } else {
+        // ── Step 2: LLM 2-phase fallback for unstructured text ────────
+        pipelineMode = 'llm-2phase'
+
+        const questions = await extractQuestionsFromText(sourceText, customInstructions, {
+          expectedCount: typeof expectedCount === 'number' ? expectedCount : null,
+          themes: Array.isArray(themesHint) ? themesHint : [],
+        })
+
+        if (questions.length === 0) {
+          return NextResponse.json(
+            {
+              error: 'No real study questions could be identified in the text. Try pasting a clearer list of questions or a richer source document.',
+              phase: 1,
+            },
+            { status: 422 }
+          )
+        }
+
+        const llmCards = await generateAnswersForQuestions(questions, sourceText, customInstructions)
+        if (llmCards.length === 0) {
+          return NextResponse.json(
+            { error: 'Questions were identified but no answers could be generated.', phase: 2 },
+            { status: 422 }
+          )
+        }
+
+        questionsExtractedCount = questions.length
+
+        // Hard-cap the LLM card count to the number of questions we extracted.
+        // This is the safety net for the "449 cards from 244 questions" bug:
+        // if the model batches drift and produce extra cards, we trim them.
+        cards = llmCards.slice(0, questions.length)
       }
 
-      // Phase 2: generate detailed answers in small batches
-      const cards = await generateAnswersForQuestions(questions, sourceText, customInstructions)
-
-      if (cards.length === 0) {
-        return NextResponse.json(
-          { error: 'Questions were identified but no answers could be generated.', phase: 2 },
-          { status: 422 }
-        )
+      // ── Step 3: Theme consolidation (if requested) ──────────────────
+      if (groupByTheme && cards.length > 0) {
+        try {
+          const grouping: CardForGrouping[] = cards.map((c, idx) => ({
+            index: idx,
+            front: c.front,
+            theme: c.theme,
+          }))
+          const buckets = await consolidateThemes(openai, grouping)
+          // Apply the consolidated theme back to each card
+          for (const b of buckets) {
+            for (const idx of b.card_indices) {
+              if (cards[idx]) cards[idx].theme = b.theme
+            }
+          }
+          console.log(
+            `[Flashcards] Theme consolidation: ${buckets.length} bucket(s) — ${buckets
+              .map((b) => `${b.theme}(${b.card_indices.length})`)
+              .join(', ')}`
+          )
+        } catch (err: any) {
+          console.error('[Flashcards] Theme consolidation failed; falling back to single deck:', err.message)
+        }
       }
 
-      // ── Routing: single deck OR multiple themed sub-decks ────────────
-      if (groupByTheme) {
-        // Group cards by normalised theme
+      // ── Step 4: Persist to DB ───────────────────────────────────────
+      if (groupByTheme && cards.length > 0) {
+        // Group cards by their (consolidated) theme
         const groups = new Map<string, RawCard[]>()
         for (const c of cards) {
           const key = normaliseTheme(c.theme)
@@ -386,7 +487,7 @@ export async function POST(
           groups.get(key)!.push(c)
         }
 
-        // Stable order: most cards first, then alphabetical
+        // Order: largest first, then alphabetical
         const orderedThemes = [...groups.entries()].sort((a, b) => {
           if (b[1].length !== a[1].length) return b[1].length - a[1].length
           return a[0].localeCompare(b[0])
@@ -395,7 +496,6 @@ export async function POST(
         const baseName = deck.name
         const totalDecks = orderedThemes.length
         const padWidth = String(totalDecks).length
-
         const createdDecks: Array<{ id: string; name: string; cardsCount: number }> = []
 
         for (let i = 0; i < orderedThemes.length; i++) {
@@ -408,7 +508,6 @@ export async function POST(
           let targetDeckId: string
 
           if (i === 0) {
-            // Reuse the original deck for the first theme — rename it
             const { error: renameError } = await supabase
               .from('flashcard_decks')
               .update({
@@ -424,7 +523,6 @@ export async function POST(
             }
             targetDeckId = deckId
           } else {
-            // Create a sibling deck for the additional themes
             const { data: newDeck, error: createError } = await supabase
               .from('flashcard_decks')
               .insert({
@@ -444,7 +542,6 @@ export async function POST(
             targetDeckId = newDeck.id
           }
 
-          // Insert cards for this theme
           const dbCards = normaliseCardsForDb(themeCards, targetDeckId, user.id, 1)
           if (dbCards.length === 0) continue
 
@@ -457,7 +554,6 @@ export async function POST(
             continue
           }
 
-          // Update deck counters
           await supabase
             .from('flashcard_decks')
             .update({
@@ -477,16 +573,16 @@ export async function POST(
 
         return NextResponse.json({
           mode: 'themed',
+          pipeline: pipelineMode,
           decks: createdDecks,
-          questionsExtracted: questions.length,
+          questionsExtracted: questionsExtractedCount,
           cardsCreated: totalCards,
-          // Backwards-compat fields
           deckId,
           cards: [],
         })
       }
 
-      // ── Single-deck mode (no theme grouping) ─────────────────────────
+      // ── Single-deck mode (no theme grouping) ────────────────────────
       const dbCards = normaliseCardsForDb(cards, deckId, user.id, 1)
       const { data: insertedCards, error: insertError } = await supabase
         .from('flashcard_cards')
@@ -517,8 +613,9 @@ export async function POST(
 
       return NextResponse.json({
         mode: 'single',
+        pipeline: pipelineMode,
         deckId,
-        questionsExtracted: questions.length,
+        questionsExtracted: questionsExtractedCount,
         cardsCreated: insertedCards.length,
         cards: insertedCards,
       })

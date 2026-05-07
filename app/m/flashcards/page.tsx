@@ -24,6 +24,16 @@ export default function MobileFlashcardsPage() {
     if (!session) { router.push('/m/login'); return }
     setToken(session.access_token)
 
+    try {
+      if (typeof window !== 'undefined' && !sessionStorage.getItem('starter_deck_checked')) {
+        sessionStorage.setItem('starter_deck_checked', '1')
+        await fetch('/api/starter-deck/seed', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+      }
+    } catch { /* silent */ }
+
     const res = await fetch('/api/flashcards', {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })

@@ -27,6 +27,19 @@ export default function FlashcardsPage() {
       if (!session) { router.push('/login'); return }
       setToken(session.access_token)
 
+      // Idempotent server-side seed of the default CDC starter deck. We
+      // await the result so the deck list below already reflects it on
+      // the very first visit. Subsequent visits short-circuit server-side.
+      try {
+        if (typeof window !== 'undefined' && !sessionStorage.getItem('starter_deck_checked')) {
+          sessionStorage.setItem('starter_deck_checked', '1')
+          await fetch('/api/starter-deck/seed', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          })
+        }
+      } catch { /* silent: never block the deck list on the seeder */ }
+
       const res = await fetch('/api/flashcards', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })

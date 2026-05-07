@@ -1,0 +1,60 @@
+{
+  "stack_number": 4,
+  "cards": [
+    {
+      "n": 75,
+      "front": "Un de vos collaborateurs refuse de faire le travail que vous lui demandez. Comment réagissez-vous ?",
+      "back": "Je commence par comprendre la raison du refus : incompréhension, surcharge, désaccord, manque de compétence, problème personnel ou opposition au cadre. Je rappelle ensuite que l'agent a une obligation d'exécuter les missions qui relèvent de son poste, sauf ordre manifestement illégal ou dangereux. Si le refus vient d'une difficulté réelle, j'accompagne : priorisation, formation, appui. Si le refus est injustifié, je formalise la demande, fixe un délai et informe ma hiérarchie/RH si nécessaire. La réponse doit être graduée, mais le refus d'exécuter une mission ne peut pas devenir une pratique acceptée."
+    },
+    {
+      "n": 76,
+      "front": "Suite à l'obtention de l'examen, on vous nomme sur un poste en pleine réorganisation. Comment le vivez-vous ?",
+      "back": "Je le vivrais comme un défi exigeant, mais cohérent avec une fonction de cadre. Une réorganisation peut créer de l'incertitude, donc je chercherais d'abord à comprendre le contexte, les objectifs, le calendrier et les marges de manœuvre. Je prendrais le temps d'écouter les équipes, de repérer les risques et d'identifier les priorités. Je ne chercherais pas à tout changer immédiatement : dans une période de réorganisation, il faut à la fois donner un cap et sécuriser les agents."
+    },
+    {
+      "n": 77,
+      "front": "Si vous aviez su qu'il était en pleine réorganisation, l'auriez-vous tout de même accepté ? Pourquoi ?",
+      "back": "Oui, si le poste correspond à mes compétences et si le cadre de mission est clair. Une réorganisation n'est pas forcément un signal négatif ; elle peut être une opportunité de reconstruire un fonctionnement plus efficace. En revanche, j'aurais posé des questions sur les objectifs, les moyens, le dialogue social et l'accompagnement prévu. Accepter un poste difficile suppose de ne pas être naïf, mais aussi de ne pas fuir les responsabilités."
+    },
+    {
+      "n": 78,
+      "front": "Vous êtes chargé d'un projet de réorganisation, la fusion de deux services. Comment procédez-vous ?",
+      "back": "Je commence par un diagnostic : missions, effectifs, charges, compétences, processus, irritants et risques. Ensuite, je définis les objectifs de la fusion : meilleure continuité, simplification, mutualisation, lisibilité pour les usagers ou partenaires. J'associe les agents et les représentants du personnel selon le cadre applicable, avec un calendrier clair. Je construis des scénarios, j'évalue les impacts humains et organisationnels, puis je propose une décision argumentée. Après la mise en œuvre, je prévois un suivi : indicateurs, points d'équipe, ajustements et retour d'expérience."
+    },
+    {
+      "n": 79,
+      "front": "Un de vos collaborateurs vous relate une suspicion de harcèlement moral au sein de son bureau. Comment réagissez-vous ? Comment procédez-vous ?",
+      "back": "Je prends la parole très au sérieux, sans conclure trop vite. J'écoute, je recueille des faits précis, je protège la confidentialité et j'explique les suites possibles. Je ne mène pas seul une enquête informelle : j'alerte la hiérarchie et les RH selon les procédures internes, et j'oriente vers les acteurs compétents : prévention, médecine du travail, cellule d'écoute, référent ou dispositif de signalement. Je veille à protéger l'agent contre toute mesure de représailles et à préserver le collectif. L'enjeu est de traiter rapidement, objectivement et humainement."
+    },
+    {
+      "n": 80,
+      "front": "Vous prenez vos fonctions dans un nouveau service où l'ancien manager était très apprécié. L'équipe ne tarit pas d'éloges à son égard. Comment comptez-vous vous positionner et asseoir votre légitimité ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
+      "back": "Je ne cherche pas à rivaliser avec l'ancien manager ni à effacer son héritage. Je reconnais ce qui a bien fonctionné et je prends le temps d'écouter. Ensuite, j'installe progressivement ma propre légitimité par la fiabilité : présence, clarté, décisions cohérentes, respect des engagements. Je peux dire à l'équipe : 'Je ne viens pas remplacer une personne dans son style, je viens exercer une responsabilité avec ma méthode, dans la continuité de ce qui fonctionne et avec les ajustements nécessaires.'"
+    },
+    {
+      "n": 81,
+      "front": "Deux nouveaux collaborateurs intègrent votre collectif de travail composé essentiellement de seniors. Ils sont jeunes et débordent d'idées nouvelles. Quelle sera votre stratégie pour créer et maintenir la cohésion de cette équipe recomposée ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
+      "back": "Je valorise les deux apports : l'expérience des seniors et l'énergie d'innovation des nouveaux. Je mets en place une intégration structurée : tutorat, partage des pratiques, temps d'échange sur les méthodes. Je veille à ce que les idées nouvelles ne soient pas perçues comme une critique du travail existant, et à ce que l'expérience ne devienne pas un frein automatique. L'objectif est de créer une complémentarité : transmettre, tester, ajuster, et reconnaître chacun."
+    },
+    {
+      "n": 82,
+      "front": "Vous avez une suspicion de conduite addictive, alcool et psychotropes, chez un de vos collaborateurs. Comment agissez-vous ? Quels sont vos interlocuteurs au sein de votre établissement ? Dans votre réponse, montrez votre méthode, votre posture de cadre et la manière dont vous sécurisez la décision.",
+      "back": "Je ne pose pas de diagnostic médical. Je pars des faits observables : retards, comportement inhabituel, erreurs, odeur d'alcool, mise en danger, difficultés relationnelles. S'il y a un danger immédiat pour l'agent ou les autres, je retire l'agent de la situation à risque et j'alerte la hiérarchie selon la procédure. Ensuite, j'associe les RH, la médecine du travail, l'assistant de prévention ou le service social selon l'organisation. L'objectif est double : protéger le service et accompagner l'agent, sans stigmatisation."
+    },
+    {
+      "n": 83,
+      "front": "Des collaborateurs refusent de télétravailler, prétextant un environnement familial incompatible. Comment agissez-vous ? Quels sont vos recours ?",
+      "back": "Le télétravail est un mode d'organisation qui suppose des conditions matérielles et personnelles adaptées. Si l'environnement familial est incompatible, je l'écoute et je vérifie le cadre interne : le télétravail est-il obligatoire, recommandé ou simplement possible ? Je recherche des solutions : jours réduits, horaires adaptés, bureau partagé, présence sur site, tiers-lieu si prévu. Si la présence est nécessaire au service et possible, elle peut être maintenue. Le recours principal est le dialogue, puis l'application du cadre RH. On ne force pas un télétravail inefficace ou dangereux pour la qualité du travail."
+    },
+    {
+      "n": 84,
+      "front": "Un accident se produit dans votre service, chute d'une armoire et agent grièvement blessé. Êtes-vous responsable en tant que chef de service ?",
+      "back": "Ma responsabilité peut être engagée si j'ai manqué à mes obligations de prévention, d'alerte ou de sécurité, notamment si le risque était connu et non traité. Dans l'immédiat, je fais porter secours, je sécurise la zone, j'alerte la hiérarchie, les RH, les services de prévention et je fais établir les déclarations nécessaires. Ensuite, il faut analyser les causes : matériel, fixation, signalement antérieur, document unique, consignes. Le chef de service n'est pas automatiquement coupable, mais il a une obligation forte de prévention et de réaction."
+    },
+    {
+      "n": 85,
+      "front": "Comment gèrerez-vous un management à distance, multi-sites et télétravailleur ? Quels sont vos points de vigilance ?",
+      "back": "Je poserais un cadre très clair : objectifs, rituels d'équipe, points individuels, outils partagés, règles de disponibilité et modalités de reporting. Le risque du multi-sites est l'inégalité d'information et le sentiment d'isolement. Je veillerais donc à circuler entre les sites, à organiser des temps collectifs, à repérer les signaux faibles et à ne pas favoriser les agents les plus visibles. Le management à distance repose sur la confiance, mais une confiance structurée.\n\nSTACK 5 — Parcours, RHP et compétences comportementales"
+    }
+  ]
+}
