@@ -20,7 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // Marker stored in flashcard_decks.source_pdf_name to identify decks
 // produced by this seeder. Bump the suffix when shipping a new version
 // to allow re-seeding without duplicating older runs.
-export const STARTER_DECK_MARKER_PREFIX = '__starter:cdc-attache-v2__'
+export const STARTER_DECK_MARKER_PREFIX = '__starter:cdc-attache-v3__'
 
 interface ManifestStack {
   number: number
