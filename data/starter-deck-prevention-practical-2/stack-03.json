@@ -1,0 +1,55 @@
+{
+  "stack_number": 3,
+  "cards": [
+    {
+      "n": 21,
+      "front": "**Prevention of blood-borne infection transmission in dental medicine. Procedure to prevent exposure to sharp objects**",
+      "back": "• Train staff about sharps risks, prevention, and **incident reporting**.\n\n• Follow healthcare worker safety rules and safe clinical routines.\n\n• Use **PPE** consistently and dispose of contaminated waste correctly.\n\n• Use **protective sharps technologies**, especially during high-risk procedures.\n\n• After exposure, respond immediately and report the incident."
+    },
+    {
+      "n": 22,
+      "front": "**Prevention of blood-borne infection transmission in dental medicine. Handling of contaminated syringes and needles**",
+      "back": "• Keep needles/syringes visible and dispose immediately in biohazard **sharps containers**.\n\n• Do not recap, bend, break, or point contaminated needles toward the body.\n\n• If another anesthetic puncture is needed on the same patient, use another needle.\n\n• If recapping is unavoidable, use one-handed scoop technique or a mechanical device.\n\n• Safety devices should keep hands behind the needle, be reliable/easy, and not reduce medical quality."
+    },
+    {
+      "n": 23,
+      "front": "**Prevention of blood-borne infection transmission in dental medicine. Post-exposure prophylaxis for blood-borne transmissible accidental exposure**",
+      "back": "• A contaminated sharp injury is a **medical emergency**.\n\n• **Immediate local care:** wash wound with soap/water; rinse mouth/nose/skin with water; rinse eyes with water/saline/sterile solution.\n\n• Report the incident immediately to the supervisor.\n\n• **Assess risk:** virus involved, exposure type, blood amount, source viral load/status.\n\n• If source status is unknown, inform exposed person; test source only with legal consent and confidentiality.\n\n• Choose **PEP/treatment** and provide counselling/support."
+    },
+    {
+      "n": 24,
+      "front": "**Processing of reusable instruments in dental medicine. Cleaning and disinfection**",
+      "back": "• **Wear PPE:** **resistant gloves**, goggles, and mask.\n\n• **Manual cleaning:** immerse 15 min in **enzymatic detergent/disinfectant**, brush joints/retentive zones, rinse well.\n\n• Use labelled, covered containers with solution name, concentration, and **contact time**.\n\n• Prefer **automatic washer-disinfectors** when possible.\n\n• **Ultrasonic cleaning** is safer and 1-9x more efficient; ideal for sharp instruments and burs.\n\n• **Ultrasonic steps:** prepare solution, run 5 min to remove air, load trays, clean about 16 min, rinse, dry."
+    },
+    {
+      "n": 25,
+      "front": "**Processing of reusable instruments in dental medicine. Preparation, packaging, and storage**",
+      "back": "• Immediately place used instruments in **enzymatic detergent** to prevent debris from drying.\n\n• Clean mechanically if possible, disinfect for required time, rinse, and dry completely.\n\n• Inspect with good light/magnification; lubricate hinged tools with water-based sterilization-compatible lubricant.\n\n• Package in **single-use** pouches/wraps/rigid containers; label date, contents, and sterilizer cycle.\n\n• Seal, sterilize, then store in a clean, dry, safe area.\n\n• Use **FIFO**; if packaging is damaged, repackage and resterilize."
+    },
+    {
+      "n": 26,
+      "front": "**Disinfection in dental medicine: Levels of disinfection**",
+      "back": "• **High-level:** destroys all microorganisms except bacterial spores; examples **glutaraldehyde**, hydrogen peroxide, peracetic acid.\n\n• **Intermediate-level:** inactivates Mycobacterium tuberculosis, vegetative bacteria, and most viruses, not spores.\n\n• **Intermediate examples:** hypochlorite/halogens, iodophors, phenolics, some quats with alcohol, chlorhexidine.\n\n• **Low-level:** destroys most bacteria, some viruses, and fungi, but not TB or spores.\n\n• **Low-level examples:** quaternary ammonium compounds and detergents."
+    },
+    {
+      "n": 27,
+      "front": "**Disinfection in dental medicine: Disinfectants; disinfection steps**",
+      "back": "• **Step 1 - Cleaning:** physically removes dirt, organic matter, and reduces microorganisms.\n\n• **Step 2 - Disinfection:** destroys or inactivates pathogens left after cleaning.\n\n• **Common disinfectant families:** chlorine/halogens, aldehydes, alcohols, phenols, oxidants, surfactants/quats, and biguanides/chlorhexidine.\n\n• **Never skip cleaning:** organic debris reduces disinfectant effectiveness.\n\n• Always respect manufacturer concentration and **contact time**."
+    },
+    {
+      "n": 28,
+      "front": "**Disinfection in dental medicine: Surface disinfection techniques**",
+      "back": "• Surface choice depends on contamination risk and surface type.\n\n• **Risk categories:** critical, semi-critical, non-critical intraoral contact, non-critical skin contact, environmental patient-care, and auxiliary areas.\n\n• **Spray-Wipe-Spray:** spray disinfectant, wipe with disposable towel, spray again, leave full **contact time**.\n\n• **Wipe-Discard-Wipe:** wipe/clean with disinfectant wipe, discard, wipe/disinfect with a fresh wipe, discard.\n\n• Use barriers or **disinfection** based on how often the surface is touched or contaminated."
+    },
+    {
+      "n": 29,
+      "front": "**Using physical barriers to protect equipment and surfaces**",
+      "back": "• **Physical barriers** cover equipment/surfaces to prevent contamination by blood or body fluids.\n\n• **Materials:** impermeable paper, aluminum foil, plastic covers, or plastic bags.\n\n• Use on surfaces likely to be touched or splashed during treatment.\n\n• Wear **PPE** when removing and replacing barriers.\n\n• Discard contaminated barriers in regulated **biohazard containers**.\n\n• Apply clean barriers for every new patient."
+    },
+    {
+      "n": 30,
+      "front": "**Dental office preparation. Preparing an operator area for each patient**",
+      "back": "• Flush **waterlines** for **30 seconds**; run **ultrasonic scaler** **3 minutes** if used.\n\n• Cover or disinfect chair, lights, switches, keyboard, instrument table, X-ray items, and other touched surfaces.\n\n• Attach **saliva ejector**, high-volume evacuator, sterile handpieces, and air/water syringe; place waste bag.\n\n• Prepare **sterile instrument kits** after checking indicators; set only needed materials in small dishes near the dentist.\n\n• Cover tray/table and disinfect after patient; close doors/drawers; keep personal items in a clean area."
+    }
+  ]
+}

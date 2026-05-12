@@ -1,0 +1,55 @@
+{
+  "stack_number": 2,
+  "cards": [
+    {
+      "n": 11,
+      "front": "**Equipment for patient protection**",
+      "back": "• **Aim:** protect the patient from **splashes**, **aerosols**, materials, and contamination during treatment.\n\n• **Main items:** protective films, disposable protective gown, facial mask when needed, head cap, protective glasses, and bib.\n\n• Use **single-use** or properly disinfected items for each patient.\n\n• Patient protection also helps keep the dental unit and surrounding area cleaner."
+    },
+    {
+      "n": 12,
+      "front": "**Hand hygiene: Indications**",
+      "back": "• Before direct contact with a patient.\n\n• Before putting on any type of gloves.\n\n• After each patient and after glove removal.\n\n• After handling blood or saliva contaminated with blood.\n\n• After touching the patient’s intact skin, such as blood pressure or pulse measurement.\n\n• After touching objects or medical equipment near the patient."
+    },
+    {
+      "n": 13,
+      "front": "**Hand hygiene: Hygienic circumstances and products**",
+      "back": "• Do **hand hygiene** before patient contact and gloves; after patient contact, blood/saliva, nearby objects, and glove removal.\n\n• **Basic products:** simple soap or antimicrobial soap.\n\n• **Higher decontamination:** alcohol-based rubs, chlorhexidine gluconate, iodine/iodophors.\n\n• **Other agents:** quaternary ammonium compounds, triclosan, chloroxylenol, hexachlorophene.\n\n• **Choose product based on the situation:** simple wash, antimicrobial wash, surgical wash, or rapid alcohol decontamination."
+    },
+    {
+      "n": 14,
+      "front": "**Hand hygiene: Simple technique**",
+      "back": "• Remove jewelry and accessories from hands/wrists.\n\n• Wet hands and wrists with warm running water; apply enough soap.\n\n• Rub all hand surfaces for **15-30 seconds**.\n\n• Rinse with water flowing from hands toward forearms.\n\n• Dry hands/wrists completely before putting on gloves.\n\n• Cover palms, backs of hands, between fingers, backs of fingers, thumbs, and rotational rubbing areas."
+    },
+    {
+      "n": 15,
+      "front": "**Procedure to prevent airborne infection transmission**",
+      "back": "• Use Standard/Universal Precautions and **PPE**.\n\n• **Ask for pre-procedural antiseptic mouth rinse:** chlorhexidine, povidone-iodine, essential oils, etc.\n\n• Use **rubber dam** for strong **isolation** of the operative field.\n\n• Ensure good **ventilation** and air circulation.\n\n• Use **air purification devices** when needed, such as antimicrobial filters or UV lamps."
+    },
+    {
+      "n": 16,
+      "front": "**Procedure to prevent infection transmission during seasonal epidemics, respiratory viral infections, and influenza**",
+      "back": "• **For respiratory symptoms:** isolate patient in a closed room; give mask/tissues and no-touch bins.\n\n• Patient wears a mask when leaving the dental office.\n\n• **Staff uses PPE:** surgical mask, gloves, protective glasses; **hand hygiene** after contact.\n\n• Delay non-urgent treatment and increase cleaning/disinfection during flu season.\n\n• **Confirmed H1N1 emergency:** urgent care only, **N95 mask** + **full PPE**, avoid **aerosols** and coughing triggers."
+    },
+    {
+      "n": 17,
+      "front": "**Procedure to prevent tuberculosis transmission during dental treatments**",
+      "back": "• **Main controls:** **early detection**, **isolation**, **environmental control**, and **respiratory protection** for staff.\n\n• Screen patient history and TB symptoms; restrict symptomatic healthcare personnel until diagnosis is clarified.\n\n• **Active TB**, symptomatic positive skin test, or unknown treatment history: **emergency treatment only** until status is confirmed.\n\n• **Use special conditions if emergency care is required:** **isolation** room, air filtration, respiratory masks, scheduled appointment.\n\n• Adequately treated TB with negative sputum cultures/completed therapy: treat as healthy patient."
+    },
+    {
+      "n": 18,
+      "front": "**Control of water contamination in the dental unit network. Microbial biofilms**",
+      "back": "• **Dental unit waterlines can develop biofilm:** microbes stick to inner tubing and form a multi-species film.\n\n• Waterline design, slow flow, and large surface area promote bacterial growth.\n\n• Microbial counts can become very high, even hundreds of thousands of CFU/mL within days.\n\n• Safe water targets are low; Romania/US reference commonly uses less than **500 CFU/mL**.\n\n• Biofilm matters because contaminated water spray can expose patients and staff."
+    },
+    {
+      "n": 19,
+      "front": "**Procedure to prevent infection transmission from the dental unit water network**",
+      "back": "• Flush **waterlines** for several minutes before/during clinical activity and between sessions.\n\n• Use **anti-retraction devices** to prevent backflow contamination.\n\n• Use **microbial filters**, purification devices, or **independent water systems**.\n\n• Treat water intermittently or continuously with **biocides** such as iodophores, sodium hypochlorite, **glutaraldehyde**, or isopropanol.\n\n• Test water quality periodically and train staff to monitor it."
+    },
+    {
+      "n": 20,
+      "front": "**Prevention of blood-borne infection transmission in dental medicine. Risk of transmission of major blood-borne diseases**",
+      "back": "• **HBV:** important occupational risk; percutaneous injury risk can be about **22-31%**; survives in dried blood for at least 1 week.\n\n• **HCV:** less efficiently transmitted; accidental **percutaneous exposure** average about **1.8%**; skin exposure transmission not documented.\n\n• **HIV:** **percutaneous exposure** about **0.3%**; **mucous membrane exposure** about **0.09%**; non-intact skin risk lower.\n\n• Main dental danger = blood exposure through **sharps injuries** or **splashes** to mucosa/non-intact skin."
+    }
+  ]
+}

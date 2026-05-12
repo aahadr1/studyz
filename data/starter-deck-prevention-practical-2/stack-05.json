@@ -1,0 +1,60 @@
+{
+  "stack_number": 5,
+  "cards": [
+    {
+      "n": 41,
+      "front": "**Sterilization monitoring**",
+      "back": "• **Physical indicators:** record time, temperature, and pressure.\n\n• **Chemical indicators:** color-changing dyes/chemicals checking one or more cycle parameters.\n\n• **Chemical indicator types:** external, internal, and multi-parameter internal.\n\n• **Biological indicators:** best proof; dried bacterial spores on strips should be destroyed if **sterilization** succeeded.\n\n• **Documentation:** keep daily/weekly records and date every sterilized pack for traceability.\n\n• Monitoring proves the cycle worked, not just that the machine ran."
+    },
+    {
+      "n": 42,
+      "front": "**Contamination control of handpieces**",
+      "back": "• **Handpieces** are semi-critical and hard to disinfect because external and internal parts get contaminated with blood/saliva.\n\n• Only safe complete method = **monitored sterilization**, not simple surface **disinfection**.\n\n• **Standard cycle:** cleaning, decontamination, packaging, **sterilization**, storage.\n\n• **Metal:** wash with detergent, dry, lubricate before/after **sterilization**, pouch, autoclave.\n\n• **Ceramic:** no lubrication; avoid damaging chemicals; clean, package, autoclave/chemiclave if suitable.\n\n• **Optical fibers:** clean with detergent and isopropyl alcohol; residual oil/debris can damage the fiber tip.\n\n• **EtO** penetrates internal parts well but is slow and needs very clean instruments."
+    },
+    {
+      "n": 43,
+      "front": "**Principles of organizing activity in the dental office**",
+      "back": "• Place tools/equipment intelligently to reduce movement, strain, and stress.\n\n• Remove unnecessary tools, steps, and devices.\n\n• Use **multi-use tools** when appropriate, such as **rubber dam** or double-ended instruments.\n\n• **Standardize procedures** to save time and reduce mistakes.\n\n• Place items according to frequency of use; rarely used items can be stored or placed on mobile units.\n\n• **Goal:** less fatigue, better posture, faster and safer workflow."
+    },
+    {
+      "n": 44,
+      "front": "**The concept of four-handed dentistry. Operational zones**",
+      "back": "• Dentist and assistant work as a coordinated team to reduce movement, fatigue, and stress.\n\n• **Benefits:** faster care, better efficiency, less physical strain, better posture, improved infection control.\n\n• **Dentist zone:** 8-11 o’clock.\n\n• **Assistant zone:** 2-5 o’clock, for suction and instruments.\n\n• **Transfer zone:** 5-8 o’clock, for passing instruments.\n\n• **Static zone:** 11-2 o’clock, for equipment not actively used."
+    },
+    {
+      "n": 45,
+      "front": "**The concept of limited contamination. Contamination zones**",
+      "back": "• **Zone 1 - high risk:** within about 1 m of the mouth; direct blood/saliva contact; disinfect before and after each patient.\n\n• **Zone 2 - medium risk:** rarely used but possibly contaminated items, such as syringe or **rubber dam**; disinfect if used.\n\n• **Zone 3 - low risk:** material preparation area; use barriers or disinfect if contaminated.\n\n• **Zone 4 - clean zone:** keyboard, desk, doors, computer; protect with covers and avoid contaminated gloves.\n\n• Keep clean and contaminated zones separated to limit cross-contamination."
+    },
+    {
+      "n": 46,
+      "front": "**Waste management in the dental office**",
+      "back": "• Wear **full PPE**, including puncture-resistant gloves; use protective apron if needed.\n\n• Needles/syringes go in puncture-resistant, leak-proof, certified or color-coded **sharps containers**.\n\n• Keep **sharps containers** close to the dental chair and below eye level.\n\n• **Segregate waste correctly:** sharps, infectious waste, chemical waste, and general waste.\n\n• Recycle non-hazardous paper, plastic, glass, and aluminum when possible.\n\n• Label and store waste according to biohazard rules."
+    },
+    {
+      "n": 47,
+      "front": "**Criteria for selecting equipment in dental offices. Medical chair**",
+      "back": "• Designed for sit-down dentistry and balanced working posture.\n\n• Padded for comfort and to protect the spine/back.\n\n• Adjustable vertically and horizontally.\n\n• Rotating base allows easier positioning.\n\n• **Goal:** reduce fatigue while keeping the operator stable and efficient."
+    },
+    {
+      "n": 48,
+      "front": "**Criteria for selecting equipment in dental offices. Assistant's chair**",
+      "back": "• Padded and stable for long procedures.\n\n• Rotating base with 5 legs.\n\n• Metal foot ring supports the feet because the assistant works higher than the dentist.\n\n• Backrest must not interfere with instrument transfer.\n\n• Backrest should not be used as arm support.\n\n• **Goal:** good visibility and mobility without disturbing workflow."
+    },
+    {
+      "n": 49,
+      "front": "**Criteria for selecting equipment in dental offices. Patient's chair**",
+      "back": "• Solid, stable base; can move up/down and recline/decline.\n\n• Comfortable for the patient.\n\n• Allows good access and visibility for dentist and assistant.\n\n• Slim, short backrest and armrests let the team get close without effort.\n\n• Dental unit should be in the transfer zone so instruments are reachable without disrupting workflow."
+    },
+    {
+      "n": 50,
+      "front": "**Dental unit. Handling systems**",
+      "back": "• **Over-the-patient delivery system**.\n\n• **Side delivery system**.\n\n• **Split delivery system**.\n\n• **Rear delivery system:** instruments delivered from behind.\n\n• **Trans-thoracic delivery system:** presented in the notes as the best option.\n\n• Choice affects ergonomics, access, and team workflow."
+    },
+    {
+      "n": 51,
+      "front": "**Ergonomic principles of work organization in the dental office. Posture adoption**",
+      "back": "• Back 10-20 degrees from hips; avoid trunk rotation.\n\n• Head about 25 degrees; shoulders relaxed; chest forward and up.\n\n• Upper arm 10-15 degrees and close to body; elbow about 90 degrees; eyes 35-40 cm from mouth.\n\n• Thigh/lower-leg angle about 110 degrees; thighs max 45 degrees; knees lower than hips; feet flat.\n\n• Support forearms/fingers or use patient’s head for stability; keep wrists supported.\n\n• Take short breaks and strengthen core/spine; assistant sits 10-20 cm higher than dentist."
+    }
+  ]
+}

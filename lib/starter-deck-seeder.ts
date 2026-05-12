@@ -1,8 +1,7 @@
 /**
  * Starter Deck Seeder
  * --------------------
- * Inserts the default "Flashcards Oral CDC / Attaché" deck (154 cards
- * organised in 11 thematic stacks) into a user's flashcard library.
+ * Inserts the default starter flashcard sets into a user's flashcard library.
  *
  * Idempotent: if a deck with our marker prefix is already present for the
  * user, the seeder exits without touching anything.
@@ -21,6 +20,14 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // produced by this seeder. Bump the suffix when shipping a new version
 // to allow re-seeding without duplicating older runs.
 export const STARTER_DECK_MARKER_PREFIX = '__starter:cdc-attache-v4__'
+export const PREVENTION_PRACTICAL_2_MARKER_PREFIX = '__starter:prevention-practical-2-v1__'
+
+interface StarterDeckConfig {
+  markerPrefix: string
+  markerPattern: string
+  directory: string
+  namePrefix: string
+}
 
 interface ManifestStack {
   number: number
@@ -58,20 +65,35 @@ export interface SeederResult {
   message?: string
 }
 
-let _cachedManifest: ManifestData | null = null
-let _cachedStacks: Map<number, StackFile> | null = null
+const STARTER_DECKS: StarterDeckConfig[] = [
+  {
+    markerPrefix: STARTER_DECK_MARKER_PREFIX,
+    markerPattern: '__starter:cdc-attache-v%',
+    directory: 'starter-deck',
+    namePrefix: 'CDC',
+  },
+  {
+    markerPrefix: PREVENTION_PRACTICAL_2_MARKER_PREFIX,
+    markerPattern: '__starter:prevention-practical-2-v%',
+    directory: 'starter-deck-prevention-practical-2',
+    namePrefix: 'Prevention Practical 2',
+  },
+]
 
-function getStarterDeckDir(): string {
+const _cachedDeckData = new Map<string, { manifest: ManifestData; stacks: Map<number, StackFile> }>()
+
+function getStarterDeckDir(directory: string): string {
   // process.cwd() is the project root in Next.js / Node scripts
-  return path.join(process.cwd(), 'data', 'starter-deck')
+  return path.join(process.cwd(), 'data', directory)
 }
 
-function loadStarterDeckData(): { manifest: ManifestData; stacks: Map<number, StackFile> } {
-  if (_cachedManifest && _cachedStacks) {
-    return { manifest: _cachedManifest, stacks: _cachedStacks }
+function loadStarterDeckData(config: StarterDeckConfig): { manifest: ManifestData; stacks: Map<number, StackFile> } {
+  const cached = _cachedDeckData.get(config.directory)
+  if (cached) {
+    return cached
   }
 
-  const dir = getStarterDeckDir()
+  const dir = getStarterDeckDir(config.directory)
   const manifestPath = path.join(dir, 'manifest.json')
   if (!fs.existsSync(manifestPath)) {
     throw new Error(`Starter deck manifest not found at ${manifestPath}`)
@@ -101,50 +123,45 @@ function loadStarterDeckData(): { manifest: ManifestData; stacks: Map<number, St
     )
   }
 
-  _cachedManifest = manifest
-  _cachedStacks = stacks
-  return { manifest, stacks }
+  const loaded = { manifest, stacks }
+  _cachedDeckData.set(config.directory, loaded)
+  return loaded
 }
 
-function deckMarkerForStack(stackNumber: number): string {
-  return `${STARTER_DECK_MARKER_PREFIX}:stack-${String(stackNumber).padStart(2, '0')}`
+function deckMarkerForStack(config: StarterDeckConfig, stackNumber: number): string {
+  return `${config.markerPrefix}:stack-${String(stackNumber).padStart(2, '0')}`
 }
 
-function deckNameForStack(stackMeta: ManifestStack): string {
+function deckNameForStack(config: StarterDeckConfig, stackMeta: ManifestStack): string {
   // Number prefix keeps decks ordered alphabetically in the user's list.
   const num = String(stackMeta.number).padStart(2, '0')
-  return `CDC ${num}. ${stackMeta.title}`
+  return `${config.namePrefix} ${num}. ${stackMeta.title}`
 }
 
 /**
- * Seed (or no-op) the starter deck for a single user.
- * Uses an admin Supabase client (service role) so it can also be invoked
- * from server contexts where the user's JWT is not available.
+ * Seed one starter deck set for a single user.
  */
-export async function seedStarterDeckForUser(
+async function seedStarterDeckSetForUser(
   admin: SupabaseClient,
-  userId: string
+  userId: string,
+  config: StarterDeckConfig
 ): Promise<SeederResult> {
-  if (!userId) {
-    return { status: 'error', decks_created: 0, cards_created: 0, message: 'userId required' }
-  }
-
   let manifest: ManifestData
   let stacks: Map<number, StackFile>
   try {
-    const data = loadStarterDeckData()
+    const data = loadStarterDeckData(config)
     manifest = data.manifest
     stacks = data.stacks
   } catch (err: any) {
     return { status: 'error', decks_created: 0, cards_created: 0, message: err.message }
   }
 
-  // Idempotency: skip if any starter deck already exists for this user.
+  // Idempotency: skip if this specific starter deck set already exists.
   const { data: existing, error: existingErr } = await admin
     .from('flashcard_decks')
     .select('id')
     .eq('user_id', userId)
-    .like('source_pdf_name', '__starter:cdc-attache-v%')
+    .like('source_pdf_name', config.markerPattern)
     .limit(1)
 
   if (existingErr) {
@@ -161,7 +178,7 @@ export async function seedStarterDeckForUser(
       status: 'already_seeded',
       decks_created: 0,
       cards_created: 0,
-      message: 'User already has the starter deck',
+      message: `User already has ${manifest.deck_name}`,
     }
   }
 
@@ -176,9 +193,9 @@ export async function seedStarterDeckForUser(
       .from('flashcard_decks')
       .insert({
         user_id: userId,
-        name: deckNameForStack(stackMeta),
+        name: deckNameForStack(config, stackMeta),
         description: stackMeta.description,
-        source_pdf_name: deckMarkerForStack(stackMeta.number),
+        source_pdf_name: deckMarkerForStack(config, stackMeta.number),
         total_cards: stack.cards.length,
         new_count: stack.cards.length,
         due_count: 0,
@@ -229,5 +246,51 @@ export async function seedStarterDeckForUser(
     decks_created: totalDecks,
     cards_created: totalCards,
     message: `Seeded ${totalDecks} decks / ${totalCards} cards (${manifest.deck_name})`,
+  }
+}
+
+/**
+ * Seed (or no-op) all starter deck sets for a single user.
+ * Uses an admin Supabase client (service role) so it can also be invoked
+ * from server contexts where the user's JWT is not available.
+ */
+export async function seedStarterDeckForUser(
+  admin: SupabaseClient,
+  userId: string
+): Promise<SeederResult> {
+  if (!userId) {
+    return { status: 'error', decks_created: 0, cards_created: 0, message: 'userId required' }
+  }
+
+  let totalDecks = 0
+  let totalCards = 0
+  let seededSets = 0
+  let alreadySeededSets = 0
+  const messages: string[] = []
+
+  for (const config of STARTER_DECKS) {
+    const result = await seedStarterDeckSetForUser(admin, userId, config)
+    totalDecks += result.decks_created
+    totalCards += result.cards_created
+    if (result.message) messages.push(result.message)
+
+    if (result.status === 'error') {
+      return {
+        status: 'error',
+        decks_created: totalDecks,
+        cards_created: totalCards,
+        message: result.message,
+      }
+    }
+
+    if (result.status === 'seeded') seededSets += 1
+    if (result.status === 'already_seeded') alreadySeededSets += 1
+  }
+
+  return {
+    status: seededSets > 0 ? 'seeded' : 'already_seeded',
+    decks_created: totalDecks,
+    cards_created: totalCards,
+    message: messages.join(' | ') || `Starter decks checked (${alreadySeededSets} already present)`,
   }
 }

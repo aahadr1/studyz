@@ -1,0 +1,55 @@
+{
+  "stack_number": 1,
+  "cards": [
+    {
+      "n": 1,
+      "front": "**Modes of HIV transmission in dental medicine**",
+      "back": "• **Main real risks:** needle-stick/percutaneous exposure about **0.3%** (about 1 in 300).\n\n• Mucous membrane splash risk about **0.09%** (about 1 in 1000).\n\n• Splash on non-intact skin = low risk and lower than **mucous membrane exposure**.\n\n• **HIV** is not transmitted by touching dried blood on surfaces.\n\n• Key dental danger = fresh blood exposure through sharps, wounds, eyes, nose, or mouth."
+    },
+    {
+      "n": 2,
+      "front": "**Infection control in dental medicine. Universal/Standard precautions**",
+      "back": "• **Universal Precautions:** treat all blood and blood-contaminated fluids as infectious for every patient.\n\n• **Standard Precautions:** extend protection to all body fluids except sweat, especially with broken skin or mucosa.\n\n• Rules depend on the procedure and exposure risk, not on who the patient is.\n\n• **Core measures:** **PPE**, **hand hygiene**, **disinfection**, **sterilization**, **sharps injury prevention**, and **contaminated waste management**."
+    },
+    {
+      "n": 3,
+      "front": "**Personal protective equipment. Types of gloves**",
+      "back": "• **Examination gloves:** for clinical exams and non-surgical care; sterile or non-sterile; **single-use**.\n\n• **Surgical gloves:** sterile and **single-use**; used for surgical procedures.\n\n• **Non-medical gloves:** for cleaning, **disinfection**, chemicals, and sharps handling; never used on patients.\n\n• **Common materials:** latex, nitrile, vinyl/polyvinyl, polyurethane, chloroprene, rubber/copolymers.\n\n• Choose gloves according to clinical risk, allergy risk, and resistance needed."
+    },
+    {
+      "n": 4,
+      "front": "**Personal protective equipment. Gloves. Usage rules**",
+      "back": "• Wear gloves for all clinical procedures; change after each patient or if damaged.\n\n• Never wash, disinfect, sanitize, or reuse gloves; this can create microcracks and contamination.\n\n• **Gloves do not replace hand hygiene:** clean hands before use and after removal.\n\n• Remove gloves by turning the contaminated outside inward.\n\n• Avoid touching objects outside the operative field with contaminated gloves; use clean over-gloves, tongs, or paper towels if needed."
+    },
+    {
+      "n": 5,
+      "front": "**Personal protective equipment. Gloves. Preventive measures against allergic reactions**",
+      "back": "• Latex allergy is more frequent in dental staff (about **6-17%**) than in the general population.\n\n• **Reduce exposure to latex proteins:** use latex only when needed for infectious protection.\n\n• Prefer **low-protein**, **powder-free** latex gloves.\n\n• Use **synthetic gloves** for latex-allergic people.\n\n• Avoid touching eyes/face with gloves; wash hands after use to remove powder or latex residues.\n\n• Educate staff about allergy risks and prevention."
+    },
+    {
+      "n": 6,
+      "front": "**Personal protective equipment. Masks**",
+      "back": "• **Purpose:** protect staff from **aerosols**, **droplets**, and **splashes** of blood or body fluids.\n\n• Mask must cover mouth and nose, fit under the chin, and be adjusted tightly at the nose.\n\n• Change after each patient, or when moist or damaged.\n\n• Do not wear the mask on the neck, chin, or nape because it becomes contaminated.\n\n• Use **filter masks** for patients with confirmed infectious status.\n\n• Efficiency is best early in use, before the mask becomes moist."
+    },
+    {
+      "n": 7,
+      "front": "**Personal protective equipment. Goggles. Face shield**",
+      "back": "• Protect against particles, light radiation, chemicals, and microbes such as **HBV**.\n\n• Can be glass or plastic, clear or tinted/UV-protective.\n\n• Handle glasses only by the side arms/temples, after removing contaminated gloves and cleaning hands.\n\n• Decontaminate by disinfecting, respecting **contact time**, rinsing, disinfecting/immersing again, rinsing, and drying.\n\n• Some goggles can be autoclaved if manufacturer allows it.\n\n• Face shield/visor gives full-face protection."
+    },
+    {
+      "n": 8,
+      "front": "**Personal protective equipment. Medical gown**",
+      "back": "• Protects staff clothing and skin from physical, chemical, and biological contamination.\n\n• Should cover chest, arms, and lower body; sleeves/cuffs should fit under gloves.\n\n• Wear only inside the medical facility.\n\n• Change daily or immediately if wet, damaged, or contaminated.\n\n• Dispose in special bags/containers using **PPE**.\n\n• Wash with hot water/detergent or chlorine solution, then hot-air dry and iron."
+    },
+    {
+      "n": 9,
+      "front": "**Protocol for donning protective equipment**",
+      "back": "• **1. Gown:** long sleeves, knee length or two-piece outfit, tied at back/neck/chest.\n\n• **2. Mask:** cover mouth, nose, and chin; secure straps/elastics; mold nose strip.\n\n• **3. Goggles/face shield:** put on by handling the side arms.\n\n• **4. Gloves:** remove jewelry, perform **hand hygiene**, dry hands, then put gloves over gown cuffs.\n\n• Correct order prevents clean items from becoming contaminated too early."
+    },
+    {
+      "n": 10,
+      "front": "**Protocol for removing protective equipment**",
+      "back": "• Remove **PPE** before leaving the office; remove/discard the mask after exiting and closing the door.\n\n• **Gloves:** peel outside inward and discard in **biohazard waste**.\n\n• **Goggles/face shield:** contaminated outside; handle only by side arms/temples.\n\n• **Gown:** contaminated outside and sleeves; touch inside only and roll inward.\n\n• **Mask:** do not touch the front; remove by straps only.\n\n• Wash hands immediately after **PPE** removal."
+    }
+  ]
+}

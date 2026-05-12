@@ -1,0 +1,49 @@
+{
+  "deck_name": "Prevention Practical 2 - Infection Transmission Prevention in Dental Medicine",
+  "deck_description": "51 concise flashcards from Prevention Practical 2 on infection transmission prevention in dental medicine, organized into five permanent stacks.",
+  "language": "en",
+  "version": "1.0.0",
+  "total_cards": 51,
+  "stacks": [
+    {
+      "number": 1,
+      "title": "HIV, standard precautions, and PPE",
+      "description": "Cards 01-10 from Prevention Practical 2: HIV transmission, standard precautions, gloves, masks, goggles, gowns, and PPE donning/removal.",
+      "card_range": "001-010",
+      "card_count": 10,
+      "file": "stack-01.json"
+    },
+    {
+      "number": 2,
+      "title": "Patient protection, hand hygiene, respiratory and waterline controls",
+      "description": "Cards 11-20 from Prevention Practical 2: patient protection, hand hygiene, airborne/respiratory/TB prevention, dental unit waterline biofilms, and blood-borne disease risks.",
+      "card_range": "011-020",
+      "card_count": 10,
+      "file": "stack-02.json"
+    },
+    {
+      "number": 3,
+      "title": "Sharps, post-exposure care, instruments, and disinfection",
+      "description": "Cards 21-30 from Prevention Practical 2: sharps safety, needle handling, post-exposure prophylaxis, reusable instrument processing, disinfection levels, surfaces, barriers, and operator-area preparation.",
+      "card_range": "021-030",
+      "card_count": 10,
+      "file": "stack-03.json"
+    },
+    {
+      "number": 4,
+      "title": "Dental office preparation and sterilization methods",
+      "description": "Cards 31-40 from Prevention Practical 2: patient/procedure/end-of-day/weekly dental office preparation and moist heat, dry heat, cold chemical, vapor, and ethylene oxide sterilization.",
+      "card_range": "031-040",
+      "card_count": 10,
+      "file": "stack-04.json"
+    },
+    {
+      "number": 5,
+      "title": "Monitoring, handpieces, organization, zones, waste, equipment, and ergonomics",
+      "description": "Cards 41-51 from Prevention Practical 2: sterilization monitoring, handpiece contamination control, four-handed dentistry, contamination zones, waste management, chair/unit selection, and posture.",
+      "card_range": "041-051",
+      "card_count": 11,
+      "file": "stack-05.json"
+    }
+  ]
+}

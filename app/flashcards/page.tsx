@@ -31,8 +31,8 @@ export default function FlashcardsPage() {
       // await the result so the deck list below already reflects it on
       // the very first visit. Subsequent visits short-circuit server-side.
       try {
-        if (typeof window !== 'undefined' && !sessionStorage.getItem('starter_deck_checked')) {
-          sessionStorage.setItem('starter_deck_checked', '1')
+        if (typeof window !== 'undefined' && !sessionStorage.getItem('starter_deck_checked_v2')) {
+          sessionStorage.setItem('starter_deck_checked_v2', '1')
           await fetch('/api/starter-deck/seed', {
             method: 'POST',
             headers: { Authorization: `Bearer ${session.access_token}` },

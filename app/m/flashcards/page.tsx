@@ -25,8 +25,8 @@ export default function MobileFlashcardsPage() {
     setToken(session.access_token)
 
     try {
-      if (typeof window !== 'undefined' && !sessionStorage.getItem('starter_deck_checked')) {
-        sessionStorage.setItem('starter_deck_checked', '1')
+      if (typeof window !== 'undefined' && !sessionStorage.getItem('starter_deck_checked_v2')) {
+        sessionStorage.setItem('starter_deck_checked_v2', '1')
         await fetch('/api/starter-deck/seed', {
           method: 'POST',
           headers: { Authorization: `Bearer ${session.access_token}` },

@@ -1,0 +1,55 @@
+{
+  "stack_number": 4,
+  "cards": [
+    {
+      "n": 31,
+      "front": "**Dental office preparation. Patient preparation**",
+      "back": "• Seat the patient and place a bib.\n\n• Give protective eyewear.\n\n• Ask the patient to rinse with antiseptic solution for **15-30 seconds**, such as chlorhexidine.\n\n• Adjust chair and dental light to the correct position.\n\n• Place **saliva ejector** and tell patient not to close lips around it to avoid reverse aspiration.\n\n• **Goal:** protect patient and reduce microbial load before care."
+    },
+    {
+      "n": 32,
+      "front": "**Dental office preparation. During a clinical procedure**",
+      "back": "• **Use four-handed dentistry:** dentist and assistant work together.\n\n• Wear **full PPE** and keep instruments organized.\n\n• Be especially careful with sharps and used needles.\n\n• Respect dentist and assistant working zones.\n\n• **Apply the no-touch principle:** do not touch records, radiographs, or dropped instruments with contaminated gloves.\n\n• Disinfect clinical items used, such as models and occlusion records."
+    },
+    {
+      "n": 33,
+      "front": "**Dental office preparation. After each treatment**",
+      "back": "• Remove gloves, perform **hand hygiene**, and complete documentation in the **clean zone**.\n\n• Put on **thick utility gloves**; transport dirty instruments safely and discard sharps in **rigid biohazard containers**.\n\n• Throw **single-use** items into infectious waste.\n\n• Run handpieces **30 seconds**, clean visible debris, and send for **sterilization**.\n\n• Remove barriers; clean and disinfect uncovered or contaminated surfaces.\n\n• Reprocess eyewear, remove **PPE** safely, wash hands, and prepare chair/floor for cleaning."
+    },
+    {
+      "n": 34,
+      "front": "**Dental office preparation. At the end of the day**",
+      "back": "• Clean and disinfect all operatory surfaces and equipment.\n\n• **Use the two-step method:** clean first, then disinfect.\n\n• **Spray-Wipe-Spray** method may be used; respect **contact time**, often about **10 minutes** if specified.\n\n• Clean the dental unit water system to reduce contamination.\n\n• Clean the sink and amalgam separator filter.\n\n• Leave the operatory ready for safe next-day use."
+    },
+    {
+      "n": 35,
+      "front": "**Dental office preparation. Weekly procedures**",
+      "back": "• **Deep clean/disinfect operatory surfaces:** walls, shelves, lights, chair upholstery.\n\n• Disassemble/clean light arms and handles; inspect suction hoses, **waterlines**, and holders.\n\n• Perform **shock/deep disinfection** of dental unit **waterlines**.\n\n• **Clean sterilization equipment:** **autoclaves**, ultrasonic baths, cassettes, containers.\n\n• Maintain equipment and handpieces; clean traps, filters, reservoirs.\n\n• Clean admin/waiting/storage areas; check expiry dates; disinfect waste containers and replace labels/bags."
+    },
+    {
+      "n": 36,
+      "front": "**Sterilization by moist heat**",
+      "back": "• **Indicated** for soft materials, glass, porcelain, rubber, handpieces, and instruments.\n\n• **Advantages:** fast, good steam penetration, allows packaging, processes many items.\n\n• **Steps:** clean/decontaminate/dry; disassemble/space items; pack/tray; load autoclave with space for steam.\n\n• Follow manufacturer time, pressure, and temperature.\n\n• **Gravity autoclave:** **121 deg C** for 15-30 min; **pre-vacuum**: **132 deg C** for 3.5-10 min.\n\n• Timing starts at target temperature; open after pressure drops; dry about 30 min, cool, store clean/dry."
+    },
+    {
+      "n": 37,
+      "front": "**Sterilization by dry heat**",
+      "back": "• **Indicated** for metal instruments, endodontic tools, glass, porcelain, powders, and oils.\n\n• **Advantages:** non-corrosive, preserves sharp edges, low cost.\n\n• **Steps:** clean/decontaminate/dry; wrap or place in metal trays; heat until target temperature.\n\n• **Times:** **190 deg C** 12 min forced air; **170 deg C** 1 h; **160 deg C** 2 h; **150 deg C** 2.5 h; **140 deg C** 3 h.\n\n• For sharp instruments/needles, do not exceed **160 deg C**.\n\n• Cool inside oven; wrapped items stay sterile while package is intact/dry; unwrapped items must be used immediately."
+    },
+    {
+      "n": 38,
+      "front": "**Chemical sterilization (cold)**",
+      "back": "• Uses long immersion in germicidal solutions such as **glutaraldehyde**, hydrogen peroxide, peracetic acid, or combinations.\n\n• Difference from **high-level disinfection** = longer **contact time**.\n\n• **Less recommended:** cannot be biologically monitored, needs strict sterile rinsing/drying, depends on solution quality, and takes **6-10 h** or more.\n\n• Use only for heat-sensitive instruments when no disposable option exists.\n\n• **Steps:** clean/dry, prepare labelled solution, fully immerse, wait **10-12 h** for **glutaraldehyde**, remove with sterile forceps, rinse sterile water, dry/store sterile closed container up to 1 week."
+    },
+    {
+      "n": 39,
+      "front": "**Chemical vapor sterilization under pressure**",
+      "back": "• **Chemiclave** uses chemical vapors under pressure, mainly aldehydes.\n\n• **Typical cycle:** **132 deg C** for 20 min at about 1.5 atm.\n\n• Vapor may include formaldehyde, ethanol, acetone/ketones, water, or other alcohols.\n\n• **Indicated** for instruments, burs, needles, and some soft materials.\n\n• **Advantage:** helps prevent corrosion or degradation of metal instruments.\n\n• **Disadvantage:** may damage heat-sensitive materials."
+    },
+    {
+      "n": 40,
+      "front": "**Ethylene oxide chemical sterilization**",
+      "back": "• Best for complex instruments and delicate or heat-sensitive materials.\n\n• **EtO gas** penetrates internal and complex structures.\n\n• Automated high-temperature systems, slightly below 100 deg C, sterilize in a few hours.\n\n• Low-temperature/room-temperature systems need about **12 hours**.\n\n• Porous and plastic materials absorb the gas.\n\n• **Aeration** for more than **24 h** is required before contact with skin or tissues."
+    }
+  ]
+}
